@@ -1,0 +1,26 @@
+[package]
+name = "vixel"
+version = "0.1.0"
+edition = "2024"
+description = "A keyboard-first, vim-style pixel art editor with Aseprite-grade rendering"
+
+[dependencies]
+# GUI (OpenGL/glow now; swap to wgpu later by enabling the `wgpu` feature and
+# setting `NativeOptions::renderer = Renderer::Wgpu` — no render-code changes,
+# since all drawing goes through egui::TextureHandle).
+eframe = { version = "0.37", default-features = false, features = [
+    "glow",
+    "accesskit",
+    "clipboard",
+    "default_fonts",
+    "links",
+    "system_fonts",
+    "wayland",
+    "x11",
+] }
+
+image = { version = "0.25", default-features = false, features = ["png"] }
+flate2 = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
