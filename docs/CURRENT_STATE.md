@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-10-22 — after the selection-transforms + blur/contour batch.
+Last updated: 2026-10-22 — after the palette + transform-undo batch.
 
 ## Summary
 
@@ -63,6 +63,8 @@ across horizontal/vertical/both axes).
 ## Color
 
 - default 16-color palette, fg/bg, swap, full RGB picker, eyedropper.
+- palette management: add the current fg, remove the selected swatch, and
+  import/export **`.gpl` (GIMP), `.hex`, and `.pal` (JASC)** via `:pal`.
 
 ## Undo/redo
 
@@ -118,10 +120,11 @@ middle-drag = pan.
 `delframe` · `newlayer`/`dellayer`/`layerup`/`layerdown`/`layername <name>` ·
 `fliph`/`flipv`/`rot90` (selection-aware) · `sym <mode>` · `wand <0-255>` /
 `wandall on|off` · `selop <op>` · `grad linear|radial` · `contour` ·
-`export <file>` · `import <png>` · `open <file>` · `help`.
+`pal load|save <file>` · `export <file>` · `import <png>` · `open <file>` ·
+`help`.
 
 ## Test status
 
-`cargo test` → 18 tests green; `cargo clippy --all-targets` → clean. Verified to
+`cargo test` → 21 tests green; `cargo clippy --all-targets` → clean. Verified to
 launch on NixOS via `steam-run`. (Interaction paths are compiled + unit-tested
 but not yet hand-tested on a live display.)

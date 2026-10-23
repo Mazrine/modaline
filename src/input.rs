@@ -5,7 +5,7 @@ use eframe::egui::{self, Event, Key, Modifiers};
 use crate::color::Rgba;
 use crate::editor::{Clipboard, Editor, Mode, Pending, Shape, Tool};
 use crate::gui::View;
-use crate::{ase, io};
+use crate::{ase, io, palette};
 
 /// Read this frame's input events and translate them into editor/view actions.
 pub fn handle_input(editor: &mut Editor, view: &mut View, ui: &egui::Ui) {
@@ -503,6 +503,36 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "contour" | "outline" => {
             let (x, y) = editor.cursor;
             editor.contour_at(x, y);
+        }
+        "pal" | "palette" => {
+            let Some(rest) = arg else {
+                editor.msg = "usage: :pal load|save <file>".into();
+                return;
+            };
+            let (sub, path) = match rest.find(char::is_whitespace) {
+                Some(i) => (&rest[..i], rest[i..].trim_start()),
+                None => (rest, ""),
+            };
+            if path.is_empty() {
+                editor.msg = "usage: :pal load|save <file>".into();
+            } else {
+                let p = std::path::Path::new(path);
+                match sub {
+                    "load" => match palette::load(p) {
+                        Ok(colors) => {
+                            let n = colors.len();
+                            editor.load_palette(colors);
+                            editor.msg = format!("palette: {n} colors");
+                        }
+                        Err(e) => editor.msg = format!("palette load failed: {e}"),
+                    },
+                    "save" => match palette::save(&editor.palette, p) {
+                        Ok(()) => editor.msg = "palette saved".into(),
+                        Err(e) => editor.msg = format!("palette save failed: {e}"),
+                    },
+                    _ => editor.msg = "usage: :pal load|save <file>".into(),
+                }
+            }
         }
         "export" => {
             if let Some(p) = arg {

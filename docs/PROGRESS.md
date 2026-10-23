@@ -5,11 +5,11 @@
 
 ## Status snapshot
 
-- `cargo test` → **18 tests green**
+- `cargo test` → **21 tests green**
 - `cargo clippy --all-targets` → **clean**
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **selection transforms + blur/contour**.
+- Last completed batch: **custom palettes + transform undo**.
 
 ## How to resume
 
@@ -50,6 +50,9 @@ Read, in order:
 10. **Transforms + blur/contour batch** — `:fliph`/`:flipv`/`:rot90` now transform
     the selection's content (single cel, undoable) when a selection exists;
     blur (`n`) and contour (`C`) tools. 2 new tests.
+11. **Palettes + transform-undo batch** — `.gpl`/`.hex`/`.pal` palette
+    import/export (`:pal`), palette add/remove UI, and whole-sprite transforms
+    are now undoable via a sprite-snapshot undo step. 3 new tests.
 
 ## Next step (exact)
 
@@ -62,14 +65,9 @@ Read, in order:
 
 - linked cels, cel opacity, and indexed-color export.
 
-### 3. Custom palettes
+### 3. Tile mode
 
-- load/save `.gpl` / Aseprite `.pal` / `.hex`; palette management UI.
-
-### 4. Undo for whole-sprite transforms
-
-- `:fliph`/`:flipv`/`:rot90` with no selection mutate the sprite directly (not
-  undoable). Record a multi-cel undo step (or a sprite snapshot).
+- tile selection + wrapping paint.
 
 ## Known limitations (do not forget)
 
@@ -78,8 +76,6 @@ Read, in order:
   wand (`w`).
 - Selection is single-layer for copy/cut/move (not merged across layers).
 - `.ase` export is depth-32 RGBA only (indexed import is supported).
-- Whole-sprite transforms (`:fliph`/`:flipv`/`:rot90` with no selection) are not
-  undoable; **selection** transforms are.
 - Timeline thumbnails rebuild every UI pass (fine for small sprites; cache by
   revision if it ever matters).
 - OS paste prefers clipboard *text* when present (egui behavior); image paste is

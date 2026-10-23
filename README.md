@@ -95,6 +95,7 @@ middle-drag pan. (The editor is keyboard-first, but the mouse is fully wired.)
 | `:wand <0-255>` / `:wandall on\|off` | magic-wand tolerance / match all layers |
 | `:selop replace\|add\|subtract\|intersect` | how new selections combine |
 | `:grad linear\|radial` | gradient mode |
+| `:pal load\|save <file>` | load/save palette (`.gpl`, `.hex`, `.pal`) |
 | `:export out.png\|out.ase` | export current frame as PNG, or the sprite as `.ase` |
 | `:import in.png` | import a PNG as a new sprite |
 | `:open proj.vpx\|proj.ase\|in.png` | load a project / `.ase` / PNG (by extension) |
@@ -167,10 +168,10 @@ picker, pencil/eraser/bucket/picker/line/rect/ellipse with **filled shapes**,
 **marquee + magic-wand (tolerance, all-layers) + lasso + polygon selection**
 with **add/subtract/intersect** and copy/cut/paste/move, **symmetry painting**,
 flip H/V + rotate 90° (**selection-aware**), stroke-grouped undo/redo,
-**`.ase`/`.aseprite` + PNG + `.vpx` import/export**, **OS clipboard**, full vim
-keymap (normal/draw/visual/paste/command modes).
+**`.ase`/`.aseprite` + PNG + `.vpx` import/export**, **custom palettes**
+(`.gpl`/`.hex`/`.pal`), **OS clipboard**, full vim keymap (normal/draw/visual/
+paste/command modes).
 
-Not yet (Aseprite parity gaps): selection modifiers (add/subtract), selection
-transforms, tile mode, custom palette files, frame thumbnail previews in the
-timeline, color profiles, shaders, OS clipboard integration, indexed-color
-export.
+Not yet (Aseprite parity gaps): layer groups & masks, tile mode, Aseprite
+format extras (linked cels, cel opacity, indexed-color export), tile mode, color
+profiles, shaders.

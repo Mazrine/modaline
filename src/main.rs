@@ -5,6 +5,7 @@ mod editor;
 mod gui;
 mod input;
 mod io;
+mod palette;
 mod sprite;
 
 use eframe::egui;

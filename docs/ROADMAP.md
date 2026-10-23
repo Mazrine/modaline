@@ -7,12 +7,13 @@ north star but is a large, ongoing effort; this lists the concrete next steps.
 
 *(Done: selection tools + add/subtract/intersect, magic-wand tolerance &
 all-layers, filled shapes, symmetry, gradient/spray/shade/blur/contour,
-selection transforms, OS clipboard, timeline thumbnails.)*
+selection + whole-sprite transforms, OS clipboard, timeline thumbnails, custom
+palettes.)*
 
 - **Layer groups & masks.**
 - **Aseprite format fidelity** — linked cels, cel opacity, indexed-color export.
-- **Custom palettes** (`.gpl` / Aseprite `.pal`).
-- **Undo for whole-sprite transforms** (only selection transforms record today).
+- **Tile mode.**
+- **Color profiles** (P3) and **shaders/wgpu** (P3).
 
 ## P1 — fill out the toolset & selection
 
@@ -66,5 +67,5 @@ selection transforms, OS clipboard, timeline thumbnails.)*
 ## Suggested order
 
 1. Layer groups & masks.
-2. Aseprite format fidelity + custom palettes.
-3. Undo for whole-sprite transforms, then shaders/wgpu.
+2. Aseprite format fidelity (linked cels, cel opacity, indexed export), then tile mode.
+3. Color profiles, then shaders/wgpu.

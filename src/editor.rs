@@ -161,11 +161,14 @@ pub struct Pending {
     pub start: (u32, u32),
 }
 
-/// One undoable change: a set of pixel writes, each `(x, y, before, after)`.
-pub struct UndoStep {
-    pub layer: usize,
-    pub frame: usize,
-    pub cells: Vec<(u32, u32, Rgba, Rgba)>,
+/// One undoable change.
+pub enum UndoStep {
+    /// Per-pixel writes, each `(layer, frame, x, y, before, after)`.
+    Cells {
+        cells: Vec<(usize, usize, u32, u32, Rgba, Rgba)>,
+    },
+    /// Whole-sprite snapshot (for whole-sprite transforms).
+    Snapshot { before: Sprite, after: Sprite },
 }
 
 /// The sprite model plus the interaction state (modes, tools, undo, colors).
@@ -260,33 +263,31 @@ impl Editor {
     // ---- drawing ----
 
     fn record(&mut self, layer: usize, frame: usize, x: u32, y: u32, old: Rgba, new: Rgba) {
-        match &mut self.stroke {
-            Some(s) => s.cells.push((x, y, old, new)),
-            None => {
-                self.undo.push(UndoStep {
-                    layer,
-                    frame,
-                    cells: vec![(x, y, old, new)],
-                });
-                self.redo.clear();
-            }
+        if let Some(UndoStep::Cells { cells }) = &mut self.stroke {
+            cells.push((layer, frame, x, y, old, new));
+        } else {
+            self.undo.push(UndoStep::Cells {
+                cells: vec![(layer, frame, x, y, old, new)],
+            });
+            self.redo.clear();
         }
     }
 
     pub fn begin_stroke(&mut self) {
-        self.stroke = Some(UndoStep {
-            layer: self.active_layer,
-            frame: self.active_frame,
-            cells: Vec::new(),
-        });
+        self.stroke = Some(UndoStep::Cells { cells: Vec::new() });
     }
 
     pub fn end_stroke(&mut self) {
-        if let Some(s) = self.stroke.take()
-            && !s.cells.is_empty() {
+        if let Some(s) = self.stroke.take() {
+            let empty = match &s {
+                UndoStep::Cells { cells } => cells.is_empty(),
+                UndoStep::Snapshot { .. } => false,
+            };
+            if !empty {
                 self.undo.push(s);
                 self.redo.clear();
             }
+        }
     }
 
     pub fn paint_pixel(&mut self, x: u32, y: u32, color: Rgba) {
@@ -547,8 +548,8 @@ impl Editor {
         self.begin_stroke();
         let changes = flood_fill(&mut self.sprite, l, f, x, y, color);
         let n = changes.len();
-        if let Some(s) = &mut self.stroke {
-            s.cells.extend(changes);
+        if let Some(UndoStep::Cells { cells }) = &mut self.stroke {
+            cells.extend(changes.into_iter().map(|(x, y, old, new)| (l, f, x, y, old, new)));
         }
         if n > 0 {
             self.dirty = true;
@@ -614,23 +615,46 @@ impl Editor {
     // ---- undo/redo ----
 
     pub fn undo(&mut self) {
-        if let Some(s) = self.undo.pop() {
-            for &(x, y, before, _) in &s.cells {
-                self.sprite.set(s.layer, s.frame, x, y, before);
+        if let Some(step) = self.undo.pop() {
+            match &step {
+                UndoStep::Cells { cells } => {
+                    for &(l, f, x, y, before, _) in cells {
+                        self.sprite.set(l, f, x, y, before);
+                    }
+                }
+                UndoStep::Snapshot { before, .. } => {
+                    self.sprite = before.clone();
+                    self.clamp_cursor();
+                }
             }
-            self.redo.push(s);
+            self.redo.push(step);
             self.dirty = true;
         }
     }
 
     pub fn redo(&mut self) {
-        if let Some(s) = self.redo.pop() {
-            for &(x, y, _, after) in &s.cells {
-                self.sprite.set(s.layer, s.frame, x, y, after);
+        if let Some(step) = self.redo.pop() {
+            match &step {
+                UndoStep::Cells { cells } => {
+                    for &(l, f, x, y, _, after) in cells {
+                        self.sprite.set(l, f, x, y, after);
+                    }
+                }
+                UndoStep::Snapshot { after, .. } => {
+                    self.sprite = after.clone();
+                    self.clamp_cursor();
+                }
             }
-            self.undo.push(s);
+            self.undo.push(step);
             self.dirty = true;
         }
+    }
+
+    fn clamp_cursor(&mut self) {
+        self.cursor = (
+            self.cursor.0.min(self.sprite.width - 1),
+            self.cursor.1.min(self.sprite.height - 1),
+        );
     }
 
     // ---- color / layer / frame ----
@@ -650,6 +674,38 @@ impl Editor {
     pub fn swap_colors(&mut self) {
         std::mem::swap(&mut self.fg, &mut self.bg);
         std::mem::swap(&mut self.fg_idx, &mut self.bg_idx);
+    }
+
+    // ---- palette ----
+
+    pub fn load_palette(&mut self, colors: Vec<Rgba>) {
+        if colors.is_empty() {
+            return;
+        }
+        self.palette = colors;
+        self.fg_idx = self.fg_idx.min(self.palette.len() - 1);
+        self.bg_idx = self.bg_idx.min(self.palette.len() - 1);
+        self.fg = self.palette[self.fg_idx];
+        self.bg = self.palette[self.bg_idx];
+    }
+
+    pub fn add_palette_color(&mut self) {
+        if !self.palette.contains(&self.fg) {
+            self.palette.push(self.fg);
+            self.fg_idx = self.palette.len() - 1;
+        }
+    }
+
+    pub fn remove_palette_color(&mut self) {
+        if self.palette.len() > 1 {
+            self.palette.remove(self.fg_idx);
+            if self.fg_idx >= self.palette.len() {
+                self.fg_idx = self.palette.len() - 1;
+            }
+            self.bg_idx = self.bg_idx.min(self.palette.len() - 1);
+            self.fg = self.palette[self.fg_idx];
+            self.bg = self.palette[self.bg_idx];
+        }
     }
 
     pub fn cycle_layer(&mut self, dir: i32) {
@@ -1075,8 +1131,7 @@ impl Editor {
         if let Some(sel) = self.current_selection() {
             self.transform_selection(&sel, Xform::FlipH);
         } else {
-            self.sprite.flip_h();
-            self.dirty = true;
+            self.transform_whole(Xform::FlipH);
         }
     }
 
@@ -1084,8 +1139,7 @@ impl Editor {
         if let Some(sel) = self.current_selection() {
             self.transform_selection(&sel, Xform::FlipV);
         } else {
-            self.sprite.flip_v();
-            self.dirty = true;
+            self.transform_whole(Xform::FlipV);
         }
     }
 
@@ -1093,13 +1147,25 @@ impl Editor {
         if let Some(sel) = self.current_selection() {
             self.transform_selection(&sel, Xform::Rot90);
         } else {
-            self.sprite.rotate_cw();
-            self.cursor = (
-                self.cursor.0.min(self.sprite.width - 1),
-                self.cursor.1.min(self.sprite.height - 1),
-            );
-            self.dirty = true;
+            self.transform_whole(Xform::Rot90);
         }
+    }
+
+    /// Transform the whole sprite (all cels) as one snapshot undo step.
+    fn transform_whole(&mut self, kind: Xform) {
+        let before = self.sprite.clone();
+        match kind {
+            Xform::FlipH => self.sprite.flip_h(),
+            Xform::FlipV => self.sprite.flip_v(),
+            Xform::Rot90 => self.sprite.rotate_cw(),
+        }
+        let after = self.sprite.clone();
+        self.undo.push(UndoStep::Snapshot { before, after });
+        self.redo.clear();
+        self.clamp_cursor();
+        self.selection = None;
+        self.select_anchor = None;
+        self.dirty = true;
     }
 
     /// Transform the selected pixels inside the active cel (one undo step).
@@ -1381,5 +1447,26 @@ mod tests {
         assert_eq!(e.sprite.get(0, 0, 2, 0), Rgba(1, 2, 3, 255));
         let sel = e.selection.as_ref().unwrap();
         assert_eq!((sel.w, sel.h), (3, 2));
+    }
+
+    #[test]
+    fn whole_sprite_transform_undoes() {
+        let mut e = Editor::new(3, 2);
+        e.sprite.set(0, 0, 0, 0, Rgba(255, 0, 0, 255));
+        e.flip_h();
+        assert_eq!(e.sprite.get(0, 0, 2, 0), Rgba(255, 0, 0, 255));
+        e.undo();
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
+        e.redo();
+        assert_eq!(e.sprite.get(0, 0, 2, 0), Rgba(255, 0, 0, 255));
+    }
+
+    #[test]
+    fn whole_sprite_rotate_undo_restores_dims() {
+        let mut e = Editor::new(2, 3);
+        e.rotate_cw();
+        assert_eq!((e.sprite.width, e.sprite.height), (3, 2));
+        e.undo();
+        assert_eq!((e.sprite.width, e.sprite.height), (2, 3));
     }
 }

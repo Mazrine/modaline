@@ -277,7 +277,15 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     });
     ui.separator();
 
-    ui.label(egui::RichText::new("Palette").strong());
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Palette").strong());
+        if ui.button("＋fg").clicked() {
+            editor.add_palette_color();
+        }
+        if ui.button("－").clicked() {
+            editor.remove_palette_color();
+        }
+    });
     egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
             for (i, c) in editor.palette.iter().enumerate() {
@@ -286,9 +294,16 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                 if i == editor.fg_idx {
                     btn = btn.stroke(Stroke::new(2.0, Color32::WHITE));
                 }
-                if ui.add(btn).on_hover_text(format!("#{:02x}{:02x}{:02x}", c.0, c.1, c.2)).clicked() {
+                let resp = ui
+                    .add(btn)
+                    .on_hover_text(format!("#{:02x}{:02x}{:02x}", c.0, c.1, c.2));
+                if resp.clicked() {
                     editor.fg = *c;
                     editor.fg_idx = i;
+                }
+                if resp.secondary_clicked() {
+                    editor.bg = *c;
+                    editor.bg_idx = i;
                 }
             }
         });
