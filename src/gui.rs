@@ -12,6 +12,8 @@ pub struct View {
     pub initialized: bool,
     pub show_grid: bool,
     pub onion: bool,
+    /// Frame index being dragged in the timeline.
+    drag_frame: Option<usize>,
     /// Cached per-frame timeline thumbnails (rebuilt each UI pass).
     thumbs: Vec<Option<TextureHandle>>,
 }
@@ -24,6 +26,7 @@ impl View {
             initialized: false,
             show_grid: true,
             onion: true,
+            drag_frame: None,
             thumbs: Vec::new(),
         }
     }
@@ -221,6 +224,35 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
         }
         ui.separator();
 
+        let tags: Vec<(String, usize, bool, [u8; 3])> = editor
+            .sprite
+            .tags
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                (
+                    format!("{} {}-{}", t.name, t.from, t.to),
+                    t.from,
+                    editor.active_tag == Some(i),
+                    [t.color.0, t.color.1, t.color.2],
+                )
+            })
+            .collect();
+        for (i, (label, from, active, rgb)) in tags.into_iter().enumerate() {
+            let text = egui::RichText::new(label).color(Color32::from_rgb(rgb[0], rgb[1], rgb[2]));
+            if ui
+                .selectable_label(active, text)
+                .on_hover_text("play this tag (click again to clear)")
+                .clicked()
+            {
+                editor.active_tag = if active { None } else { Some(i) };
+                if !active {
+                    editor.active_frame = from.min(editor.sprite.frames.len() - 1);
+                }
+            }
+        }
+        ui.separator();
+
         let count = editor.sprite.frames.len();
         if view.thumbs.len() < count {
             view.thumbs.resize_with(count, || None);
@@ -237,10 +269,18 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
         for i in 0..count {
             let comp = frame_composite(editor, i);
             upload(ui, &mut view.thumbs[i], &format!("thumb{i}"), comp);
-            let (rect, resp) = ui.allocate_exact_size(Vec2::new(tw, th), Sense::click());
+            let (rect, resp) = ui.allocate_exact_size(Vec2::new(tw, th), Sense::click_and_drag());
             draw_checker(ui.painter(), rect, 4.0);
             if let Some(t) = &view.thumbs[i] {
                 ui.painter().image(t.id(), rect, uv, Color32::WHITE);
+            }
+            if view.drag_frame.is_some() && resp.contains_pointer() {
+                ui.painter().rect_stroke(
+                    rect,
+                    1.0,
+                    Stroke::new(2.0, Color32::from_rgb(120, 200, 255)),
+                    StrokeKind::Inside,
+                );
             }
             let stroke = if i == selected {
                 Stroke::new(2.0, Color32::WHITE)
@@ -251,6 +291,21 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
                 .rect_stroke(rect, 1.0, stroke, StrokeKind::Inside);
             if resp.clicked() {
                 selected = i;
+            }
+            if resp.drag_started() {
+                view.drag_frame = Some(i);
+            }
+            if let Some(from) = view.drag_frame
+                && from != i
+                && resp.contains_pointer()
+                && ui.input(|inp| inp.pointer.any_released())
+            {
+                editor.move_frame(from, i);
+                view.drag_frame = None;
+                selected = i;
+            }
+            if resp.drag_stopped() && view.drag_frame.is_some() {
+                view.drag_frame = None;
             }
             if resp.hovered() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -940,7 +995,9 @@ const HELP: &[&str] = &[
     "",
     "commands:",
     "  :w [file]   :q   :q!   :wq   :new [w h]   :resize w h",
-    "  :newframe / :dupframe / :delframe",
+    "  :newframe / :dupframe / :delframe   (drag a thumbnail to reorder)",
+    "  :tag <name> [from to] / :tagdel [name]   (named frame ranges)",
+    "  :framemove <from> <to>",
     "  :newlayer / :dellayer / :layerup / :layerdown / :layername <name>",
     "  :newgroup / :indent / :outdent / :lock / :unlock   (layer groups)",
     "  :mask add|apply|del   (alpha mask: selection if any, else full)",

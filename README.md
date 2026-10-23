@@ -87,6 +87,9 @@ middle-drag pan. (The editor is keyboard-first, but the mouse is fully wired.)
 | `:resize w h` | resize canvas (keeps overlap) |
 | `:newframe` / `:delframe` | add / remove animation frame |
 | `:dupframe` | duplicate the current frame (cels + duration) |
+| `:framemove <from> <to>` | move a frame (or drag a timeline thumbnail) |
+| `:tag <name> [from to]` | create/update a named frame tag |
+| `:tagdel [name]` | delete a frame tag (default: the active one) |
 | `:newlayer` / `:dellayer` | add / remove layer |
 | `:layerup` / `:layerdown` | move the active layer up / down |
 | `:layername <name>` | rename the active layer |
@@ -114,7 +117,8 @@ middle-drag pan. (The editor is keyboard-first, but the mouse is fully wired.)
   add/remove, groups + indent/outdent, lock flag, alpha mask) + palette swatches
   + full RGB picker for fg/bg.
 - **Bottom** — frame timeline (numbered cells, add/duplicate/remove),
-  play/pause, per-frame duration.
+  play/pause, per-frame duration, drag-to-reorder, and tag chips that restrict
+  playback to a named range.
 - **Top** — mode, tool strip, fg/bg swatches, zoom, cursor/status, and the `:`
   command line.
 
@@ -180,7 +184,8 @@ with **add/subtract/intersect** and copy/cut/paste/move, **symmetry painting**,
 flip H/V + rotate 90° (**selection-aware**), stroke-grouped undo/redo,
 **`.ase`/`.aseprite` + PNG + `.vpx` import/export**, **custom palettes**
 (`.gpl`/`.hex`/`.pal`), **OS clipboard**, **tile mode** (3x3 seamless preview +
-wrapping cursor), full vim keymap (normal/draw/visual/paste/command modes).
+wrapping cursor), **frame tags + drag reorder**, full vim keymap
+(normal/draw/visual/paste/command modes).
 
 Not yet (Aseprite parity gaps): external tileset files, color profiles,
 shaders.

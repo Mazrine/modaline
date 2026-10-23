@@ -5,11 +5,11 @@
 
 ## Status snapshot
 
-- `cargo test` → **34 tests green**
+- `cargo test` → **38 tests green**
 - `cargo clippy --all-targets` → **clean**
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **tile mode**.
+- Last completed batch: **frame tags & reorder**.
 
 ## How to resume
 
@@ -71,6 +71,12 @@ Read, in order:
     the sprite repeated 3x3 with the center tile outlined; the cursor wraps at
     the edges, so edge strokes stay seamless across the tile boundary. Clicks
     in the neighbouring copies fold back into the sprite. 1 new test.
+15. **Frame tags & reorder batch** — named inclusive frame ranges (`:tag
+    <name> [from to]`, `:tagdel`), shown as colored chips above the timeline;
+    clicking one restricts playback to its range. Tags round-trip in `.vpx`
+    and `.ase` (Tags chunk: name/range/color) and shift with frame
+    insert/remove. Frames reorder by dragging a thumbnail or `:framemove`.
+    4 new tests.
 
 ## Next step (exact)
 
@@ -79,8 +85,8 @@ every remaining item is recorded there, so nothing depends on chat history.
 
 ### Next (P1)
 
-- **Frame tags** (named ranges) and **frame reorder**.
-- Then onion-skin settings, layer drag-reorder, text tool, palette reorder /
+- **Onion-skin settings** (tint color, count, opacity) and loop/playback options.
+- Then layer drag-reorder, text tool, palette reorder /
   HSV-hex picker / color modes, symmetry settings, grid & snap, export options
   (sprite sheet/GIF/JSON/slices), filters, selection expand/border/feather, free
   transform, color profiles, shaders/wgpu, persistence — all detailed in
@@ -103,6 +109,10 @@ every remaining item is recorded there, so nothing depends on chat history.
   wand (`w`).
 - Tile mode wraps the cursor (and the preview), not multi-pixel geometry:
   line/rect/gradient spanning the seam do not duplicate onto the other edge.
+- Tag loop direction / repeat count are not modelled (playback is always
+  forward, looping); they are written as forward/0 to `.ase`.
+- Structural edits (layers, frames, tags, masks) are not in the undo stack:
+  only pixel strokes and whole-sprite transforms are undoable.
 - Selection is single-layer for copy/cut/move (not merged across layers).
 - Timeline thumbnails rebuild every UI pass (fine for small sprites; cache by
   revision if it ever matters).

@@ -107,6 +107,20 @@ pub struct Frame {
     pub duration_ms: u16,
 }
 
+/// A named, inclusive frame range ("walk", "idle", ...).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Tag {
+    pub name: String,
+    pub from: usize,
+    pub to: usize,
+    #[serde(default = "tag_color")]
+    pub color: Rgba,
+}
+
+fn tag_color() -> Rgba {
+    Rgba(120, 170, 255, 255)
+}
+
 /// A sprite: a grid of cels indexed `[layer][frame]`.
 ///
 /// `layers[0]` is the topmost layer (drawn last, matching Aseprite's list).
@@ -117,6 +131,8 @@ pub struct Sprite {
     pub layers: Vec<Layer>,
     pub frames: Vec<Frame>,
     pub cels: Vec<Vec<Cel>>,
+    #[serde(default)]
+    pub tags: Vec<Tag>,
 }
 
 impl Sprite {
@@ -134,6 +150,7 @@ impl Sprite {
             layers,
             frames,
             cels,
+            tags: Vec::new(),
         }
     }
 
@@ -326,6 +343,7 @@ impl Sprite {
             layer.insert(idx + 1, cel.clone());
         }
         self.frames.insert(idx + 1, Frame { duration_ms: 100 });
+        self.shift_tags_on_insert(idx);
     }
 
     /// Duplicate frame `idx` (with its cels and duration) right after it.
@@ -337,6 +355,7 @@ impl Sprite {
             self.cels[l].insert(idx + 1, cel);
         }
         self.frames.insert(idx + 1, self.frames[idx]);
+        self.shift_tags_on_insert(idx);
     }
 
     pub fn remove_frame(&mut self, idx: usize) -> bool {
@@ -347,7 +366,60 @@ impl Sprite {
             layer.remove(idx);
         }
         self.frames.remove(idx);
+        self.shift_tags_on_remove(idx);
         true
+    }
+
+    /// Move frame `from` to index `to` (all layers' cels move with it).
+    pub fn move_frame(&mut self, from: usize, to: usize) -> bool {
+        if from >= self.frames.len() || to >= self.frames.len() || from == to {
+            return false;
+        }
+        for layer in &mut self.cels {
+            let cel = layer.remove(from);
+            layer.insert(to, cel);
+        }
+        let frame = self.frames.remove(from);
+        self.frames.insert(to, frame);
+        true
+    }
+
+    /// Keep tags within the frame range; drop any that collapse.
+    pub fn clamp_tags(&mut self) {
+        let last = self.frames.len().saturating_sub(1);
+        self.tags.retain_mut(|t| {
+            t.to = t.to.min(last);
+            t.from = t.from.min(t.to);
+            true
+        });
+    }
+
+    /// A frame was inserted at `idx + 1`: ranges at/after it move, and a range
+    /// spanning it grows.
+    fn shift_tags_on_insert(&mut self, idx: usize) {
+        for t in &mut self.tags {
+            if t.from > idx {
+                t.from += 1;
+                t.to += 1;
+            } else if t.to >= idx {
+                t.to += 1;
+            }
+        }
+    }
+
+    fn shift_tags_on_remove(&mut self, idx: usize) {
+        self.tags.retain_mut(|t| {
+            if t.from > idx {
+                t.from -= 1;
+                t.to -= 1;
+            } else if t.to >= idx {
+                t.to = t.to.saturating_sub(1);
+                if t.to < t.from {
+                    return false;
+                }
+            }
+            true
+        });
     }
 
     /// Insert a blank layer just above `idx` (towards the top of the stack).
@@ -801,6 +873,40 @@ mod tests {
         assert_eq!(s.layers.len(), 1);
         assert_eq!(s.layers[0].name, "Layer 1");
         assert!(!s.remove_layer(0), "cannot delete the last layer");
+    }
+
+    #[test]
+    fn move_frame_reorders_cels() {
+        let mut s = Sprite::new(1, 1);
+        s.set(0, 0, 0, 0, Rgba::rgb(1, 1, 1));
+        s.add_frame_after(0);
+        s.set(0, 1, 0, 0, Rgba::rgb(2, 2, 2));
+        s.add_frame_after(1);
+        s.set(0, 2, 0, 0, Rgba::rgb(3, 3, 3));
+        assert!(s.move_frame(2, 0));
+        assert_eq!(s.get(0, 0, 0, 0), Rgba::rgb(3, 3, 3));
+        assert_eq!(s.get(0, 1, 0, 0), Rgba::rgb(1, 1, 1));
+        assert_eq!(s.get(0, 2, 0, 0), Rgba::rgb(2, 2, 2));
+        assert!(!s.move_frame(0, 0));
+    }
+
+    #[test]
+    fn tags_follow_frame_insert_and_remove() {
+        let mut s = Sprite::new(1, 1);
+        s.add_frame_after(0);
+        s.add_frame_after(1);
+        s.tags.push(Tag {
+            name: "walk".into(),
+            from: 1,
+            to: 2,
+            color: Rgba(1, 2, 3, 255),
+        });
+        s.add_frame_after(0); // insert before the tag -> shifts to 2..3
+        assert_eq!((s.tags[0].from, s.tags[0].to), (2, 3));
+        s.remove_frame(2);
+        assert_eq!((s.tags[0].from, s.tags[0].to), (2, 2));
+        s.remove_frame(2);
+        assert!(s.tags.is_empty(), "removing the last tagged frame drops it");
     }
 
     #[test]

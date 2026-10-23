@@ -9,13 +9,13 @@ star, but the project is already a usable editor — the rest is depth and polis
 Done: **layer groups & masks** (nested groups, per-layer alpha masks, lock /
 editable flags) and **Aseprite format fidelity** (linked cels, compressed
 tilemaps with embedded tilesets, cel opacity, indexed/grayscale export, real
-fixtures) and **tile mode** (3x3 seamless preview + wrapping cursor).
+fixtures), **tile mode** (3x3 seamless preview + wrapping cursor) and **frame
+tags + reorder**.
 
 Nothing left in P0 — promote from P1.
 
 ## P1 — editing depth
 
-- **Frame tags** (named ranges) and **frame reorder** (drag in the timeline).
 - **Onion-skin settings** (tint color, count, opacity) and loop/playback options.
 - **Layer panel**: drag-to-reorder (currently ↑/↓ + `:layerup`/`:layerdown`).
 - **Text tool** — bitmap-font text placement (a larger feature).
@@ -50,7 +50,7 @@ Nothing left in P0 — promote from P1.
 
 ## Suggested order
 
-1. Frame tags & reorder.
+1. Onion-skin settings.
 2. Export options.
 3. Text tool, filters, free transform.
 4. Color profiles, shaders/wgpu, persistence.

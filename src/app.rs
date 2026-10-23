@@ -38,9 +38,8 @@ impl eframe::App for VixelApp {
         if self.playing {
             let now = Instant::now();
             if now >= self.next_frame {
-                let n = self.editor.sprite.frames.len();
                 let dur = self.editor.sprite.frames[self.editor.active_frame].duration_ms as u64;
-                self.editor.active_frame = (self.editor.active_frame + 1) % n.max(1);
+                self.editor.advance_frame();
                 self.next_frame = now + Duration::from_millis(dur.max(16));
             }
             ui.ctx().request_repaint();

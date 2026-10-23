@@ -474,6 +474,43 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             Some("off") => editor.set_tile_mode(Some(false)),
             _ => editor.set_tile_mode(None),
         },
+        "tag" | "tags" => match arg {
+            Some(rest) => {
+                let mut parts = rest.split_whitespace();
+                let name = parts.next().unwrap_or("");
+                if name.is_empty() {
+                    editor.msg = "usage: :tag <name> [from to]".into();
+                } else {
+                    let from = parts.next().and_then(|s| s.parse::<usize>().ok());
+                    let to = parts.next().and_then(|s| s.parse::<usize>().ok());
+                    editor.set_tag(name, from, to);
+                }
+            }
+            None => {
+                editor.msg = if editor.sprite.tags.is_empty() {
+                    "no tags (use :tag <name> [from to])".into()
+                } else {
+                    editor
+                        .sprite
+                        .tags
+                        .iter()
+                        .map(|t| format!("{} {}-{}", t.name, t.from, t.to))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
+            }
+        },
+        "tagdel" | "untag" => editor.del_tag(arg),
+        "framemove" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            match (
+                it.next().and_then(|s| s.parse::<usize>().ok()),
+                it.next().and_then(|s| s.parse::<usize>().ok()),
+            ) {
+                (Some(from), Some(to)) => editor.move_frame(from, to),
+                _ => editor.msg = "usage: :framemove <from> <to>".into(),
+            }
+        }
         "fliph" => editor.flip_h(),
         "flipv" => editor.flip_v(),
         "rot90" => editor.rotate_cw(),

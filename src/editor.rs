@@ -185,6 +185,8 @@ pub struct Editor {
     pub bg_idx: usize,
     pub active_layer: usize,
     pub active_frame: usize,
+    /// Index into `sprite.tags`; playback is restricted to it when set.
+    pub active_tag: Option<usize>,
     pub symmetry: Symmetry,
     pub lasso_points: Vec<(u32, u32)>,
     pub selection_op: SelectionOp,
@@ -229,6 +231,7 @@ impl Editor {
             bg_idx: 0,
             active_layer: 0,
             active_frame: 0,
+            active_tag: None,
             symmetry: Symmetry::None,
             lasso_points: Vec::new(),
             selection_op: SelectionOp::Replace,
@@ -786,10 +789,86 @@ impl Editor {
             if self.active_frame >= self.sprite.frames.len() {
                 self.active_frame = self.sprite.frames.len() - 1;
             }
+            if self.active_tag.is_some_and(|i| i >= self.sprite.tags.len()) {
+                self.active_tag = None;
+            }
             self.dirty = true;
         } else {
             self.msg = "cannot delete last frame".into();
         }
+    }
+
+    /// Move a frame (drag-and-drop in the timeline).
+    pub fn move_frame(&mut self, from: usize, to: usize) {
+        if self.sprite.move_frame(from, to) {
+            if self.active_frame == from {
+                self.active_frame = to;
+            }
+            self.dirty = true;
+        }
+    }
+
+    /// Create or update a tag over the inclusive frame range.
+    pub fn set_tag(&mut self, name: &str, from: Option<usize>, to: Option<usize>) {
+        let last = self.sprite.frames.len().saturating_sub(1);
+        let a = from.unwrap_or(self.active_frame).min(last);
+        let b = to.unwrap_or(a).min(last);
+        let (a, b) = if a <= b { (a, b) } else { (b, a) };
+        let idx = match self.sprite.tags.iter().position(|t| t.name == name) {
+            Some(i) => {
+                self.sprite.tags[i].from = a;
+                self.sprite.tags[i].to = b;
+                i
+            }
+            None => {
+                self.sprite
+                    .tags
+                    .push(crate::sprite::Tag {
+                        name: name.to_string(),
+                        from: a,
+                        to: b,
+                        color: Rgba(120, 170, 255, 255),
+                    });
+                self.sprite.tags.len() - 1
+            }
+        };
+        self.active_tag = Some(idx);
+        self.msg = format!("tag '{name}': frames {a}-{b}");
+        self.dirty = true;
+    }
+
+    /// Delete a tag by name, or the active tag when no name is given.
+    pub fn del_tag(&mut self, name: Option<&str>) {
+        let idx = match name {
+            Some(n) => self.sprite.tags.iter().position(|t| t.name == n),
+            None => self.active_tag,
+        };
+        if let Some(i) = idx {
+            self.sprite.tags.remove(i);
+            self.active_tag = None;
+            self.dirty = true;
+        } else {
+            self.msg = "no such tag".into();
+        }
+    }
+
+    /// Inclusive frame range for playback: the active tag, else everything.
+    pub fn play_range(&self) -> (usize, usize) {
+        let last = self.sprite.frames.len().saturating_sub(1);
+        match self.active_tag.and_then(|i| self.sprite.tags.get(i)) {
+            Some(t) => (t.from.min(last), t.to.min(last)),
+            None => (0, last),
+        }
+    }
+
+    /// Step to the next playback frame, wrapping inside the active tag.
+    pub fn advance_frame(&mut self) {
+        let (a, b) = self.play_range();
+        self.active_frame = if self.active_frame < a || self.active_frame >= b {
+            a
+        } else {
+            self.active_frame + 1
+        };
     }
 
     pub fn resize(&mut self, w: u32, h: u32) {
@@ -1597,6 +1676,23 @@ mod tests {
         assert_eq!((e.sprite.width, e.sprite.height), (3, 2));
         e.undo();
         assert_eq!((e.sprite.width, e.sprite.height), (2, 3));
+    }
+
+    #[test]
+    fn tag_restricts_playback() {
+        let mut e = Editor::new(1, 1);
+        e.add_frame();
+        e.add_frame(); // 3 frames
+        e.set_tag("walk", Some(1), Some(2));
+        assert_eq!(e.play_range(), (1, 2));
+        e.active_frame = 1;
+        e.advance_frame();
+        assert_eq!(e.active_frame, 2);
+        e.advance_frame();
+        assert_eq!(e.active_frame, 1, "wraps at the tag end");
+        e.del_tag(Some("walk"));
+        assert_eq!(e.play_range(), (0, 2));
+        assert!(e.active_tag.is_none());
     }
 
     #[test]

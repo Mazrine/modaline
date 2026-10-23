@@ -13,7 +13,7 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 
 use crate::color::Rgba;
-use crate::sprite::{BlendMode, Cel, Frame, Layer, Sprite};
+use crate::sprite::{BlendMode, Cel, Frame, Layer, Sprite, Tag};
 
 const MAGIC: u16 = 0xA5E0;
 const FRAME_MAGIC: u16 = 0xF1FA;
@@ -21,6 +21,7 @@ const FRAME_MAGIC: u16 = 0xF1FA;
 const CHUNK_LAYER: u16 = 0x2004;
 const CHUNK_CEL: u16 = 0x2005;
 const CHUNK_PALETTE: u16 = 0x2019;
+const CHUNK_TAGS: u16 = 0x2018;
 const CHUNK_PALETTE_RGB: u16 = 0x0004;
 const CHUNK_PALETTE_RGBA: u16 = 0x0011;
 
@@ -111,6 +112,9 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
         for layer in &s.layers {
             write_layer_chunk(&mut body, layer);
         }
+        if !s.tags.is_empty() {
+            write_tags_chunk(&mut body, &s.tags);
+        }
     }
     for li in 0..s.layers.len() {
         if s.layers[li].group {
@@ -163,6 +167,25 @@ fn write_layer_chunk(out: &mut Vec<u8>, layer: &Layer) {
     b.extend_from_slice(&(name.len() as u16).to_le_bytes());
     b.extend_from_slice(name);
     write_chunk(out, CHUNK_LAYER, &b);
+}
+
+fn write_tags_chunk(out: &mut Vec<u8>, tags: &[Tag]) {
+    let mut b = Vec::new();
+    b.extend_from_slice(&(tags.len() as u16).to_le_bytes());
+    b.extend_from_slice(&[0u8; 8]); // reserved
+    for t in tags {
+        b.extend_from_slice(&(t.from as u16).to_le_bytes());
+        b.extend_from_slice(&(t.to as u16).to_le_bytes());
+        b.push(0); // loop direction: forward
+        b.extend_from_slice(&0u16.to_le_bytes()); // repeat
+        b.extend_from_slice(&[0u8; 6]); // reserved
+        b.extend_from_slice(&[t.color.0, t.color.1, t.color.2]);
+        b.push(0); // extra byte
+        let name = t.name.as_bytes();
+        b.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        b.extend_from_slice(name);
+    }
+    write_chunk(out, CHUNK_TAGS, &b);
 }
 
 fn write_cel_chunk(out: &mut Vec<u8>, s: &Sprite, li: usize, frame: usize, depth: &OutDepth) {
@@ -259,6 +282,7 @@ struct Import {
     layer_tilesets: Vec<u32>,
     tilesets: Vec<Tileset>,
     tilemaps: Vec<TilemapCel>,
+    tags: Vec<Tag>,
 }
 
 impl Import {
@@ -431,6 +455,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         layer_tilesets: Vec::new(),
         tilesets: Vec::new(),
         tilemaps: Vec::new(),
+        tags: Vec::new(),
     };
     let has_uuid = u32_at(&data, 14) & 4 != 0;
     let mut layers: Vec<Layer> = Vec::new();
@@ -466,6 +491,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
                     im.layer_tilesets.push(tileset);
                 }
                 CHUNK_CEL => cel_bodies.push((frame, body.to_vec())),
+                CHUNK_TAGS => im.tags.extend(parse_tags(body)),
                 CHUNK_TILESET => im.tilesets.push(parse_tileset(body, depth, &im.palette)?),
                 CHUNK_PALETTE => parse_palette_new(body, &mut im.palette)?,
                 CHUNK_PALETTE_RGB => parse_palette_rgb(body, &mut im.palette, false),
@@ -517,9 +543,40 @@ pub fn load(path: &Path) -> Result<Sprite> {
         layers,
         frames,
         cels,
+        tags: im.tags,
     };
     sprite.normalize_levels();
+    sprite.clamp_tags();
     Ok(sprite)
+}
+
+fn parse_tags(body: &[u8]) -> Vec<Tag> {
+    let count = u16_at(body, 0) as usize;
+    let mut p = 10usize; // count (2) + reserved (8)
+    let mut tags = Vec::new();
+    for _ in 0..count {
+        if p + 17 > body.len() {
+            break;
+        }
+        let from = u16_at(body, p) as usize;
+        let to = u16_at(body, p + 2) as usize;
+        // p+4 direction, p+5..7 repeat, p+7..13 reserved, p+13..16 RGB,
+        // p+16 extra byte, then a STRING name.
+        let color = Rgba(body[p + 13], body[p + 14], body[p + 15], 255);
+        let name_len = u16_at(body, p + 17) as usize;
+        let name = body
+            .get(p + 19..p + 19 + name_len)
+            .map(|b| String::from_utf8_lossy(b).into_owned())
+            .unwrap_or_default();
+        p += 19 + name_len;
+        tags.push(Tag {
+            name: if name.is_empty() { "Tag".into() } else { name },
+            from,
+            to,
+            color,
+        });
+    }
+    tags
 }
 
 fn parse_tileset(body: &[u8], depth: u16, palette: &[Rgba]) -> Result<Tileset> {
@@ -973,6 +1030,37 @@ mod tests {
     }
 
     #[test]
+    fn round_trips_frame_tags() {
+        let mut s = Sprite::new(1, 1);
+        s.add_frame_after(0);
+        s.add_frame_after(1);
+        s.set(0, 0, 0, 0, Rgba(1, 2, 3, 255));
+        s.tags.push(Tag {
+            name: "walk".into(),
+            from: 0,
+            to: 1,
+            color: Rgba(200, 100, 50, 255),
+        });
+        s.tags.push(Tag {
+            name: "idle".into(),
+            from: 2,
+            to: 2,
+            color: Rgba(10, 20, 30, 255),
+        });
+        let path = tmp("vixel_ase_tags.ase");
+        save(&s, &path).unwrap();
+        let loaded = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(loaded.tags.len(), 2);
+        assert_eq!(loaded.tags[0].name, "walk");
+        assert_eq!((loaded.tags[0].from, loaded.tags[0].to), (0, 1));
+        assert_eq!(loaded.tags[0].color, Rgba(200, 100, 50, 255));
+        assert_eq!(loaded.tags[1].name, "idle");
+        assert_eq!((loaded.tags[1].from, loaded.tags[1].to), (2, 2));
+    }
+
+    #[test]
     fn loads_real_aseprite_files() {
         for name in [
             "prop.ase",
@@ -992,4 +1080,3 @@ mod tests {
         }
     }
 }
-

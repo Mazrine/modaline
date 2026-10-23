@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-10-23 — after the tile mode batch.
+Last updated: 2026-10-23 — after the frame tags & reorder batch.
 
 ## Summary
 
@@ -65,6 +65,12 @@ across horizontal/vertical/both axes).
   skinning (previous frame tinted red, next green), and **timeline thumbnails**
   (click a thumbnail to switch frames). The timeline also exposes the active
   cel's **opacity** (per layer + frame, as in Aseprite).
+- **frame tags** (named inclusive ranges): `:tag <name> [from to]`,
+  `:tagdel [name]`; tags are listed above the timeline, clicking one restricts
+  playback to its range (click again to clear). Tags round-trip in `.vpx` and
+  `.ase` (name, range, color) and follow frame insert/remove.
+- **frame reorder**: drag a timeline thumbnail onto another slot, or
+  `:framemove <from> <to>`.
 
 ## Canvas
 
@@ -141,11 +147,12 @@ middle-drag = pan.
 `fliph`/`flipv`/`rot90` (selection-aware) · `sym <mode>` · `wand <0-255>` /
 `wandall on|off` · `selop <op>` · `grad linear|radial` · `contour` ·
 `pal load|save <file>` · `newgroup` · `indent`/`outdent` · `lock`/`unlock` ·
-`mask add|apply|del` · `tile [on|off]` · `export <file>` · `import <png>` ·
-`open <file>` · `help`.
+`mask add|apply|del` · `tile [on|off]` · `tag <name> [from to]` · `tagdel` ·
+`framemove <from> <to>` · `export <file>` · `import <png>` · `open <file>` ·
+`help`.
 
 ## Test status
 
-`cargo test` → 34 tests green; `cargo clippy --all-targets` → clean. Verified to
+`cargo test` → 38 tests green; `cargo clippy --all-targets` → clean. Verified to
 launch on NixOS via `steam-run`. (Interaction paths are compiled + unit-tested
 but not yet hand-tested on a live display.)
