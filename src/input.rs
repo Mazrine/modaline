@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use eframe::egui::{self, Event, Key, Modifiers};
 
 use crate::color::Rgba;
-use crate::editor::{Editor, Mode, Pending, Shape, Tool};
+use crate::editor::{Clipboard, Editor, Mode, Pending, Shape, Tool};
 use crate::gui::View;
 use crate::{ase, io};
 
@@ -24,9 +24,78 @@ pub fn handle_input(editor: &mut Editor, view: &mut View, ui: &egui::Ui) {
                 modifiers,
                 ..
             } => handle_key(editor, view, *key, *modifiers),
+            Event::Copy => clipboard_copy(editor, ui.ctx()),
+            Event::Cut => clipboard_cut(editor, ui.ctx()),
+            Event::PasteImage(img) => clipboard_paste_image(editor, img),
             _ => {}
         }
     }
+}
+
+/// Ctrl/Cmd-C: yank the selection (or whole cel) to the clipboard and OS clipboard.
+fn clipboard_copy(editor: &mut Editor, ctx: &egui::Context) {
+    if !editor.has_selection() {
+        editor.select_all();
+    }
+    editor.yank();
+    if let Some(cb) = &editor.clipboard
+        && let Some(img) = clipboard_to_image(cb)
+    {
+        ctx.copy_image(img);
+    }
+}
+
+/// Ctrl/Cmd-X: cut the selection (or whole cel) and put it on the OS clipboard.
+fn clipboard_cut(editor: &mut Editor, ctx: &egui::Context) {
+    if !editor.has_selection() {
+        editor.select_all();
+    }
+    editor.cut();
+    if let Some(cb) = &editor.clipboard
+        && let Some(img) = clipboard_to_image(cb)
+    {
+        ctx.copy_image(img);
+    }
+}
+
+/// Ctrl/Cmd-V with an image on the OS clipboard → float it for pasting.
+fn clipboard_paste_image(editor: &mut Editor, img: &std::sync::Arc<egui::ColorImage>) {
+    let (w, h) = (img.size[0] as u32, img.size[1] as u32);
+    if w == 0 || h == 0 {
+        return;
+    }
+    let mut pixels = Vec::with_capacity((w * h) as usize);
+    for c in &img.pixels {
+        let [r, g, b, a] = c.to_srgba_unmultiplied();
+        pixels.push(Rgba(r, g, b, a));
+    }
+    editor.clipboard = Some(Clipboard {
+        w,
+        h,
+        pixels,
+        mask: vec![true; (w * h) as usize],
+    });
+    editor.start_paste();
+    editor.msg = "pasted from clipboard".into();
+}
+
+fn clipboard_to_image(cb: &Clipboard) -> Option<egui::ColorImage> {
+    if cb.w == 0 || cb.h == 0 {
+        return None;
+    }
+    let mut rgba = Vec::with_capacity((cb.w * cb.h * 4) as usize);
+    for i in 0..(cb.w * cb.h) as usize {
+        let c = if cb.mask[i] {
+            cb.pixels[i]
+        } else {
+            Rgba::TRANSPARENT
+        };
+        rgba.extend_from_slice(&[c.0, c.1, c.2, c.3]);
+    }
+    Some(egui::ColorImage::from_rgba_unmultiplied(
+        [cb.w as usize, cb.h as usize],
+        &rgba,
+    ))
 }
 
 fn handle_key(editor: &mut Editor, view: &mut View, key: Key, mods: Modifiers) {
@@ -34,20 +103,13 @@ fn handle_key(editor: &mut Editor, view: &mut View, key: Key, mods: Modifiers) {
 
     if mods.command {
         match key {
-            R => {
-                editor.redo();
-                return;
-            }
-            C => {
-                editor.should_quit = true;
-                return;
-            }
-            S => {
-                save(editor);
-                return;
-            }
-            _ => return,
+            R => editor.redo(),
+            Z => editor.undo(),
+            S => save(editor),
+            Q => editor.should_quit = true,
+            _ => {}
         }
+        return;
     }
 
     match editor.mode {

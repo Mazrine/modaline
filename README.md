@@ -52,8 +52,9 @@ Modal, like vim. Start in **normal** mode.
 | `+` / `-` | zoom in / out |
 | `:` | command line |
 | `?` | help |
-| `Ctrl-s` | save |
-| `Ctrl-c` | quit |
+| `Ctrl-c` / `Ctrl-x` / `Ctrl-v` | copy / cut / paste (OS clipboard; no selection copies the whole cel) |
+| `Ctrl-z` | undo (alias of `u`) |
+| `Ctrl-s` / `Ctrl-q` | save / quit |
 
 ### Draw mode (`i`)
 

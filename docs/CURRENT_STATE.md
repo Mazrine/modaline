@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-10-19 — after the symmetry + lasso/polygon batch.
+Last updated: 2026-10-22 — after the OS-clipboard + timeline-thumbnails batch.
 
 ## Summary
 
@@ -48,7 +48,8 @@ ellipse — all with live preview where applicable — plus **symmetry painting*
 ## Frames & animation
 
 - add / duplicate / remove frames, per-frame duration, playback with onion
-  skinning (previous frame tinted red, next green).
+  skinning (previous frame tinted red, next green), and **timeline thumbnails**
+  (click a thumbnail to switch frames).
 
 ## Canvas
 
@@ -98,7 +99,8 @@ ellipse — all with live preview where applicable — plus **symmetry painting*
 | `u` / `Ctrl-r` | undo / redo |
 | `+` `-` | zoom |
 | `:` `?` | command / help |
-| `Ctrl-s` / `Ctrl-c` | save / quit |
+| `Ctrl-c` / `Ctrl-x` / `Ctrl-v` | copy / cut / paste (OS clipboard) |
+| `Ctrl-s` / `Ctrl-q` | save / quit |
 
 Mouse: left = paint fg · right = paint bg · middle = pick · wheel = zoom ·
 middle-drag = pan.

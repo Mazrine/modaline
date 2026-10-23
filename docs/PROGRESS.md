@@ -9,7 +9,7 @@
 - `cargo clippy --all-targets` → **clean**
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **symmetry painting + lasso/polygon selection**.
+- Last completed batch: **OS clipboard + timeline thumbnails**.
 
 ## How to resume
 
@@ -39,29 +39,34 @@ Read, in order:
    `docs/ROADMAP.md`.
 6. **Draw/select batch** — symmetry painting (`s`) + lasso (`L`) / polygonal
    (`P`) selection. 3 new tests. Docs updated.
+7. **Clipboard + thumbnails batch** — OS clipboard (Ctrl-C/X/V, image
+   copy/paste through egui), timeline thumbnails, and the Ctrl-C→copy /
+   Ctrl-Q→quit / Ctrl-Z→undo remap.
 
 ## Next step (exact)
 
-### 1. OS clipboard (Ctrl-C / Ctrl-X / Ctrl-V)
+### 1. Selection modifiers
 
-egui 0.37 already surfaces the OS clipboard, so this is mostly wiring:
+- Add / subtract / intersect with the current selection (e.g. shift/alt while
+  marqueeing or wanding).
+- `Selection` is already a per-pixel mask, so this is just mask union /
+  difference / intersection, then assign back to `self.selection`.
 
-- `input.rs::handle_input` currently ignores `Event::Copy`, `Event::Cut`, and
-  `Event::Paste`/`Event::PasteImage`. Map:
-  - `Event::Copy` → `editor.yank()` and push the selection to the OS clipboard.
-  - `Event::Cut` → `editor.cut()` + copy to OS clipboard.
-  - `Event::PasteImage(img)` / `Event::Paste(text)` → build a `Clipboard` and
-    enter paste mode.
-- Copy out: `ui.ctx().copy_image(ColorImage)` (for the selection, cropped to its
-  bounding box; transparent outside the mask). Paste in: `Event::PasteImage`
-  arrives as `Arc<ColorImage>` — convert to `Clipboard`.
-- Keep the existing internal `y`/`x`/`p` as the keyboard-first path.
+### 2. Magic-wand tolerance + "all layers"
 
-### 2. Timeline thumbnails
+- Add a color-distance tolerance to `Editor::magic_wand` (currently exact match).
+- Option to flood over all visible layers instead of only the active one.
 
-- In `gui.rs::timeline`, render a small preview per frame (a mini composite).
-- Simplest: paint `sel`-scaled filled rects from `sprite.composite(frame)`, or
-  cache one `TextureHandle` per frame (invalidate on edit/frame change).
+### 3. Toolset
+
+- gradient (linear/radial between fg and bg), spray, shade, blur, contour.
+- filled ellipse / rectangle: add a `filled: bool` to `Shape` and use
+  `ellipse_points(..., filled)` / a filled-rect helper.
+
+### 4. Selection transforms
+
+- Apply flip / rotate to the selection's pixels (or the whole cel when there is
+  no selection), instead of only the whole sprite (current `:fliph` etc.).
 
 ## Known limitations (do not forget)
 
@@ -72,6 +77,10 @@ egui 0.37 already surfaces the OS clipboard, so this is mostly wiring:
 - Selection is single-layer for copy/cut/move (not merged across layers).
 - `.ase` export is depth-32 RGBA only (indexed import is supported).
 - No selection add/subtract/intersect yet, no selection transforms.
+- Timeline thumbnails rebuild every UI pass (fine for small sprites; cache by
+  revision if it ever matters).
+- OS paste prefers clipboard *text* when present (egui behavior); image paste is
+  used when the clipboard has no usable text.
 - Rendering is CPU-composited; no custom shaders (kept backend-agnostic on
   purpose for the future glow→wgpu switch).
 
@@ -80,4 +89,5 @@ egui 0.37 already surfaces the OS clipboard, so this is mostly wiring:
 Interaction paths are compiled + unit-tested and the app launches, but **not
 hand-tested on a live display** in this environment. First manual pass should
 cover: draw/erase, `v` marquee → `m` move, `w` wand, `L` lasso drag, `P` polygon
-+ `Enter`, `s` symmetry painting, `:w x.ase` then reopen.
++ `Enter`, `s` symmetry painting, `Ctrl-c` in another app → `Ctrl-v` here,
+`:w x.ase` then reopen.

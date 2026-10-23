@@ -5,14 +5,15 @@ north star but is a large, ongoing effort; this lists the concrete next steps.
 
 ## P0 — next batch candidates
 
-- **Timeline thumbnails** — render a mini composite per frame in the bottom
-  panel (small textures or painted rects).
-- **OS clipboard** — map `Ctrl-c`/`Ctrl-x`/`Ctrl-v` (and egui's
-  `Event::Copy`/`Cut`/`Paste`) to yank/cut/paste. Needs a PNG round-trip through
-  the system clipboard.
+*(P0 is complete: selection tools, symmetry, OS clipboard, and timeline
+thumbnails are all done.)*
 
-*(Done in previous batches: marquee + magic-wand + lasso + polygon selection,
-symmetry painting, blend modes, `.ase`/`.aseprite`.)*
+- **Selection modifiers** — add / subtract / intersect with the current selection
+  (shift/alt while selecting).
+- **Magic-wand tolerance** + an "all layers" option.
+- **Toolset** — gradient, spray, shade, blur, contour; filled ellipse/rect.
+- **Selection transforms** (flip/rotate the selection, not just the whole
+  sprite).
 
 ## P1 — fill out the toolset & selection
 

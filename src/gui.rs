@@ -12,6 +12,8 @@ pub struct View {
     pub initialized: bool,
     pub show_grid: bool,
     pub onion: bool,
+    /// Cached per-frame timeline thumbnails (rebuilt each UI pass).
+    thumbs: Vec<Option<TextureHandle>>,
 }
 
 impl View {
@@ -22,6 +24,7 @@ impl View {
             initialized: false,
             show_grid: true,
             onion: true,
+            thumbs: Vec::new(),
         }
     }
 
@@ -83,7 +86,7 @@ pub fn draw(
     playing: &mut bool,
 ) {
     egui::Panel::top("toolbar").show(ui, |ui| toolbar(ui, editor, view));
-    egui::Panel::bottom("timeline").show(ui, |ui| timeline(ui, editor, playing));
+    egui::Panel::bottom("timeline").show(ui, |ui| timeline(ui, editor, playing, view));
     egui::Panel::right("side").show(ui, |ui| side(ui, editor, view));
     egui::CentralPanel::default().show(ui, |ui| {
         canvas(ui, editor, view, texture, onion_prev, onion_next)
@@ -165,7 +168,7 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
 
 // ---- bottom timeline ----
 
-fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool) {
+fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &mut View) {
     ui.horizontal(|ui| {
         let play_label = if *playing { "⏸" } else { "⏵" };
         if ui.button(play_label).clicked() {
@@ -181,14 +184,44 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool) {
             editor.del_frame();
         }
         ui.separator();
+
         let count = editor.sprite.frames.len();
+        if view.thumbs.len() < count {
+            view.thumbs.resize_with(count, || None);
+        } else if view.thumbs.len() > count {
+            view.thumbs.truncate(count);
+        }
+
         let mut selected = editor.active_frame;
+        let th = 40.0;
+        let aspect = editor.sprite.width as f32 / editor.sprite.height.max(1) as f32;
+        let tw = (th * aspect).clamp(10.0, 120.0);
+        let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
+
         for i in 0..count {
-            if ui.selectable_label(i == selected, format!("{}", i + 1)).clicked() {
+            let comp = frame_composite(editor, i);
+            upload(ui, &mut view.thumbs[i], &format!("thumb{i}"), comp);
+            let (rect, resp) = ui.allocate_exact_size(Vec2::new(tw, th), Sense::click());
+            draw_checker(ui.painter(), rect, 4.0);
+            if let Some(t) = &view.thumbs[i] {
+                ui.painter().image(t.id(), rect, uv, Color32::WHITE);
+            }
+            let stroke = if i == selected {
+                Stroke::new(2.0, Color32::WHITE)
+            } else {
+                Stroke::new(1.0, Color32::from_gray(80))
+            };
+            ui.painter()
+                .rect_stroke(rect, 1.0, stroke, StrokeKind::Inside);
+            if resp.clicked() {
                 selected = i;
+            }
+            if resp.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
             }
         }
         editor.active_frame = selected;
+
         ui.separator();
         ui.label("ms:");
         let d = &mut editor.sprite.frames[editor.active_frame].duration_ms;
@@ -754,7 +787,9 @@ const HELP: &[&str] = &[
     "  X                  swap fg / bg",
     "  u / Ctrl-r         undo / redo",
     "  + / -              zoom in / out",
-    "  :                  command line    Ctrl-c quit",
+    "  Ctrl-c / x / v     copy / cut / paste (OS clipboard)",
+    "  Ctrl-s / Ctrl-q    save / quit",
+    "  :                  command line",
     "",
     "mouse: left=paint fg  right=paint bg  middle=pick  wheel=zoom  middle-drag=pan",
     "",

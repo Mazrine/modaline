@@ -448,6 +448,17 @@ impl Editor {
         self.mode = Mode::Visual;
     }
 
+    /// Persistent selection of the whole canvas.
+    pub fn select_all(&mut self) {
+        self.selection = Some(Selection::rect(
+            0,
+            0,
+            self.sprite.width as i32 - 1,
+            self.sprite.height as i32 - 1,
+        ));
+        self.select_anchor = None;
+    }
+
     pub fn has_selection(&self) -> bool {
         self.select_anchor.is_some() || self.selection.is_some()
     }
