@@ -5,11 +5,11 @@
 
 ## Status snapshot
 
-- `cargo test` → **26 tests green**
+- `cargo test` → **33 tests green**
 - `cargo clippy --all-targets` → **clean**
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **layer groups & masks**.
+- Last completed batch: **Aseprite format fidelity**.
 
 ## How to resume
 
@@ -60,19 +60,20 @@ Read, in order:
     paint paths, per-layer alpha masks (`:mask add|apply|del`) that follow
     flips/rotate/resize and persist in `.vpx`. `.ase` now reads/writes layer
     groups, child levels and the editable flag. 5 new tests.
+13. **Aseprite fidelity batch** — fixed chunk framing (Aseprite's chunk size
+    **includes** the 6-byte header; the old writer was malformed), read linked
+    cels (type 1) and compressed tilemap cels (type 3) with embedded tilesets
+    (X/Y/diagonal flips), per-cel opacity (read, write, timeline slider), correct
+    legacy palette chunks, and lossless depth selection on export (grayscale
+    16-bit, indexed 8-bit with palette chunk, else RGBA). Real Aseprite-saved
+    fixtures added under `tests/fixtures/ase/`. 7 new tests.
 
 ## Next step (exact)
 
 The immediate order is below. **The full backlog lives in `docs/ROADMAP.md`** —
 every remaining item is recorded there, so nothing depends on chat history.
 
-### 1. Aseprite format fidelity
-
-- Read linked cels (type 1) and compressed tilesets (type 3); read/write cel
-  opacity; write indexed-color (depth 8/16); add round-trip tests against real
-  Aseprite-saved fixtures. (Layer groups + child levels now round-trip.)
-
-### 2. Tile mode
+### 1. Tile mode
 
 - Tile grid + wrapping paint for seamless textures.
 
@@ -92,6 +93,11 @@ all detailed in `docs/ROADMAP.md`.
 - New layers are added as siblings; nesting is an explicit `:indent`.
 - New groups start empty and do not adopt the active layer.
 - `.ase` carries groups/flags but not masks (masks are `.vpx`-only).
+- Tilemap layers are rasterized on `.ase` import; tilesets are not kept (no
+  tile editing yet).
+- `.ase` import ignores external tileset files (flag 1) and cel z-index.
+- `.ase` files exported by vixel before this batch have non-conformant chunk
+  sizes and may not load; re-export them with the current build.
 - Lasso/polygon are mouse-driven; keyboard selection is marquee (`v`) + magic
   wand (`w`).
 - Selection is single-layer for copy/cut/move (not merged across layers).

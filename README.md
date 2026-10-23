@@ -138,8 +138,10 @@ the flattened composite of all visible layers.
 
 ## File formats
 
-- **`.ase` / `.aseprite`** — the native Aseprite format (read + write, 32-bit
-  RGBA, reads raw and zlib-compressed cels, and indexed/grayscale via palette).
+- **`.ase` / `.aseprite`** — the native Aseprite format (read + write): raw,
+  zlib, linked and compressed-tilemap cels; RGBA, grayscale and indexed pixels;
+  layer groups, cel opacity and frame durations. Export picks the smallest
+  lossless depth (gray, indexed, or 32-bit RGBA).
 - **`.vpx`** — project file: JSON with size, layers, frames, and every cel.
 - **PNG** — single-frame import/export with full alpha.
 
@@ -178,6 +180,5 @@ flip H/V + rotate 90° (**selection-aware**), stroke-grouped undo/redo,
 (`.gpl`/`.hex`/`.pal`), **OS clipboard**, full vim keymap (normal/draw/visual/
 paste/command modes).
 
-Not yet (Aseprite parity gaps): tile mode, Aseprite
-format extras (linked cels, cel opacity, indexed-color export), color
+Not yet (Aseprite parity gaps): tile mode, external tileset files, color
 profiles, shaders.

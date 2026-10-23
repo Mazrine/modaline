@@ -7,6 +7,22 @@ use crate::color::Rgba;
 pub struct Cel {
     /// Row-major, `width * height` pixels.
     pub pixels: Vec<Rgba>,
+    /// 0..255, cel opacity (Aseprite stores this per cel).
+    #[serde(default = "full")]
+    pub opacity: u8,
+}
+
+fn full() -> u8 {
+    255
+}
+
+impl Cel {
+    pub fn blank(area: usize) -> Self {
+        Self {
+            pixels: vec![Rgba::TRANSPARENT; area],
+            opacity: 255,
+        }
+    }
 }
 
 /// Per-layer blend mode (how this layer composites over those below it).
@@ -111,9 +127,7 @@ impl Sprite {
             ..Default::default()
         }];
         let frames = vec![Frame { duration_ms: 100 }];
-        let cels = vec![vec![Cel {
-            pixels: vec![Rgba::TRANSPARENT; area],
-        }]];
+        let cels = vec![vec![Cel::blank(area)]];
         Self {
             width,
             height,
@@ -160,6 +174,11 @@ impl Sprite {
                 continue;
             }
             let op = layer.opacity as u32;
+            let cel_op = if layer.group {
+                255
+            } else {
+                self.cels[i][frame].opacity as u32
+            };
             let grouped;
             let src: &[Rgba] = if layer.group {
                 let mut buf = vec![Rgba::TRANSPARENT; self.area()];
@@ -170,7 +189,7 @@ impl Sprite {
                 &self.cels[i][frame].pixels
             };
             for (k, px) in src.iter().enumerate() {
-                let mut sa = px.3 as u32 * op / 255;
+                let mut sa = px.3 as u32 * op / 255 * cel_op / 255;
                 if let Some(m) = &layer.mask {
                     sa = sa * *m.pixels.get(k).unwrap_or(&255) as u32 / 255;
                 }
@@ -302,9 +321,7 @@ impl Sprite {
 
     /// Insert a blank frame just after `idx`.
     pub fn add_frame_after(&mut self, idx: usize) {
-        let cel = Cel {
-            pixels: vec![Rgba::TRANSPARENT; self.area()],
-        };
+        let cel = Cel::blank(self.area());
         for layer in self.cels.iter_mut() {
             layer.insert(idx + 1, cel.clone());
         }
@@ -345,9 +362,7 @@ impl Sprite {
                 ..Default::default()
             },
         );
-        let cel = Cel {
-            pixels: vec![Rgba::TRANSPARENT; self.area()],
-        };
+        let cel = Cel::blank(self.area());
         self.cels
             .insert(idx + 1, vec![cel; self.frames.len()]);
     }
@@ -365,9 +380,7 @@ impl Sprite {
                 ..Default::default()
             },
         );
-        let cel = Cel {
-            pixels: vec![Rgba::TRANSPARENT; self.area()],
-        };
+        let cel = Cel::blank(self.area());
         self.cels
             .insert(idx + 1, vec![cel; self.frames.len()]);
     }
@@ -644,6 +657,7 @@ mod tests {
         });
         let cel = Cel {
             pixels: vec![Rgba::rgb(10, 20, 30)],
+            opacity: 255,
         };
         s.cels.push(vec![cel; 1]);
         assert_eq!(s.composite(0)[0], Rgba(10, 20, 30, 255));
@@ -662,6 +676,7 @@ mod tests {
         });
         s.cels.push(vec![Cel {
             pixels: vec![Rgba::rgb(128, 128, 128)],
+            opacity: 255,
         }]);
         // top layer multiplies gray over gray
         s.layers[0].blend = BlendMode::Multiply;
@@ -719,6 +734,7 @@ mod tests {
         for _ in 0..2 {
             s.cels.push(vec![Cel {
                 pixels: vec![Rgba::TRANSPARENT],
+                opacity: 255,
             }]);
         }
         s.cels[0][0].pixels[0] = Rgba::rgb(255, 0, 0); // group itself is ignored

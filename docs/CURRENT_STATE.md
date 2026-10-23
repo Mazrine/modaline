@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-10-23 — after the layer groups & masks batch.
+Last updated: 2026-10-23 — after the Aseprite fidelity batch.
 
 ## Summary
 
@@ -63,7 +63,8 @@ across horizontal/vertical/both axes).
 
 - add / duplicate / remove frames, per-frame duration, playback with onion
   skinning (previous frame tinted red, next green), and **timeline thumbnails**
-  (click a thumbnail to switch frames).
+  (click a thumbnail to switch frames). The timeline also exposes the active
+  cel's **opacity** (per layer + frame, as in Aseprite).
 
 ## Canvas
 
@@ -82,11 +83,15 @@ across horizontal/vertical/both axes).
 
 ## File formats
 
-- **`.ase` / `.aseprite`** — native Aseprite format, read + write. Reads raw and
-  zlib-compressed cels, RGBA (depth 32) and indexed/grayscale (depth 8/16 via
-  palette chunks), layer names/visibility/blend/opacity, layer groups (type +
-  child level) and the editable flag, frame durations. Writes depth-32 RGBA.
-  Layer masks are `.vpx`-only.
+- **`.ase` / `.aseprite`** — native Aseprite format, read + write.
+  - Reads raw (0), zlib-compressed (2), **linked (1)** and **compressed tilemap
+    (3)** cels, including embedded tileset images with X/Y/diagonal flips.
+  - Reads RGBA (32), grayscale (16) and indexed (8) pixels, new and legacy
+    palette chunks, layer names/visibility/blend/opacity, layer groups (type +
+    child level), the editable flag, **per-cel opacity** and frame durations.
+  - Writes at an automatically chosen **lossless** depth: grayscale when every
+    pixel is gray, indexed when the sprite uses <= 255 colors, else 32-bit RGBA.
+    Layer masks are `.vpx`-only; tilemap layers are rasterized on import.
 - **`.vpx`** — JSON project file (size, layers, frames, all cels).
 - **PNG** — single-frame import/export with alpha.
 
@@ -137,6 +142,6 @@ middle-drag = pan.
 
 ## Test status
 
-`cargo test` → 26 tests green; `cargo clippy --all-targets` → clean. Verified to
+`cargo test` → 33 tests green; `cargo clippy --all-targets` → clean. Verified to
 launch on NixOS via `steam-run`. (Interaction paths are compiled + unit-tested
 but not yet hand-tested on a live display.)

@@ -6,15 +6,12 @@ star, but the project is already a usable editor — the rest is depth and polis
 
 ## P0 — next up
 
-- **Aseprite format fidelity** — read **linked cels** (type 1), **compressed
-  tilesets** (type 3), **cel opacity** (currently ignored); write
-  **indexed-color** (depth 8/16) in addition to depth-32 RGBA; add round-trip
-  tests against real Aseprite-saved fixtures. Layer groups, child levels and the
-  editable flag already round-trip.
 - **Tile mode** — tile grid with wrapping paint for seamless textures.
 
 Done: **layer groups & masks** (nested groups, per-layer alpha masks, lock /
-editable flags).
+editable flags) and **Aseprite format fidelity** (linked cels, compressed
+tilemaps with embedded tilesets, cel opacity, indexed/grayscale export, real
+fixtures).
 
 ## P1 — editing depth
 
@@ -53,7 +50,7 @@ editable flags).
 
 ## Suggested order
 
-1. Aseprite format fidelity → tile mode.
+1. Tile mode.
 2. Export options.
 3. Text tool, filters, free transform.
 4. Color profiles, shaders/wgpu, persistence.

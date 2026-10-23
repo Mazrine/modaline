@@ -246,6 +246,10 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
         ui.label("ms:");
         let d = &mut editor.sprite.frames[editor.active_frame].duration_ms;
         ui.add(egui::DragValue::new(d).range(1..=10_000));
+        ui.separator();
+        ui.label("cel op:");
+        let cel = &mut editor.sprite.cels[editor.active_layer][editor.active_frame];
+        ui.add(egui::Slider::new(&mut cel.opacity, 0..=255));
     });
 }
 
