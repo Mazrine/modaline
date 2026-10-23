@@ -193,6 +193,8 @@ pub struct Editor {
     pub spray_seed: u64,
     pub wand_tolerance: u8,
     pub wand_all_layers: bool,
+    /// Show the sprite tiled 3x3 and wrap the cursor across its edges.
+    pub tile_mode: bool,
     pub undo: Vec<UndoStep>,
     pub redo: Vec<UndoStep>,
     pub stroke: Option<UndoStep>,
@@ -235,6 +237,7 @@ impl Editor {
             spray_seed: 0x9E37_79B9_7F4A_7C15,
             wand_tolerance: 0,
             wand_all_layers: false,
+            tile_mode: false,
             undo: Vec::new(),
             redo: Vec::new(),
             stroke: None,
@@ -253,11 +256,26 @@ impl Editor {
     }
 
     pub fn move_cursor(&mut self, dx: i32, dy: i32) {
-        let w = self.sprite.width as i32;
-        let h = self.sprite.height as i32;
-        let nx = (self.cursor.0 as i32 + dx).clamp(0, w.saturating_sub(1));
-        let ny = (self.cursor.1 as i32 + dy).clamp(0, h.saturating_sub(1));
+        let w = (self.sprite.width as i32).max(1);
+        let h = (self.sprite.height as i32).max(1);
+        let nx = self.cursor.0 as i32 + dx;
+        let ny = self.cursor.1 as i32 + dy;
+        let (nx, ny) = if self.tile_mode {
+            (nx.rem_euclid(w), ny.rem_euclid(h))
+        } else {
+            (nx.clamp(0, w - 1), ny.clamp(0, h - 1))
+        };
         self.cursor = (nx as u32, ny as u32);
+    }
+
+    /// Toggle (or set) seamless-tile preview + wrapping cursor.
+    pub fn set_tile_mode(&mut self, on: Option<bool>) {
+        self.tile_mode = on.unwrap_or(!self.tile_mode);
+        self.msg = if self.tile_mode {
+            "tile mode: on (cursor wraps at the edges)".into()
+        } else {
+            "tile mode: off".into()
+        };
     }
 
     // ---- drawing ----
@@ -1579,5 +1597,23 @@ mod tests {
         assert_eq!((e.sprite.width, e.sprite.height), (3, 2));
         e.undo();
         assert_eq!((e.sprite.width, e.sprite.height), (2, 3));
+    }
+
+    #[test]
+    fn tile_mode_wraps_cursor_and_paints_across_edges() {
+        let mut e = Editor::new(4, 3);
+        e.set_tile_mode(Some(true));
+        e.move_cursor(-1, -1);
+        assert_eq!(e.cursor, (3, 2));
+        e.move_cursor(1, 0);
+        assert_eq!(e.cursor, (0, 2));
+        // Painting at the left edge is a normal in-bounds write.
+        e.paint_pixel(0, 2, Rgba(9, 9, 9, 255));
+        assert_eq!(e.sprite.get(0, 0, 0, 2), Rgba(9, 9, 9, 255));
+
+        e.set_tile_mode(Some(false));
+        e.cursor = (0, 0);
+        e.move_cursor(-1, -1);
+        assert_eq!(e.cursor, (0, 0), "clamped when tile mode is off");
     }
 }

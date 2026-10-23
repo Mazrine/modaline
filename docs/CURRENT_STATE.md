@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-10-23 — after the Aseprite fidelity batch.
+Last updated: 2026-10-23 — after the tile mode batch.
 
 ## Summary
 
@@ -70,6 +70,10 @@ across horizontal/vertical/both axes).
 
 - integer zoom (fit + `+`/`-`/scroll), pan (middle-drag), pixel grid overlay,
   transparency checkerboard, cursor + selection + floating-paste previews.
+- **tile mode** (`:tile on|off`, side-panel checkbox): the sprite is previewed
+  tiled 3x3 with a highlighted center, and the cursor wraps across the edges
+  (moving right from the last column lands on column 0), so strokes stay
+  seamless across the tile boundary.
 
 ## Color
 
@@ -137,11 +141,11 @@ middle-drag = pan.
 `fliph`/`flipv`/`rot90` (selection-aware) · `sym <mode>` · `wand <0-255>` /
 `wandall on|off` · `selop <op>` · `grad linear|radial` · `contour` ·
 `pal load|save <file>` · `newgroup` · `indent`/`outdent` · `lock`/`unlock` ·
-`mask add|apply|del` · `export <file>` · `import <png>` · `open <file>` ·
-`help`.
+`mask add|apply|del` · `tile [on|off]` · `export <file>` · `import <png>` ·
+`open <file>` · `help`.
 
 ## Test status
 
-`cargo test` → 33 tests green; `cargo clippy --all-targets` → clean. Verified to
+`cargo test` → 34 tests green; `cargo clippy --all-targets` → clean. Verified to
 launch on NixOS via `steam-run`. (Interaction paths are compiled + unit-tested
 but not yet hand-tested on a live display.)

@@ -469,6 +469,11 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             Some("del" | "delete" | "remove") => editor.mask_del(),
             _ => editor.msg = "usage: :mask add|apply|del".into(),
         },
+        "tile" => match arg {
+            Some("on") => editor.set_tile_mode(Some(true)),
+            Some("off") => editor.set_tile_mode(Some(false)),
+            _ => editor.set_tile_mode(None),
+        },
         "fliph" => editor.flip_h(),
         "flipv" => editor.flip_v(),
         "rot90" => editor.rotate_cw(),

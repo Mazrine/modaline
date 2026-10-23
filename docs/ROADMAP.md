@@ -6,12 +6,12 @@ star, but the project is already a usable editor — the rest is depth and polis
 
 ## P0 — next up
 
-- **Tile mode** — tile grid with wrapping paint for seamless textures.
-
 Done: **layer groups & masks** (nested groups, per-layer alpha masks, lock /
 editable flags) and **Aseprite format fidelity** (linked cels, compressed
 tilemaps with embedded tilesets, cel opacity, indexed/grayscale export, real
-fixtures).
+fixtures) and **tile mode** (3x3 seamless preview + wrapping cursor).
+
+Nothing left in P0 — promote from P1.
 
 ## P1 — editing depth
 
@@ -50,7 +50,7 @@ fixtures).
 
 ## Suggested order
 
-1. Tile mode.
+1. Frame tags & reorder.
 2. Export options.
 3. Text tool, filters, free transform.
 4. Color profiles, shaders/wgpu, persistence.

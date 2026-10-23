@@ -74,6 +74,22 @@ impl View {
             Some((x as u32, y as u32))
         }
     }
+
+    /// Like `screen_to_pixel` but accepts the 3x3 tile preview around the
+    /// canvas and folds those clicks back into the sprite.
+    fn screen_to_pixel_wrapped(&self, pos: Pos2, w: u32, h: u32) -> Option<(u32, u32)> {
+        let f = (pos - self.pan) / self.zoom as f32;
+        let (x, y) = (f.x.floor(), f.y.floor());
+        let (wf, hf) = (w.max(1) as f32, h.max(1) as f32);
+        if x < -wf || y < -hf || x >= 2.0 * wf || y >= 2.0 * hf {
+            None
+        } else {
+            Some((
+                x.rem_euclid(wf) as u32,
+                y.rem_euclid(hf) as u32,
+            ))
+        }
+    }
 }
 
 pub fn draw(
@@ -258,6 +274,7 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
 fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.checkbox(&mut view.show_grid, "pixel grid");
     ui.checkbox(&mut view.onion, "onion skin");
+    ui.checkbox(&mut editor.tile_mode, "tile mode (3x3, wraps)");
     ui.horizontal(|ui| {
         ui.label("wand tol");
         ui.add(egui::Slider::new(&mut editor.wand_tolerance, 0..=255));
@@ -447,6 +464,21 @@ fn canvas(
 
     ui.painter().rect_filled(panel, 0.0, Color32::from_gray(18));
     draw_checker(ui.painter(), rect, view.zoom as f32);
+    if editor.tile_mode {
+        // Seamless preview: the sprite repeated 3x3, neighbours dimmed.
+        let full = Rect::from_min_size(view.pan - size, size * 3.0);
+        draw_checker(ui.painter(), full, view.zoom as f32);
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                let r = rect.translate(Vec2::new(dx as f32 * size.x, dy as f32 * size.y));
+                ui.painter()
+                    .image(tex.id(), r, uv, Color32::from_white_alpha(120));
+            }
+        }
+    }
 
     if view.onion && editor.sprite.frames.len() > 1 {
         let n = editor.sprite.frames.len();
@@ -469,6 +501,14 @@ fn canvas(
     }
 
     ui.painter().image(tex.id(), rect, uv, Color32::WHITE);
+    if editor.tile_mode {
+        ui.painter().rect_stroke(
+            rect.expand(1.0),
+            0.0,
+            Stroke::new(1.0, Color32::from_gray(190)),
+            StrokeKind::Outside,
+        );
+    }
 
     if view.show_grid && view.zoom >= 6 {
         draw_grid(ui.painter(), rect, view.zoom as f32, w, h);
@@ -480,7 +520,12 @@ fn canvas(
     draw_symmetry(ui.painter(), editor, view, rect);
     draw_cursor(ui.painter(), editor, view);
 
-    let resp = ui.interact(rect.intersect(panel), ui.scope_id().with("canvas"), Sense::click_and_drag());
+    let hit = if editor.tile_mode {
+        rect.expand2(size)
+    } else {
+        rect
+    };
+    let resp = ui.interact(hit.intersect(panel), ui.scope_id().with("canvas"), Sense::click_and_drag());
     canvas_input(ui, editor, view, resp, w, h);
 }
 
@@ -795,7 +840,7 @@ fn canvas_input(
 
     // middle click: pick color
     if resp.clicked_by(PB::Middle)
-        && let Some((x, y)) = view.screen_to_pixel(resp.interact_pointer_pos().unwrap_or_default(), w, h) {
+        && let Some((x, y)) = pixel_at(editor, view, resp.interact_pointer_pos().unwrap_or_default(), w, h) {
             editor.pick_color(x, y);
         }
 }
@@ -809,7 +854,7 @@ fn paint_at(
     use_bg: bool,
 ) {
     if let Some(pos) = pos
-        && let Some((x, y)) = view.screen_to_pixel(pos, w, h)
+        && let Some((x, y)) = pixel_at(editor, view, pos, w, h)
     {
         editor.cursor = (x, y);
         if use_bg {
@@ -817,6 +862,14 @@ fn paint_at(
         } else {
             editor.paint_with_tool(x, y);
         }
+    }
+}
+
+fn pixel_at(editor: &Editor, view: &View, pos: Pos2, w: u32, h: u32) -> Option<(u32, u32)> {
+    if editor.tile_mode {
+        view.screen_to_pixel_wrapped(pos, w, h)
+    } else {
+        view.screen_to_pixel(pos, w, h)
     }
 }
 
@@ -871,6 +924,7 @@ const HELP: &[&str] = &[
     "  w                  magic wand (select same-color region)",
     "  L / P              lasso / polygon selection (mouse)",
     "  s                  cycle symmetry (none / H / V / both)",
+    "  :tile [on|off]     seamless 3x3 preview; cursor wraps at the edges",
     "  t                  toggle filled shapes (rect / ellipse)",
     "  , / .              prev / next color",
     "  < / >              prev / next layer",

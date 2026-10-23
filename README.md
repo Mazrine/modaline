@@ -94,6 +94,7 @@ middle-drag pan. (The editor is keyboard-first, but the mouse is fully wired.)
 | `:indent` / `:outdent` | nest the active layer into the group above / un-nest |
 | `:lock` / `:unlock` | lock / unlock the active layer (blocks painting) |
 | `:mask add\|apply\|del` | alpha mask from the selection (or full) / bake / remove |
+| `:tile [on\|off]` | seamless 3x3 preview; cursor wraps at the edges |
 | `:fliph` / `:flipv` / `:rot90` | mirror H / V / rotate 90° (selection if any, else whole sprite) |
 | `:sym none\|h\|v\|both` | set symmetry (mirror painting) |
 | `:wand <0-255>` / `:wandall on\|off` | magic-wand tolerance / match all layers |
@@ -107,7 +108,8 @@ middle-drag pan. (The editor is keyboard-first, but the mouse is fully wired.)
 ## UI
 
 - **Center** — the canvas: checkerboard transparency, real alpha, onion skin
-  (prev frame tinted red, next green), optional pixel grid.
+  (prev frame tinted red, next green), optional pixel grid, and a 3x3
+  seamless-tile preview with wrapping cursor.
 - **Right** — layer list (visibility, opacity, blend mode, reorder, rename,
   add/remove, groups + indent/outdent, lock flag, alpha mask) + palette swatches
   + full RGB picker for fg/bg.
@@ -177,8 +179,8 @@ picker, pencil/eraser/bucket/picker/line/rect/ellipse with **filled shapes**,
 with **add/subtract/intersect** and copy/cut/paste/move, **symmetry painting**,
 flip H/V + rotate 90° (**selection-aware**), stroke-grouped undo/redo,
 **`.ase`/`.aseprite` + PNG + `.vpx` import/export**, **custom palettes**
-(`.gpl`/`.hex`/`.pal`), **OS clipboard**, full vim keymap (normal/draw/visual/
-paste/command modes).
+(`.gpl`/`.hex`/`.pal`), **OS clipboard**, **tile mode** (3x3 seamless preview +
+wrapping cursor), full vim keymap (normal/draw/visual/paste/command modes).
 
-Not yet (Aseprite parity gaps): tile mode, external tileset files, color
-profiles, shaders.
+Not yet (Aseprite parity gaps): external tileset files, color profiles,
+shaders.

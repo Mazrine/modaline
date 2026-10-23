@@ -5,11 +5,11 @@
 
 ## Status snapshot
 
-- `cargo test` → **33 tests green**
+- `cargo test` → **34 tests green**
 - `cargo clippy --all-targets` → **clean**
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **Aseprite format fidelity**.
+- Last completed batch: **tile mode**.
 
 ## How to resume
 
@@ -67,23 +67,24 @@ Read, in order:
     legacy palette chunks, and lossless depth selection on export (grayscale
     16-bit, indexed 8-bit with palette chunk, else RGBA). Real Aseprite-saved
     fixtures added under `tests/fixtures/ase/`. 7 new tests.
+14. **Tile mode batch** — `:tile on|off` (or the side-panel checkbox) previews
+    the sprite repeated 3x3 with the center tile outlined; the cursor wraps at
+    the edges, so edge strokes stay seamless across the tile boundary. Clicks
+    in the neighbouring copies fold back into the sprite. 1 new test.
 
 ## Next step (exact)
 
 The immediate order is below. **The full backlog lives in `docs/ROADMAP.md`** —
 every remaining item is recorded there, so nothing depends on chat history.
 
-### 1. Tile mode
+### Next (P1)
 
-- Tile grid + wrapping paint for seamless textures.
-
-### After that (P1+)
-
-Frame tags & reorder, onion-skin settings, layer drag-reorder, text tool, palette
-reorder / HSV-hex picker / color modes, symmetry settings, grid & snap, export
-options (sprite sheet/GIF/JSON/slices), filters, selection expand/border/feather,
-free transform (rotate/scale/skew), color profiles, shaders/wgpu, persistence —
-all detailed in `docs/ROADMAP.md`.
+- **Frame tags** (named ranges) and **frame reorder**.
+- Then onion-skin settings, layer drag-reorder, text tool, palette reorder /
+  HSV-hex picker / color modes, symmetry settings, grid & snap, export options
+  (sprite sheet/GIF/JSON/slices), filters, selection expand/border/feather, free
+  transform, color profiles, shaders/wgpu, persistence — all detailed in
+  `docs/ROADMAP.md`.
 
 ## Known limitations (do not forget)
 
@@ -100,8 +101,9 @@ all detailed in `docs/ROADMAP.md`.
   sizes and may not load; re-export them with the current build.
 - Lasso/polygon are mouse-driven; keyboard selection is marquee (`v`) + magic
   wand (`w`).
+- Tile mode wraps the cursor (and the preview), not multi-pixel geometry:
+  line/rect/gradient spanning the seam do not duplicate onto the other edge.
 - Selection is single-layer for copy/cut/move (not merged across layers).
-- `.ase` export is depth-32 RGBA only (indexed import is supported).
 - Timeline thumbnails rebuild every UI pass (fine for small sprites; cache by
   revision if it ever matters).
 - OS paste prefers clipboard *text* when present (egui behavior); image paste is
