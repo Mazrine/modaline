@@ -56,18 +56,31 @@ Read, in order:
 
 ## Next step (exact)
 
+The immediate order is below. **The full backlog lives in `docs/ROADMAP.md`** —
+every remaining item is recorded there, so nothing depends on chat history.
+
 ### 1. Layer groups & masks
 
-- Aseprite-style layer groups and per-layer alpha masks (affects compositing and
-  the layer panel).
+- Nested layer groups, per-layer alpha masks, and per-layer lock / editable
+  flags (affects compositing, the layer panel, and the `.ase` writer).
 
 ### 2. Aseprite format fidelity
 
-- linked cels, cel opacity, and indexed-color export.
+- Read linked cels (type 1) and compressed tilesets (type 3); read/write cel
+  opacity and layer groups; write indexed-color (depth 8/16); add round-trip
+  tests against real Aseprite-saved fixtures.
 
 ### 3. Tile mode
 
-- tile selection + wrapping paint.
+- Tile grid + wrapping paint for seamless textures.
+
+### After that (P1+)
+
+Frame tags & reorder, onion-skin settings, layer drag-reorder, text tool, palette
+reorder / HSV-hex picker / color modes, symmetry settings, grid & snap, export
+options (sprite sheet/GIF/JSON/slices), filters, selection expand/border/feather,
+free transform (rotate/scale/skew), color profiles, shaders/wgpu, persistence —
+all detailed in `docs/ROADMAP.md`.
 
 ## Known limitations (do not forget)
 

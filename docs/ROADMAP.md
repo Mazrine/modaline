@@ -1,71 +1,57 @@
 # Roadmap
 
-Planned work, roughly ordered by value vs. effort. "Full Aseprite parity" is the
-north star but is a large, ongoing effort; this lists the concrete next steps.
+**This is the complete backlog.** `docs/PROGRESS.md` has the immediate next step;
+everything still to do should be listed here. "Full Aseprite parity" is the north
+star, but the project is already a usable editor — the rest is depth and polish.
 
-## P0 — next batch candidates
+## P0 — next up
 
-*(Done: selection tools + add/subtract/intersect, magic-wand tolerance &
-all-layers, filled shapes, symmetry, gradient/spray/shade/blur/contour,
-selection + whole-sprite transforms, OS clipboard, timeline thumbnails, custom
-palettes.)*
+- **Layer groups & masks** — nested layer groups, per-layer alpha masks, and
+  per-layer **lock / editable** flags (affects compositing + the layer panel).
+- **Aseprite format fidelity** — read **linked cels** (type 1), **compressed
+  tilesets** (type 3), **cel opacity** (currently ignored) and layer **groups**;
+  write **indexed-color** (depth 8/16) in addition to depth-32 RGBA; add
+  round-trip tests against real Aseprite-saved fixtures.
+- **Tile mode** — tile grid with wrapping paint for seamless textures.
 
-- **Layer groups & masks.**
-- **Aseprite format fidelity** — linked cels, cel opacity, indexed-color export.
-- **Tile mode.**
-- **Color profiles** (P3) and **shaders/wgpu** (P3).
+## P1 — editing depth
 
-## P1 — fill out the toolset & selection
+- **Frame tags** (named ranges) and **frame reorder** (drag in the timeline).
+- **Onion-skin settings** (tint color, count, opacity) and loop/playback options.
+- **Layer panel**: drag-to-reorder (currently ↑/↓ + `:layerup`/`:layerdown`).
+- **Text tool** — bitmap-font text placement (a larger feature).
+- **Palette tools**: reorder swatches, HSV/hex input in the picker,
+  palette-from-sprite, and sprite **color modes** (RGB / indexed / grayscale).
+- **Symmetry settings** — radial symmetry and an adjustable center/origin.
+- **Grid settings** — grid size and snap-to-grid.
 
-- More tools: gradient, spray, shade, blur, contour, and a **fillable** ellipse/
-  rectangle (filled vs. outline toggle).
-- Magic-wand **tolerance** (color-distance threshold) and an "all layers" option.
-- Selection **modifiers** — add / subtract / intersect with an existing
-  selection (e.g. shift/alt while selecting).
-- Selection transforms: flip / rotate **the selection** (currently transforms
-  are whole-sprite only).
-- Contiguous + bounding-box selection export.
+## P2 — export, filters & transform
 
-## P1 — layers & animation
-
-- **Layer groups** and per-layer **lock** / editable flags.
-- **Mask layers** (per-layer alpha mask).
-- Frame **tags** (named ranges) and frame reorder.
-- Onion-skin settings (tint color, count, opacity).
-- Layer reorder by drag in the panel (currently ↑/↓ + `:layerup`/`down`).
-
-## P2 — Aseprite format fidelity
-
-- Read/write **linked cels**, **compressed tilesets** (type 3), cel **opacity**
-  (currently ignored), layer **groups**.
-- **Indexed-color export** (depth 8/16) in addition to the current depth-32
-  RGBA write.
-- Round-trip tests against real Aseprite-saved files (fixtures).
-
-## P2 — palettes & color
-
-- Load/save **custom palettes** (`.gpl`, Aseprite `.pal`/`.hex`).
-- Palette management UI: add/remove/reorder swatches, import/export.
-- HSV/hex input in the picker (egui has this built in — surface it).
+- **Export options** — sprite sheet, GIF, JSON metadata, and slice export.
+- **Filters** — brightness/contrast, hue/saturation, invert, outline, blur/sharpen.
+- **Selection ops** — expand/contract, border, feather, invert.
+- **Free transform** — arbitrary-angle rotate, scale, skew.
+- **Sprite properties** — color mode, pixel aspect ratio, grid.
 
 ## P3 — rendering & polish
 
-- **Custom shaders** (GPU blend modes / live effects) — the one thing that will
-  need per-backend (glow vs wgpu) code; isolate behind a small `Renderer` trait.
-- **wgpu backend** switch (feature flag + `renderer:` line — no code change
-  expected with the current `TextureHandle`-only rendering).
 - **Color profiles** (sRGB handling, ICC).
-- Config/theme persistence (window size, grid/onion defaults, keymap
-  customization).
+- **Custom shaders** (GPU blend modes / live effects) — isolated behind a small
+  `Renderer` trait, since this is the one thing needing per-backend code.
+- **wgpu backend** switch (feature flag + `renderer:` line; no code change
+  expected with the current `TextureHandle`-only rendering).
+- **Config/theme persistence** — window size, grid/onion defaults, keymap
+  customization.
 
 ## Explicitly out of scope (for now)
 
 - Web/Wasm build.
-- Multi-document/tabbed interface.
-- Plugins/scripting (Aseprite's Lua API).
+- Multi-document / tabbed interface.
+- Plugins / scripting (Aseprite's Lua API).
 
 ## Suggested order
 
-1. Layer groups & masks.
-2. Aseprite format fidelity (linked cels, cel opacity, indexed export), then tile mode.
-3. Color profiles, then shaders/wgpu.
+1. Layer groups & masks → tile mode.
+2. Aseprite format fidelity + export options.
+3. Text tool, filters, free transform.
+4. Color profiles, shaders/wgpu, persistence.
