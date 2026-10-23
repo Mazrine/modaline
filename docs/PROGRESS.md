@@ -5,11 +5,11 @@
 
 ## Status snapshot
 
-- `cargo test` → **21 tests green**
+- `cargo test` → **26 tests green**
 - `cargo clippy --all-targets` → **clean**
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **custom palettes + transform undo**.
+- Last completed batch: **layer groups & masks**.
 
 ## How to resume
 
@@ -53,24 +53,26 @@ Read, in order:
 11. **Palettes + transform-undo batch** — `.gpl`/`.hex`/`.pal` palette
     import/export (`:pal`), palette add/remove UI, and whole-sprite transforms
     are now undoable via a sprite-snapshot undo step. 3 new tests.
+12. **Layer groups & masks batch** — nested groups via a flat `child_level`
+    tree (Aseprite-style): group compositing with group visibility / opacity /
+    blend / mask, subtree-aware add/remove/move, `:newgroup` / `:indent` /
+    `:outdent`, per-layer `editable` lock (`:lock`/`:unlock`) enforced on all
+    paint paths, per-layer alpha masks (`:mask add|apply|del`) that follow
+    flips/rotate/resize and persist in `.vpx`. `.ase` now reads/writes layer
+    groups, child levels and the editable flag. 5 new tests.
 
 ## Next step (exact)
 
 The immediate order is below. **The full backlog lives in `docs/ROADMAP.md`** —
 every remaining item is recorded there, so nothing depends on chat history.
 
-### 1. Layer groups & masks
-
-- Nested layer groups, per-layer alpha masks, and per-layer lock / editable
-  flags (affects compositing, the layer panel, and the `.ase` writer).
-
-### 2. Aseprite format fidelity
+### 1. Aseprite format fidelity
 
 - Read linked cels (type 1) and compressed tilesets (type 3); read/write cel
-  opacity and layer groups; write indexed-color (depth 8/16); add round-trip
-  tests against real Aseprite-saved fixtures.
+  opacity; write indexed-color (depth 8/16); add round-trip tests against real
+  Aseprite-saved fixtures. (Layer groups + child levels now round-trip.)
 
-### 3. Tile mode
+### 2. Tile mode
 
 - Tile grid + wrapping paint for seamless textures.
 
@@ -85,6 +87,11 @@ all detailed in `docs/ROADMAP.md`.
 ## Known limitations (do not forget)
 
 - Symmetry does **not** apply to bucket fill or paste.
+- Mask pixels cannot be painted directly: masks are created from the selection
+  (or fully opaque), baked, or removed.
+- New layers are added as siblings; nesting is an explicit `:indent`.
+- New groups start empty and do not adopt the active layer.
+- `.ase` carries groups/flags but not masks (masks are `.vpx`-only).
 - Lasso/polygon are mouse-driven; keyboard selection is marquee (`v`) + magic
   wand (`w`).
 - Selection is single-layer for copy/cut/move (not merged across layers).

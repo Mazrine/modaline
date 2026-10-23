@@ -59,6 +59,9 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize) {
         }
     }
     for li in 0..s.layers.len() {
+        if s.layers[li].group {
+            continue; // groups have no cels
+        }
         write_cel_chunk(&mut body, s, li, frame);
     }
 
@@ -78,10 +81,13 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize) {
 fn write_layer_chunk(out: &mut Vec<u8>, layer: &Layer) {
     let name = layer.name.as_bytes();
     let mut b = Vec::new();
-    let flags: u16 = if layer.visible { 1 } else { 0 };
+    let mut flags: u16 = if layer.visible { 1 } else { 0 };
+    if layer.editable {
+        flags |= 2; // editable
+    }
     b.extend_from_slice(&flags.to_le_bytes());
-    b.extend_from_slice(&0u16.to_le_bytes()); // layer type: image
-    b.extend_from_slice(&0u16.to_le_bytes()); // child level
+    b.extend_from_slice(&(layer.group as u16).to_le_bytes()); // 0 image, 1 group
+    b.extend_from_slice(&layer.child_level.to_le_bytes());
     b.extend_from_slice(&0u16.to_le_bytes()); // default width
     b.extend_from_slice(&0u16.to_le_bytes()); // default height
     b.extend_from_slice(&blend_word(layer.blend).to_le_bytes());
@@ -187,9 +193,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
     if layers.is_empty() {
         layers.push(Layer {
             name: "Layer 1".into(),
-            visible: true,
-            opacity: 255,
-            blend: BlendMode::Normal,
+            ..Default::default()
         });
         cel_pixels.push(Vec::new());
     }
@@ -215,17 +219,21 @@ pub fn load(path: &Path) -> Result<Sprite> {
         })
         .collect();
 
-    Ok(Sprite {
+    let mut sprite = Sprite {
         width,
         height,
         layers,
         frames,
         cels,
-    })
+    };
+    sprite.normalize_levels();
+    Ok(sprite)
 }
 
 fn parse_layer(body: &[u8]) -> Result<Layer> {
     let flags = u16_at(body, 0);
+    let group = u16_at(body, 2) == 1;
+    let child_level = u16_at(body, 4);
     let blend = blend_from_word(u16_at(body, 10));
     let opacity = *body.get(12).unwrap_or(&255);
     let name_len = u16_at(body, 16) as usize;
@@ -236,6 +244,10 @@ fn parse_layer(body: &[u8]) -> Result<Layer> {
         visible: flags & 1 != 0,
         opacity,
         blend,
+        child_level,
+        group,
+        editable: flags & 2 != 0,
+        mask: None,
     })
 }
 
@@ -426,5 +438,33 @@ mod tests {
         assert_eq!(loaded.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
         assert_eq!(loaded.get(0, 0, 2, 1), Rgba(0, 128, 255, 255));
         assert_eq!(loaded.get(0, 1, 1, 0), Rgba(0, 255, 0, 255));
+    }
+
+    #[test]
+    fn round_trips_layer_groups_and_flags() {
+        let mut s = Sprite::new(2, 1);
+        s.set(0, 0, 1, 0, Rgba(10, 20, 30, 255));
+        s.layers.insert(
+            0,
+            Layer {
+                name: "Grp".into(),
+                group: true,
+                ..Default::default()
+            },
+        );
+        s.cels.insert(0, vec![s.cels[0][0].clone()]);
+        s.layers[1].child_level = 1;
+        s.layers[1].editable = false;
+
+        let path = std::env::temp_dir().join("vixel_ase_groups.ase");
+        save(&s, &path).unwrap();
+        let loaded = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(loaded.layers.len(), 2);
+        assert!(loaded.layers[0].group);
+        assert_eq!(loaded.layers[1].child_level, 1);
+        assert!(!loaded.layers[1].editable);
+        assert_eq!(loaded.get(1, 0, 1, 0), Rgba(10, 20, 30, 255));
     }
 }

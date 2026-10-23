@@ -31,6 +31,59 @@ pub struct Layer {
     pub opacity: u8,
     #[serde(default)]
     pub blend: BlendMode,
+    /// Nesting depth: 0 = top level, 1 = inside a group, and so on.
+    #[serde(default)]
+    pub child_level: u16,
+    /// A group layer holds the following layers with a deeper `child_level`.
+    #[serde(default)]
+    pub group: bool,
+    /// Painted pixels are ignored (and its children's) when false.
+    #[serde(default = "yes")]
+    pub editable: bool,
+    /// Per-pixel alpha multiplier applied when compositing.
+    #[serde(default)]
+    pub mask: Option<Mask>,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl Default for Layer {
+    fn default() -> Self {
+        Self {
+            name: "Layer".into(),
+            visible: true,
+            opacity: 255,
+            blend: BlendMode::Normal,
+            child_level: 0,
+            group: false,
+            editable: true,
+            mask: None,
+        }
+    }
+}
+
+/// Per-layer alpha mask, row-major like a cel: 0 hides, 255 keeps.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Mask {
+    pub pixels: Vec<u8>,
+}
+
+impl Mask {
+    /// Rebuild the mask for a new size/orientation; `f` maps old → new coords.
+    fn map(&self, ow: u32, oh: u32, nw: u32, nh: u32, f: impl Fn(u32, u32) -> (u32, u32)) -> Mask {
+        let mut pixels = vec![255; (nw * nh) as usize];
+        for y in 0..oh {
+            for x in 0..ow {
+                let (nx, ny) = f(x, y);
+                if nx < nw && ny < nh {
+                    pixels[(ny * nw + nx) as usize] = self.pixels[(y * ow + x) as usize];
+                }
+            }
+        }
+        Mask { pixels }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -55,9 +108,7 @@ impl Sprite {
         let area = (width * height) as usize;
         let layers = vec![Layer {
             name: "Layer 1".into(),
-            visible: true,
-            opacity: 255,
-            blend: BlendMode::Normal,
+            ..Default::default()
         }];
         let frames = vec![Frame { duration_ms: 100 }];
         let cels = vec![vec![Cel {
@@ -86,32 +137,79 @@ impl Sprite {
     }
 
     /// Flatten all visible layers of `frame` (top → bottom) into one image.
+    /// Groups composite their children first, then apply their own
+    /// visibility/opacity/blend/mask to the result.
     pub fn composite(&self, frame: usize) -> Vec<Rgba> {
         let mut out = vec![Rgba::TRANSPARENT; self.area()];
-        for li in (0..self.layers.len()).rev() {
-            let layer = &self.layers[li];
-            if !layer.visible {
-                continue;
-            }
-            let op = layer.opacity as u32;
-            let blend = layer.blend;
-            let cel = &self.cels[li][frame];
-            for (i, dst) in out.iter_mut().enumerate() {
-                let src = cel.pixels[i];
-                if src.3 == 0 {
-                    continue;
-                }
-                let sa = (src.3 as u32 * op) / 255;
-                if sa == 0 {
-                    continue;
-                }
-                *dst = blend_over(blend, src, sa, *dst);
-            }
-        }
+        self.composite_range(frame, 0, self.layers.len(), &mut out);
         out
     }
 
+    /// Composite the sibling run `[start, end)` over `dst`, bottom-most first.
+    fn composite_range(&self, frame: usize, start: usize, end: usize, dst: &mut [Rgba]) {
+        let mut siblings = Vec::new();
+        let mut k = start;
+        while k < end {
+            siblings.push(k);
+            k = self.subtree_end(k).min(end);
+        }
+        for &i in siblings.iter().rev() {
+            let layer = &self.layers[i];
+            let stop = self.subtree_end(i).min(end);
+            if !layer.visible || layer.opacity == 0 {
+                continue;
+            }
+            let op = layer.opacity as u32;
+            let grouped;
+            let src: &[Rgba] = if layer.group {
+                let mut buf = vec![Rgba::TRANSPARENT; self.area()];
+                self.composite_range(frame, i + 1, stop, &mut buf);
+                grouped = buf;
+                &grouped
+            } else {
+                &self.cels[i][frame].pixels
+            };
+            for (k, px) in src.iter().enumerate() {
+                let mut sa = px.3 as u32 * op / 255;
+                if let Some(m) = &layer.mask {
+                    sa = sa * *m.pixels.get(k).unwrap_or(&255) as u32 / 255;
+                }
+                if sa > 0 {
+                    dst[k] = blend_over(layer.blend, *px, sa, dst[k]);
+                }
+            }
+        }
+    }
+
+    /// Index one past the last descendant of layer `i`.
+    pub fn subtree_end(&self, i: usize) -> usize {
+        let level = self.layers[i].child_level;
+        let mut k = i + 1;
+        while k < self.layers.len() && self.layers[k].child_level > level {
+            k += 1;
+        }
+        k
+    }
+
+    /// Can `i` (and all its ancestor groups) be painted on right now?
+    pub fn layer_editable(&self, i: usize) -> bool {
+        let mut ok = self.layers[i].editable && self.layers[i].visible && !self.layers[i].group;
+        let mut level = self.layers[i].child_level;
+        for k in (0..i).rev() {
+            if level == 0 {
+                break;
+            }
+            let kl = self.layers[k].child_level;
+            if kl < level {
+                ok &= self.layers[k].editable && self.layers[k].visible;
+                level = kl;
+            }
+        }
+        ok
+    }
+
     pub fn resize(&mut self, width: u32, height: u32) {
+        let (ow, oh) = (self.width, self.height);
         for frame in 0..self.frames.len() {
             for layer in 0..self.layers.len() {
                 let mut np = vec![Rgba::TRANSPARENT; (width * height) as usize];
@@ -124,15 +222,20 @@ impl Sprite {
                 self.cels[layer][frame].pixels = np;
             }
         }
+        for layer in &mut self.layers {
+            if let Some(m) = &layer.mask {
+                layer.mask = Some(m.map(ow, oh, width, height, |x, y| (x, y)));
+            }
+        }
         self.width = width;
         self.height = height;
     }
 
     /// Mirror every cel horizontally.
     pub fn flip_h(&mut self) {
+        let (w, h) = (self.width, self.height);
         for frame in 0..self.frames.len() {
             for layer in 0..self.layers.len() {
-                let w = self.width;
                 for y in 0..self.height {
                     for x in 0..w / 2 {
                         let a = (y * w + x) as usize;
@@ -142,13 +245,18 @@ impl Sprite {
                 }
             }
         }
+        for layer in &mut self.layers {
+            if let Some(m) = &layer.mask {
+                layer.mask = Some(m.map(w, h, w, h, |x, y| (w - 1 - x, y)));
+            }
+        }
     }
 
     /// Mirror every cel vertically.
     pub fn flip_v(&mut self) {
+        let (w, h) = (self.width, self.height);
         for frame in 0..self.frames.len() {
             for layer in 0..self.layers.len() {
-                let (w, h) = (self.width, self.height);
                 for y in 0..h / 2 {
                     for x in 0..w {
                         let a = (y * w + x) as usize;
@@ -156,6 +264,11 @@ impl Sprite {
                         self.cels[layer][frame].pixels.swap(a, b);
                     }
                 }
+            }
+        }
+        for layer in &mut self.layers {
+            if let Some(m) = &layer.mask {
+                layer.mask = Some(m.map(w, h, w, h, |x, y| (x, h - 1 - y)));
             }
         }
     }
@@ -175,6 +288,12 @@ impl Sprite {
                     }
                 }
                 self.cels[layer][frame].pixels = np;
+            }
+        }
+        let (w, h) = (self.width, self.height);
+        for layer in &mut self.layers {
+            if let Some(m) = &layer.mask {
+                layer.mask = Some(m.map(w, h, nw, nh, |x, y| (h - 1 - y, x)));
             }
         }
         self.width = nw;
@@ -217,13 +336,13 @@ impl Sprite {
     /// Insert a blank layer just above `idx` (towards the top of the stack).
     pub fn add_layer_after(&mut self, idx: usize) {
         let name = format!("Layer {}", self.layers.len() + 1);
+        let child_level = self.layers[idx].child_level;
         self.layers.insert(
             idx + 1,
             Layer {
                 name,
-                visible: true,
-                opacity: 255,
-                blend: BlendMode::Normal,
+                child_level,
+                ..Default::default()
             },
         );
         let cel = Cel {
@@ -233,25 +352,76 @@ impl Sprite {
             .insert(idx + 1, vec![cel; self.frames.len()]);
     }
 
+    /// Insert an empty group just above `idx`, at the same nesting level.
+    pub fn add_group_after(&mut self, idx: usize) {
+        let name = format!("Group {}", self.layers.len() + 1);
+        let child_level = self.layers[idx].child_level;
+        self.layers.insert(
+            idx + 1,
+            Layer {
+                name,
+                group: true,
+                child_level,
+                ..Default::default()
+            },
+        );
+        let cel = Cel {
+            pixels: vec![Rgba::TRANSPARENT; self.area()],
+        };
+        self.cels
+            .insert(idx + 1, vec![cel; self.frames.len()]);
+    }
+
+    /// Remove layer `idx`; a group takes its whole subtree with it.
     pub fn remove_layer(&mut self, idx: usize) -> bool {
-        if self.layers.len() <= 1 {
+        if idx >= self.layers.len() {
             return false;
         }
-        self.layers.remove(idx);
-        self.cels.remove(idx);
+        let end = self.subtree_end(idx);
+        if end - idx >= self.layers.len() {
+            return false;
+        }
+        self.layers.drain(idx..end);
+        self.cels.drain(idx..end);
+        self.normalize_levels();
         true
     }
 
-    /// Move the layer at `from` to `to`, keeping `layers[0]` as topmost.
-    pub fn move_layer(&mut self, from: usize, to: usize) -> bool {
+    /// Move layer `from` (with its subtree) so it ends up starting at `to`.
+    /// Returns the final start index, or `None` if the move is invalid.
+    pub fn move_layer(&mut self, from: usize, to: usize) -> Option<usize> {
         if from >= self.layers.len() || to >= self.layers.len() || from == to {
-            return false;
+            return None;
         }
-        let layer = self.layers.remove(from);
-        self.layers.insert(to, layer);
-        let cels = self.cels.remove(from);
-        self.cels.insert(to, cels);
-        true
+        let end = self.subtree_end(from);
+        if to > from && to < end {
+            return None; // cannot move a group into itself
+        }
+        let n = end - from;
+        let layers: Vec<Layer> = self.layers.drain(from..end).collect();
+        let cels = self.cels.drain(from..end).collect::<Vec<_>>();
+        let at = if to > from { to + 1 - n } else { to }.min(self.layers.len());
+        self.layers.splice(at..at, layers);
+        self.cels.splice(at..at, cels);
+        self.normalize_levels();
+        Some(at)
+    }
+
+    /// Clamp every `child_level` to a structurally valid nesting depth.
+    pub fn normalize_levels(&mut self) {
+        let mut prev = 0u16;
+        for i in 0..self.layers.len() {
+            let max = if i == 0 {
+                0
+            } else if self.layers[i - 1].group {
+                prev + 1
+            } else {
+                prev
+            };
+            let level = self.layers[i].child_level.min(max);
+            self.layers[i].child_level = level;
+            prev = level;
+        }
     }
 }
 
@@ -470,9 +640,7 @@ mod tests {
         // top layer (index 0) transparent -> bottom layer shows through
         s.layers.push(Layer {
             name: "Bottom".into(),
-            visible: true,
-            opacity: 255,
-            blend: BlendMode::Normal,
+            ..Default::default()
         });
         let cel = Cel {
             pixels: vec![Rgba::rgb(10, 20, 30)],
@@ -490,9 +658,7 @@ mod tests {
         let mut s = Sprite::new(1, 1);
         s.layers.push(Layer {
             name: "Bottom".into(),
-            visible: true,
-            opacity: 255,
-            blend: BlendMode::Normal,
+            ..Default::default()
         });
         s.cels.push(vec![Cel {
             pixels: vec![Rgba::rgb(128, 128, 128)],
@@ -528,8 +694,97 @@ mod tests {
         let mut s = Sprite::new(1, 1);
         s.add_layer_after(0);
         s.layers[1].name = "Second".into();
-        assert!(s.move_layer(1, 0));
+        assert!(s.move_layer(1, 0).is_some());
         assert_eq!(s.layers[0].name, "Second");
+    }
+
+    #[test]
+    fn group_visibility_and_opacity_apply_to_children() {
+        let mut s = Sprite::new(1, 1);
+        // [group, child, bottom]
+        s.layers[0] = Layer {
+            name: "Group".into(),
+            group: true,
+            ..Default::default()
+        };
+        s.layers.push(Layer {
+            name: "Child".into(),
+            child_level: 1,
+            ..Default::default()
+        });
+        s.layers.push(Layer {
+            name: "Bottom".into(),
+            ..Default::default()
+        });
+        for _ in 0..2 {
+            s.cels.push(vec![Cel {
+                pixels: vec![Rgba::TRANSPARENT],
+            }]);
+        }
+        s.cels[0][0].pixels[0] = Rgba::rgb(255, 0, 0); // group itself is ignored
+        s.cels[1][0].pixels[0] = Rgba::rgb(0, 0, 255);
+        s.cels[2][0].pixels[0] = Rgba::rgb(0, 255, 0);
+
+        assert_eq!(s.composite(0)[0], Rgba::rgb(0, 0, 255));
+        s.layers[0].visible = false;
+        assert_eq!(s.composite(0)[0], Rgba::rgb(0, 255, 0));
+        s.layers[0].visible = true;
+        s.layers[0].opacity = 128;
+        let c = s.composite(0)[0];
+        assert!(c.0 == 0 && c.1 > 100, "group opacity dips the child, got {c:?}");
+    }
+
+    #[test]
+    fn mask_multiplies_alpha_and_transforms() {
+        let mut s = Sprite::new(2, 1);
+        s.cels[0][0].pixels[0] = Rgba(255, 255, 255, 255);
+        s.cels[0][0].pixels[1] = Rgba(255, 255, 255, 255);
+        s.layers[0].mask = Some(Mask {
+            pixels: vec![0, 255],
+        });
+        assert_eq!(s.composite(0)[0].3, 0);
+        assert_eq!(s.composite(0)[1].3, 255);
+        // Masks follow flips and resizes.
+        s.flip_h();
+        assert_eq!(s.composite(0)[0].3, 255);
+        s.resize(3, 1);
+        assert_eq!(s.layers[0].mask.as_ref().unwrap().pixels.len(), 3);
+    }
+
+    #[test]
+    fn locked_or_group_layers_are_not_editable() {
+        let mut s = Sprite::new(1, 1);
+        assert!(s.layer_editable(0));
+        s.layers[0].editable = false;
+        assert!(!s.layer_editable(0));
+        s.layers[0].editable = true;
+        s.layers[0].group = true;
+        assert!(!s.layer_editable(0));
+        s.add_layer_after(0);
+        s.layers[1].child_level = 1;
+        assert!(s.layer_editable(1));
+        s.layers[0].editable = false;
+        assert!(!s.layer_editable(1), "a locked group locks its children");
+        s.layers[0].editable = true;
+        s.layers[0].visible = false;
+        assert!(!s.layer_editable(1), "a hidden group is not editable");
+    }
+
+    #[test]
+    fn group_remove_takes_children_and_indent_normalizes() {
+        let mut s = Sprite::new(1, 1);
+        s.add_group_after(0);
+        s.add_layer_after(1);
+        s.layers[2].child_level = 1;
+        s.layers[2].name = "Inner".into();
+        assert_eq!(s.subtree_end(1), 3);
+        assert!(s.move_layer(1, 0).is_some(), "group block moves up");
+        assert_eq!(s.layers[0].name, "Group 2");
+        assert_eq!(s.layers[1].name, "Inner");
+        assert!(s.remove_layer(0));
+        assert_eq!(s.layers.len(), 1);
+        assert_eq!(s.layers[0].name, "Layer 1");
+        assert!(!s.remove_layer(0), "cannot delete the last layer");
     }
 
     #[test]

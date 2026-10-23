@@ -324,22 +324,60 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         if ui.button("－").clicked() {
             editor.del_layer();
         }
+        if ui.button("grp").on_hover_text("new group").clicked() {
+            editor.add_group();
+        }
+        if ui.button("→").on_hover_text("indent into group above").clicked() {
+            editor.indent_layer(1);
+        }
+        if ui.button("←").on_hover_text("outdent").clicked() {
+            editor.indent_layer(-1);
+        }
     });
     let count = editor.sprite.layers.len();
     let mut selected = editor.active_layer;
+    let mut toggle_mask = None;
     egui::ScrollArea::vertical().show(ui, |ui| {
         for i in 0..count {
             let layer = &mut editor.sprite.layers[i];
+            let indent = layer.child_level as f32 * 14.0;
             ui.horizontal(|ui| {
-                if ui.selectable_label(i == selected, &layer.name).clicked() {
+                ui.add_space(indent);
+                let label = if layer.group {
+                    format!("▾ {}", layer.name)
+                } else {
+                    layer.name.clone()
+                };
+                if ui.selectable_label(i == selected, label).clicked() {
                     selected = i;
                 }
-                ui.checkbox(&mut layer.visible, "");
-                blend_combo(ui, i, &mut layer.blend);
+                ui.checkbox(&mut layer.visible, "").on_hover_text("visible");
+                ui.checkbox(&mut layer.editable, "edit")
+                    .on_hover_text("editable (lock)");
+                if !layer.group
+                    && ui
+                        .selectable_label(layer.mask.is_some(), "M")
+                        .on_hover_text("alpha mask: from selection, or full; click to add/remove")
+                        .clicked()
+                {
+                    toggle_mask = Some(i);
+                }
             });
-            ui.add(egui::Slider::new(&mut layer.opacity, 0..=255).text("op"));
+            ui.horizontal(|ui| {
+                ui.add_space(indent);
+                blend_combo(ui, i, &mut layer.blend);
+                ui.add(egui::Slider::new(&mut layer.opacity, 0..=255).text("op"));
+            });
         }
     });
+    if let Some(i) = toggle_mask {
+        editor.active_layer = i;
+        if editor.sprite.layers[i].mask.is_some() {
+            editor.mask_del();
+        } else {
+            editor.mask_add();
+        }
+    }
     editor.active_layer = selected;
 }
 
@@ -846,6 +884,8 @@ const HELP: &[&str] = &[
     "  :w [file]   :q   :q!   :wq   :new [w h]   :resize w h",
     "  :newframe / :dupframe / :delframe",
     "  :newlayer / :dellayer / :layerup / :layerdown / :layername <name>",
+    "  :newgroup / :indent / :outdent / :lock / :unlock   (layer groups)",
+    "  :mask add|apply|del   (alpha mask: selection if any, else full)",
     "  :fliph   :flipv   :rot90   :sym none|horizontal|vertical|both",
     "  :wand <0-255>   :wandall on|off   :selop replace|add|subtract|intersect",
     "  :grad linear|radial   :contour",

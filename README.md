@@ -90,6 +90,10 @@ middle-drag pan. (The editor is keyboard-first, but the mouse is fully wired.)
 | `:newlayer` / `:dellayer` | add / remove layer |
 | `:layerup` / `:layerdown` | move the active layer up / down |
 | `:layername <name>` | rename the active layer |
+| `:newgroup` | add a layer group |
+| `:indent` / `:outdent` | nest the active layer into the group above / un-nest |
+| `:lock` / `:unlock` | lock / unlock the active layer (blocks painting) |
+| `:mask add\|apply\|del` | alpha mask from the selection (or full) / bake / remove |
 | `:fliph` / `:flipv` / `:rot90` | mirror H / V / rotate 90° (selection if any, else whole sprite) |
 | `:sym none\|h\|v\|both` | set symmetry (mirror painting) |
 | `:wand <0-255>` / `:wandall on\|off` | magic-wand tolerance / match all layers |
@@ -105,7 +109,8 @@ middle-drag pan. (The editor is keyboard-first, but the mouse is fully wired.)
 - **Center** — the canvas: checkerboard transparency, real alpha, onion skin
   (prev frame tinted red, next green), optional pixel grid.
 - **Right** — layer list (visibility, opacity, blend mode, reorder, rename,
-  add/remove) + palette swatches + full RGB picker for fg/bg.
+  add/remove, groups + indent/outdent, lock flag, alpha mask) + palette swatches
+  + full RGB picker for fg/bg.
 - **Bottom** — frame timeline (numbered cells, add/duplicate/remove),
   play/pause, per-frame duration.
 - **Top** — mode, tool strip, fg/bg swatches, zoom, cursor/status, and the `:`
@@ -162,7 +167,8 @@ GUI library — the view and input layers are thin shells over it.
 
 Implemented: truecolor canvas with real alpha + checkerboard, zoom + pixel grid,
 onion skinning, animation playback with timeline thumbnails, layers
-(visibility/opacity/**blend modes**/reorder/rename/add/remove), palette + RGB
+(visibility/opacity/**blend modes**/reorder/rename/add/remove, **nested
+groups**, **lock flag**, **alpha masks**), palette + RGB
 picker, pencil/eraser/bucket/picker/line/rect/ellipse with **filled shapes**,
 **gradient (linear/radial), spray, shade, blur, contour**,
 **marquee + magic-wand (tolerance, all-layers) + lasso + polygon selection**
@@ -172,6 +178,6 @@ flip H/V + rotate 90° (**selection-aware**), stroke-grouped undo/redo,
 (`.gpl`/`.hex`/`.pal`), **OS clipboard**, full vim keymap (normal/draw/visual/
 paste/command modes).
 
-Not yet (Aseprite parity gaps): layer groups & masks, tile mode, Aseprite
-format extras (linked cels, cel opacity, indexed-color export), tile mode, color
+Not yet (Aseprite parity gaps): tile mode, Aseprite
+format extras (linked cels, cel opacity, indexed-color export), color
 profiles, shaders.

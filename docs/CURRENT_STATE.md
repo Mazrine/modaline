@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-10-22 — after the palette + transform-undo batch.
+Last updated: 2026-10-23 — after the layer groups & masks batch.
 
 ## Summary
 
@@ -48,6 +48,16 @@ across horizontal/vertical/both axes).
 - visibility toggle, opacity (0–255), 8 **blend modes** (normal, multiply,
   screen, overlay, darken, lighten, add, subtract — W3C source-over math),
   reorder (↑/↓), rename (`:layername`), add/remove.
+- **nested groups**: `:newgroup` adds a group, `:indent` / `:outdent` (or the
+  panel's →/←) nest layers inside it. A group's visibility, opacity, blend
+  mode and mask apply to the composite of its children; removing a group
+  removes its whole subtree; moving a group moves its subtree.
+- **lock / editable flag** per layer: painting, bucket fill and group-level
+  locks are refused (`:lock` / `:unlock`, or the `edit` checkbox).
+- **alpha masks** per layer: `:mask add` (from the current selection, or full
+  opacity), `:mask apply` (bake into the layer's alpha and drop the mask), and
+  `:mask del`. Masks are composited as an alpha multiplier and follow flips,
+  rotation and resize. They persist in `.vpx`, not in `.ase`.
 
 ## Frames & animation
 
@@ -74,8 +84,9 @@ across horizontal/vertical/both axes).
 
 - **`.ase` / `.aseprite`** — native Aseprite format, read + write. Reads raw and
   zlib-compressed cels, RGBA (depth 32) and indexed/grayscale (depth 8/16 via
-  palette chunks), layer names/visibility/blend/opacity, frame durations.
-  Writes depth-32 RGBA.
+  palette chunks), layer names/visibility/blend/opacity, layer groups (type +
+  child level) and the editable flag, frame durations. Writes depth-32 RGBA.
+  Layer masks are `.vpx`-only.
 - **`.vpx`** — JSON project file (size, layers, frames, all cels).
 - **PNG** — single-frame import/export with alpha.
 
@@ -120,11 +131,12 @@ middle-drag = pan.
 `delframe` · `newlayer`/`dellayer`/`layerup`/`layerdown`/`layername <name>` ·
 `fliph`/`flipv`/`rot90` (selection-aware) · `sym <mode>` · `wand <0-255>` /
 `wandall on|off` · `selop <op>` · `grad linear|radial` · `contour` ·
-`pal load|save <file>` · `export <file>` · `import <png>` · `open <file>` ·
+`pal load|save <file>` · `newgroup` · `indent`/`outdent` · `lock`/`unlock` ·
+`mask add|apply|del` · `export <file>` · `import <png>` · `open <file>` ·
 `help`.
 
 ## Test status
 
-`cargo test` → 21 tests green; `cargo clippy --all-targets` → clean. Verified to
+`cargo test` → 26 tests green; `cargo clippy --all-targets` → clean. Verified to
 launch on NixOS via `steam-run`. (Interaction paths are compiled + unit-tested
 but not yet hand-tested on a live display.)

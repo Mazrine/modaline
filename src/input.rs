@@ -453,6 +453,22 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "usage: :layername <name>".into();
             }
         }
+        "newgroup" | "ng" => editor.add_group(),
+        "indent" => editor.indent_layer(1),
+        "outdent" => editor.indent_layer(-1),
+        "lock" | "unlock" => {
+            let on = name == "lock";
+            let l = editor.active_layer;
+            editor.sprite.layers[l].editable = !on;
+            editor.dirty = true;
+            editor.msg = if on { "layer locked" } else { "layer unlocked" }.into();
+        }
+        "mask" => match arg {
+            Some("add" | "new") => editor.mask_add(),
+            Some("apply" | "bake") => editor.mask_apply(),
+            Some("del" | "delete" | "remove") => editor.mask_del(),
+            _ => editor.msg = "usage: :mask add|apply|del".into(),
+        },
         "fliph" => editor.flip_h(),
         "flipv" => editor.flip_v(),
         "rot90" => editor.rotate_cw(),

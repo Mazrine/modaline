@@ -14,7 +14,9 @@ pub fn save_project(sprite: &Sprite, path: &Path) -> Result<()> {
 
 pub fn load_project(path: &Path) -> Result<Sprite> {
     let json = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    serde_json::from_str(&json).context("parse project")
+    let mut sprite: Sprite = serde_json::from_str(&json).context("parse project")?;
+    sprite.normalize_levels();
+    Ok(sprite)
 }
 
 /// Export the composite of one frame as a PNG.

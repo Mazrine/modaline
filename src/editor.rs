@@ -292,6 +292,10 @@ impl Editor {
 
     pub fn paint_pixel(&mut self, x: u32, y: u32, color: Rgba) {
         let (l, f) = (self.active_layer, self.active_frame);
+        if !self.sprite.layer_editable(l) {
+            self.msg = "layer is locked or hidden".into();
+            return;
+        }
         let old = self.sprite.get(l, f, x, y);
         if old == color {
             return;
@@ -544,6 +548,10 @@ impl Editor {
 
     pub fn apply_bucket(&mut self, x: u32, y: u32) {
         let (l, f) = (self.active_layer, self.active_frame);
+        if !self.sprite.layer_editable(l) {
+            self.msg = "layer is locked or hidden".into();
+            return;
+        }
         let color = self.fg;
         self.begin_stroke();
         let changes = flood_fill(&mut self.sprite, l, f, x, y, color);
@@ -1109,11 +1117,114 @@ impl Editor {
 
     pub fn move_layer_active(&mut self, dir: i32) {
         let from = self.active_layer;
-        let to = (from as i32 + dir).clamp(0, self.sprite.layers.len() as i32 - 1) as usize;
-        if self.sprite.move_layer(from, to) {
-            self.active_layer = to;
+        let to = if dir > 0 {
+            self.sprite.subtree_end(from)
+        } else {
+            from.saturating_sub(1)
+        };
+        if let Some(at) = self.sprite.move_layer(from, to) {
+            self.active_layer = at;
             self.dirty = true;
         }
+    }
+
+    pub fn add_group(&mut self) {
+        let idx = self.active_layer;
+        self.sprite.add_group_after(idx);
+        self.active_layer = idx + 1;
+        self.dirty = true;
+    }
+
+    /// Indent (`dir > 0`) or outdent the active layer and its children.
+    pub fn indent_layer(&mut self, dir: i32) {
+        let i = self.active_layer;
+        let cur = self.sprite.layers[i].child_level as i32;
+        let max = if i == 0 {
+            0
+        } else {
+            let prev = &self.sprite.layers[i - 1];
+            prev.child_level as i32 + prev.group as i32
+        };
+        let delta = (cur + dir).clamp(0, max) - cur;
+        if delta == 0 {
+            self.msg = if dir > 0 {
+                "no group above to indent into".into()
+            } else {
+                "already at top level".into()
+            };
+            return;
+        }
+        let end = self.sprite.subtree_end(i);
+        for layer in &mut self.sprite.layers[i..end] {
+            layer.child_level = (layer.child_level as i32 + delta) as u16;
+        }
+        self.dirty = true;
+    }
+
+    /// Mask ops are whole-sprite snapshots so they undo as one step.
+    fn snapshot(&mut self, before: Sprite) {
+        self.undo.push(UndoStep::Snapshot {
+            before,
+            after: self.sprite.clone(),
+        });
+        self.redo.clear();
+        self.dirty = true;
+    }
+
+    /// Add an alpha mask on the active layer: the selection if there is one,
+    /// otherwise fully opaque. Replaces an existing mask.
+    pub fn mask_add(&mut self) {
+        let (l, w, h) = (self.active_layer, self.sprite.width, self.sprite.height);
+        if self.sprite.layers[l].group {
+            self.msg = "groups have no mask".into();
+            return;
+        }
+        let mut pixels = vec![255u8; (w * h) as usize];
+        if let Some(sel) = self.current_selection() {
+            pixels.fill(0);
+            for y in sel.y..(sel.y + sel.h).min(h) {
+                for x in sel.x..(sel.x + sel.w).min(w) {
+                    if sel.contains(x, y) {
+                        pixels[(y * w + x) as usize] = 255;
+                    }
+                }
+            }
+        }
+        let before = self.sprite.clone();
+        self.sprite.layers[l].mask = Some(crate::sprite::Mask { pixels });
+        self.snapshot(before);
+        self.msg = "mask added".into();
+    }
+
+    /// Multiply the mask into the layer's pixels (all frames), then drop it.
+    pub fn mask_apply(&mut self) {
+        let l = self.active_layer;
+        if self.sprite.layers[l].mask.is_none() {
+            self.msg = "no mask on this layer".into();
+            return;
+        }
+        let before = self.sprite.clone();
+        let mask = self.sprite.layers[l].mask.take().unwrap();
+        for cel in &mut self.sprite.cels[l] {
+            for (i, px) in cel.pixels.iter_mut().enumerate() {
+                let m = *mask.pixels.get(i).unwrap_or(&255) as u32;
+                px.3 = (px.3 as u32 * m / 255) as u8;
+            }
+        }
+        self.snapshot(before);
+        self.msg = "mask applied".into();
+    }
+
+    pub fn mask_del(&mut self) {
+        let l = self.active_layer;
+        if self.sprite.layers[l].mask.is_none() {
+            self.msg = "no mask on this layer".into();
+            return;
+        }
+        let before = self.sprite.clone();
+        self.sprite.layers[l].mask = None;
+        self.snapshot(before);
+        self.msg = "mask removed".into();
     }
 
     pub fn rename_layer(&mut self, name: &str) {
