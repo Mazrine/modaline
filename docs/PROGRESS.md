@@ -5,11 +5,11 @@
 
 ## Status snapshot
 
-- `cargo test` → **13 tests green**
+- `cargo test` → **15 tests green**
 - `cargo clippy --all-targets` → **clean**
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **OS clipboard + timeline thumbnails**.
+- Last completed batch: **filled shapes + magic-wand tolerance + selection ops**.
 
 ## How to resume
 
@@ -42,41 +42,40 @@ Read, in order:
 7. **Clipboard + thumbnails batch** — OS clipboard (Ctrl-C/X/V, image
    copy/paste through egui), timeline thumbnails, and the Ctrl-C→copy /
    Ctrl-Q→quit / Ctrl-Z→undo remap.
+8. **Shapes + selection-quality batch** — filled rect/ellipse (`t`), magic-wand
+   tolerance + all-layers, and selection ops (replace/add/subtract/intersect).
+   2 new tests.
 
 ## Next step (exact)
 
-### 1. Selection modifiers
-
-- Add / subtract / intersect with the current selection (e.g. shift/alt while
-  marqueeing or wanding).
-- `Selection` is already a per-pixel mask, so this is just mask union /
-  difference / intersection, then assign back to `self.selection`.
-
-### 2. Magic-wand tolerance + "all layers"
-
-- Add a color-distance tolerance to `Editor::magic_wand` (currently exact match).
-- Option to flood over all visible layers instead of only the active one.
-
-### 3. Toolset
+### 1. Toolset
 
 - gradient (linear/radial between fg and bg), spray, shade, blur, contour.
-- filled ellipse / rectangle: add a `filled: bool` to `Shape` and use
-  `ellipse_points(..., filled)` / a filled-rect helper.
+- Gradient: reuse the two-point `pending` machinery (like line), then
+  interpolate fg→bg across the dragged span (over the selection if present).
 
-### 4. Selection transforms
+### 2. Selection transforms
 
-- Apply flip / rotate to the selection's pixels (or the whole cel when there is
-  no selection), instead of only the whole sprite (current `:fliph` etc.).
+- flip / rotate the **selected content** (active cel), not the whole sprite.
+- Single-cel, so it can record one undo step via `paint_pixel`.
+
+### 3. Layer groups & masks
+
+- Aseprite-style layer groups and per-layer alpha masks.
+
+### 4. Aseprite format fidelity
+
+- linked cels, cel opacity, and indexed-color export.
 
 ## Known limitations (do not forget)
 
 - Symmetry does **not** apply to bucket fill or paste.
 - Lasso/polygon are mouse-driven; keyboard selection is marquee (`v`) + magic
   wand (`w`).
-- Magic wand is exact-match, active layer only (no tolerance, no all-layers).
 - Selection is single-layer for copy/cut/move (not merged across layers).
 - `.ase` export is depth-32 RGBA only (indexed import is supported).
-- No selection add/subtract/intersect yet, no selection transforms.
+- Whole-sprite transforms (`:fliph`/`:flipv`/`:rot90`) are not undoable yet;
+  selection transforms will be.
 - Timeline thumbnails rebuild every UI pass (fine for small sprites; cache by
   revision if it ever matters).
 - OS paste prefers clipboard *text* when present (egui behavior); image paste is

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::color::Rgba;
-use crate::sprite::{Sprite, ellipse_points, flood_fill, line_points, rect_points};
+use crate::sprite::{Sprite, ellipse_points, flood_fill, line_points, rect_filled_points, rect_points};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -45,6 +45,45 @@ impl Symmetry {
     }
 }
 
+/// How a new selection combines with the existing one.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SelectionOp {
+    Replace,
+    Add,
+    Subtract,
+    Intersect,
+}
+
+impl SelectionOp {
+    pub fn name(self) -> &'static str {
+        match self {
+            SelectionOp::Replace => "replace",
+            SelectionOp::Add => "add",
+            SelectionOp::Subtract => "subtract",
+            SelectionOp::Intersect => "intersect",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            SelectionOp::Replace => SelectionOp::Add,
+            SelectionOp::Add => SelectionOp::Subtract,
+            SelectionOp::Subtract => SelectionOp::Intersect,
+            SelectionOp::Intersect => SelectionOp::Replace,
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "replace" | "r" => Some(SelectionOp::Replace),
+            "add" | "a" => Some(SelectionOp::Add),
+            "subtract" | "sub" | "s" => Some(SelectionOp::Subtract),
+            "intersect" | "and" | "i" => Some(SelectionOp::Intersect),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Shape {
     Line,
@@ -81,6 +120,15 @@ impl Selection {
 
     fn selected(&self, dx: u32, dy: u32) -> bool {
         self.mask[(dy * self.w + dx) as usize]
+    }
+
+    /// Whether sprite pixel `(px, py)` is part of this selection.
+    pub fn contains(&self, px: u32, py: u32) -> bool {
+        px >= self.x
+            && py >= self.y
+            && px < self.x + self.w
+            && py < self.y + self.h
+            && self.mask[((py - self.y) * self.w + (px - self.x)) as usize]
     }
 }
 
@@ -123,6 +171,10 @@ pub struct Editor {
     pub active_frame: usize,
     pub symmetry: Symmetry,
     pub lasso_points: Vec<(u32, u32)>,
+    pub selection_op: SelectionOp,
+    pub filled_shapes: bool,
+    pub wand_tolerance: u8,
+    pub wand_all_layers: bool,
     pub undo: Vec<UndoStep>,
     pub redo: Vec<UndoStep>,
     pub stroke: Option<UndoStep>,
@@ -159,6 +211,10 @@ impl Editor {
             active_frame: 0,
             symmetry: Symmetry::None,
             lasso_points: Vec::new(),
+            selection_op: SelectionOp::Replace,
+            filled_shapes: false,
+            wand_tolerance: 0,
+            wand_all_layers: false,
             undo: Vec::new(),
             redo: Vec::new(),
             stroke: None,
@@ -295,8 +351,15 @@ impl Editor {
 
     pub fn commit_shape(&mut self, color: Rgba) {
         if let Some(p) = self.pending.take() {
+            let filled = self.filled_shapes;
             let pts = match p.shape {
                 Shape::Line => line_points(
+                    p.start.0 as i32,
+                    p.start.1 as i32,
+                    self.cursor.0 as i32,
+                    self.cursor.1 as i32,
+                ),
+                Shape::Rect if filled => rect_filled_points(
                     p.start.0 as i32,
                     p.start.1 as i32,
                     self.cursor.0 as i32,
@@ -313,7 +376,7 @@ impl Editor {
                     p.start.1 as i32,
                     self.cursor.0 as i32,
                     self.cursor.1 as i32,
-                    false,
+                    filled,
                 ),
             };
             self.begin_stroke();
@@ -467,15 +530,52 @@ impl Editor {
     /// the persistent selection (magic wand, etc.).
     pub fn current_selection(&self) -> Option<Selection> {
         if let Some((ax, ay)) = self.select_anchor {
-            Some(Selection::rect(
+            let marquee = Selection::rect(
                 ax as i32,
                 ay as i32,
                 self.cursor.0 as i32,
                 self.cursor.1 as i32,
-            ))
+            );
+            self.combined_selection(marquee)
         } else {
             self.selection.clone()
         }
+    }
+
+    /// Combine `new_sel` with the persistent selection according to `selection_op`.
+    fn combined_selection(&self, new_sel: Selection) -> Option<Selection> {
+        let combined = match (&self.selection, self.selection_op) {
+            (Some(existing), SelectionOp::Add) => {
+                combine_masks(existing, &new_sel, SelectionOp::Add)
+            }
+            (Some(existing), SelectionOp::Subtract) => {
+                combine_masks(existing, &new_sel, SelectionOp::Subtract)
+            }
+            (Some(existing), SelectionOp::Intersect) => {
+                combine_masks(existing, &new_sel, SelectionOp::Intersect)
+            }
+            _ => new_sel,
+        };
+        if combined.mask.iter().any(|&v| v) {
+            Some(combined)
+        } else {
+            None
+        }
+    }
+
+    /// Commit a selection created by a wand / lasso / polygon.
+    fn apply_selection(&mut self, new_sel: Selection) {
+        let combined = self.combined_selection(new_sel);
+        self.selection = combined;
+        self.select_anchor = None;
+    }
+
+    /// Commit the live marquee selection and leave visual mode.
+    pub fn commit_marquee(&mut self) {
+        let combined = self.current_selection();
+        self.selection = combined;
+        self.select_anchor = None;
+        self.mode = Mode::Normal;
     }
 
     pub fn clear_selection(&mut self) {
@@ -483,11 +583,36 @@ impl Editor {
         self.selection = None;
     }
 
-    /// Select the contiguous same-color region around `(x, y)` (magic wand).
+    pub fn cycle_selection_op(&mut self) {
+        self.selection_op = self.selection_op.next();
+    }
+
+    pub fn set_selection_op(&mut self, name: &str) -> bool {
+        match SelectionOp::parse(name) {
+            Some(op) => {
+                self.selection_op = op;
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn toggle_filled_shapes(&mut self) {
+        self.filled_shapes = !self.filled_shapes;
+    }
+
+    /// Select the contiguous region around `(x, y)` matching within `wand_tolerance`.
     pub fn magic_wand(&mut self, x: u32, y: u32) {
-        let (l, f) = (self.active_layer, self.active_frame);
         let (w, h) = (self.sprite.width, self.sprite.height);
-        let target = self.sprite.get(l, f, x, y);
+        let source: Vec<Rgba> = if self.wand_all_layers {
+            self.sprite.composite(self.active_frame)
+        } else {
+            self.sprite.cels[self.active_layer][self.active_frame]
+                .pixels
+                .clone()
+        };
+        let target = source[(y * w + x) as usize];
+        let tol = self.wand_tolerance;
         let mut mask = vec![false; (w * h) as usize];
         let mut seen = vec![false; (w * h) as usize];
         let mut stack = vec![(x, y)];
@@ -502,7 +627,7 @@ impl Editor {
             ] {
                 if nx < w && ny < h {
                     let i = (ny * w + nx) as usize;
-                    if !seen[i] && self.sprite.get(l, f, nx, ny) == target {
+                    if !seen[i] && color_close(source[i], target, tol) {
                         seen[i] = true;
                         stack.push((nx, ny));
                     }
@@ -529,14 +654,13 @@ impl Editor {
                 cropped[((yy - miny) * sw + (xx - minx)) as usize] = mask[(yy * w + xx) as usize];
             }
         }
-        self.selection = Some(Selection {
+        self.apply_selection(Selection {
             x: minx,
             y: miny,
             w: sw,
             h: sh,
             mask: cropped,
         });
-        self.select_anchor = None;
     }
 
     pub fn has_lasso(&self) -> bool {
@@ -563,7 +687,7 @@ impl Editor {
                 .map(|&(x, y)| (x as i32, y as i32))
                 .collect();
             if let Some(sel) = self.selection_from_polygon(&poly) {
-                self.selection = Some(sel);
+                self.apply_selection(sel);
             }
         }
         self.lasso_points.clear();
@@ -793,6 +917,49 @@ fn point_in_polygon(px: f32, py: f32, poly: &[(i32, i32)]) -> bool {
     inside
 }
 
+/// Combine two mask shapes (`Add` / `Subtract` / `Intersect`).
+fn combine_masks(a: &Selection, b: &Selection, op: SelectionOp) -> Selection {
+    let minx = a.x.min(b.x);
+    let miny = a.y.min(b.y);
+    let maxx = (a.x + a.w).max(b.x + b.w); // exclusive
+    let maxy = (a.y + a.h).max(b.y + b.h);
+    let w = maxx - minx;
+    let h = maxy - miny;
+    let mut mask = vec![false; (w * h) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let (px, py) = (minx + x, miny + y);
+            let ia = a.contains(px, py);
+            let ib = b.contains(px, py);
+            mask[(y * w + x) as usize] = match op {
+                SelectionOp::Add => ia || ib,
+                SelectionOp::Subtract => ia && !ib,
+                SelectionOp::Intersect => ia && ib,
+                SelectionOp::Replace => ib,
+            };
+        }
+    }
+    Selection {
+        x: minx,
+        y: miny,
+        w,
+        h,
+        mask,
+    }
+}
+
+/// Whether two colors are within `tol` on every channel (transparent == transparent).
+fn color_close(a: Rgba, b: Rgba, tol: u8) -> bool {
+    if a.3 == 0 && b.3 == 0 {
+        return true;
+    }
+    let t = tol as i16;
+    (a.0 as i16 - b.0 as i16).abs() <= t
+        && (a.1 as i16 - b.1 as i16).abs() <= t
+        && (a.2 as i16 - b.2 as i16).abs() <= t
+        && (a.3 as i16 - b.3 as i16).abs() <= t
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -821,5 +988,27 @@ mod tests {
         assert_eq!(pts.len(), 4);
         assert!(pts.contains(&(3, 3)));
         assert!(pts.contains(&(0, 0)));
+    }
+
+    #[test]
+    fn selection_ops() {
+        let mut e = Editor::new(10, 10);
+        e.selection = Some(Selection::rect(0, 0, 4, 4));
+        e.selection_op = SelectionOp::Add;
+        e.apply_selection(Selection::rect(6, 6, 9, 9));
+        let sel = e.selection.clone().unwrap();
+        assert!(sel.contains(0, 0));
+        assert!(sel.contains(9, 9));
+
+        e.selection_op = SelectionOp::Subtract;
+        e.apply_selection(Selection::rect(0, 0, 9, 9));
+        assert!(e.selection.is_none());
+    }
+
+    #[test]
+    fn wand_tolerance_matches_close_colors() {
+        assert!(color_close(Rgba(100, 100, 100, 255), Rgba(105, 98, 100, 255), 8));
+        assert!(!color_close(Rgba(100, 100, 100, 255), Rgba(120, 100, 100, 255), 8));
+        assert!(color_close(Rgba::TRANSPARENT, Rgba::TRANSPARENT, 0));
     }
 }

@@ -1,7 +1,7 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, Vec2};
 
 use crate::color::Rgba;
-use crate::editor::{Editor, Mode, Shape, Symmetry, Tool};
+use crate::editor::{Editor, Mode, SelectionOp, Shape, Symmetry, Tool};
 use crate::sprite::{BlendMode, ellipse_points, line_points, rect_points};
 
 /// The canvas view: zoom (screen px per sprite px) and pan (screen pos of the
@@ -129,6 +129,18 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         {
             editor.cycle_symmetry();
         }
+        if ui.selectable_label(editor.filled_shapes, "fill").clicked() {
+            editor.toggle_filled_shapes();
+        }
+        if ui
+            .selectable_label(
+                editor.selection_op != SelectionOp::Replace,
+                format!("sel:{}", editor.selection_op.name()),
+            )
+            .clicked()
+        {
+            editor.cycle_selection_op();
+        }
 
         ui.separator();
         swatch(ui, editor.fg, true);
@@ -234,6 +246,11 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
 fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.checkbox(&mut view.show_grid, "pixel grid");
     ui.checkbox(&mut view.onion, "onion skin");
+    ui.horizontal(|ui| {
+        ui.label("wand tol");
+        ui.add(egui::Slider::new(&mut editor.wand_tolerance, 0..=255));
+    });
+    ui.checkbox(&mut editor.wand_all_layers, "wand: all layers");
     ui.separator();
 
     ui.horizontal(|ui| {
@@ -781,6 +798,7 @@ const HELP: &[&str] = &[
     "  w                  magic wand (select same-color region)",
     "  L / P              lasso / polygon selection (mouse)",
     "  s                  cycle symmetry (none / H / V / both)",
+    "  t                  toggle filled shapes (rect / ellipse)",
     "  , / .              prev / next color",
     "  < / >              prev / next layer",
     "  [ / ]              prev / next frame",
@@ -798,5 +816,6 @@ const HELP: &[&str] = &[
     "  :newframe / :dupframe / :delframe",
     "  :newlayer / :dellayer / :layerup / :layerdown / :layername <name>",
     "  :fliph   :flipv   :rot90   :sym none|horizontal|vertical|both",
+    "  :wand <0-255>   :wandall on|off   :selop replace|add|subtract|intersect",
     "  :export out.png|.ase   :import in.png   :open proj.vpx|.ase|.png",
 ];

@@ -5,15 +5,14 @@ north star but is a large, ongoing effort; this lists the concrete next steps.
 
 ## P0 — next batch candidates
 
-*(P0 is complete: selection tools, symmetry, OS clipboard, and timeline
-thumbnails are all done.)*
+*(Done: selection tools + add/subtract/intersect, magic-wand tolerance &
+all-layers, filled shapes, symmetry, OS clipboard, timeline thumbnails.)*
 
-- **Selection modifiers** — add / subtract / intersect with the current selection
-  (shift/alt while selecting).
-- **Magic-wand tolerance** + an "all layers" option.
-- **Toolset** — gradient, spray, shade, blur, contour; filled ellipse/rect.
-- **Selection transforms** (flip/rotate the selection, not just the whole
-  sprite).
+- **Toolset** — gradient (linear/radial), spray, shade, blur, contour.
+- **Selection transforms** — flip/rotate the selected content (currently
+  transforms are whole-sprite only).
+- **Layer groups & masks.**
+- **Aseprite format fidelity** — linked cels, cel opacity, indexed-color export.
 
 ## P1 — fill out the toolset & selection
 

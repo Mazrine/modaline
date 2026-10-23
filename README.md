@@ -44,6 +44,7 @@ Modal, like vim. Start in **normal** mode.
 | `L` / `P` | **lasso** (freehand) / **polygon** (click vertices) selection |
 | `y` / `x` / `m` / `p` | copy / cut / move the selection · `p` pastes the clipboard |
 | `s` | cycle symmetry (none / horizontal / vertical / both) |
+| `t` | toggle filled shapes (rect / ellipse) |
 | `,` / `.` | previous / next color |
 | `<` / `>` | previous / next layer |
 | `[` / `]` | previous / next frame |
@@ -89,6 +90,8 @@ middle-drag pan. (The editor is keyboard-first, but the mouse is fully wired.)
 | `:layername <name>` | rename the active layer |
 | `:fliph` / `:flipv` / `:rot90` | mirror H / V / rotate 90° (whole sprite) |
 | `:sym none\|h\|v\|both` | set symmetry (mirror painting) |
+| `:wand <0-255>` / `:wandall on\|off` | magic-wand tolerance / match all layers |
+| `:selop replace\|add\|subtract\|intersect` | how new selections combine |
 | `:export out.png\|out.ase` | export current frame as PNG, or the sprite as `.ase` |
 | `:import in.png` | import a PNG as a new sprite |
 | `:open proj.vpx\|proj.ase\|in.png` | load a project / `.ase` / PNG (by extension) |
@@ -154,12 +157,14 @@ GUI library — the view and input layers are thin shells over it.
 ## Implemented vs. full Aseprite
 
 Implemented: truecolor canvas with real alpha + checkerboard, zoom + pixel grid,
-onion skinning, animation playback, layers (visibility/opacity/**blend modes**/
-reorder/rename/add/remove), palette + RGB picker, pencil/eraser/bucket/picker/
-line/rect/ellipse, **marquee + magic-wand + lasso + polygon selection** with
-copy/cut/paste/move, **symmetry painting**, flip H/V + rotate 90°,
-stroke-grouped undo/redo, **`.ase`/`.aseprite` + PNG + `.vpx` import/export**,
-full vim keymap (normal/draw/visual/paste/command modes).
+onion skinning, animation playback with timeline thumbnails, layers
+(visibility/opacity/**blend modes**/reorder/rename/add/remove), palette + RGB
+picker, pencil/eraser/bucket/picker/line/rect/ellipse with **filled shapes**,
+**marquee + magic-wand (tolerance, all-layers) + lasso + polygon selection**
+with **add/subtract/intersect** and copy/cut/paste/move, **symmetry painting**,
+flip H/V + rotate 90°, stroke-grouped undo/redo, **`.ase`/`.aseprite` + PNG +
+`.vpx` import/export**, **OS clipboard**, full vim keymap (normal/draw/visual/
+paste/command modes).
 
 Not yet (Aseprite parity gaps): selection modifiers (add/subtract), selection
 transforms, tile mode, custom palette files, frame thumbnail previews in the

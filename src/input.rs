@@ -138,8 +138,7 @@ fn handle_key(editor: &mut Editor, view: &mut View, key: Key, mods: Modifiers) {
             ArrowUp => editor.move_cursor(0, -1),
             ArrowRight => editor.move_cursor(1, 0),
             Escape => {
-                editor.select_anchor = None;
-                editor.mode = Mode::Normal;
+                editor.commit_marquee();
             }
             _ => {}
         },
@@ -277,6 +276,7 @@ fn handle_char(editor: &mut Editor, ch: char) {
             editor.end_stroke();
         }
         's' => editor.cycle_symmetry(),
+        't' => editor.toggle_filled_shapes(),
         'w' => {
             let (x, y) = editor.cursor;
             editor.magic_wand(x, y);
@@ -448,6 +448,31 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     editor.msg = format!("symmetry: {}", editor.symmetry.name());
                 } else {
                     editor.msg = "usage: :sym none|horizontal|vertical|both".into();
+                }
+        }
+        "wand" | "tolerance" => {
+            if let Some(n) = arg.and_then(|s| s.parse::<u8>().ok()) {
+                editor.wand_tolerance = n;
+                editor.msg = format!("wand tolerance: {n}");
+            } else {
+                editor.msg = "usage: :wand <0-255>".into();
+            }
+        }
+        "wandall" | "wandlayers" => {
+            let on = matches!(arg, Some("on" | "true" | "1" | "all"));
+            if arg.is_some() {
+                editor.wand_all_layers = on;
+                editor.msg = format!("wand all layers: {}", if on { "on" } else { "off" });
+            } else {
+                editor.msg = "usage: :wandall on|off".into();
+            }
+        }
+        "selop" | "selection" => {
+            if let Some(name) = arg
+                && editor.set_selection_op(name) {
+                    editor.msg = format!("selection: {}", editor.selection_op.name());
+                } else {
+                    editor.msg = "usage: :selop replace|add|subtract|intersect".into();
                 }
         }
         "export" => {

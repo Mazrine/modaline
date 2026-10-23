@@ -404,6 +404,19 @@ pub fn rect_points(x0: i32, y0: i32, x1: i32, y1: i32) -> Vec<(u32, u32)> {
     pts
 }
 
+/// Every pixel inside the rectangle, inclusive.
+pub fn rect_filled_points(x0: i32, y0: i32, x1: i32, y1: i32) -> Vec<(u32, u32)> {
+    let (xmin, xmax) = if x0 <= x1 { (x0, x1) } else { (x1, x0) };
+    let (ymin, ymax) = if y0 <= y1 { (y0, y1) } else { (y1, y0) };
+    let mut pts = Vec::with_capacity(((xmax - xmin + 1) * (ymax - ymin + 1)) as usize);
+    for y in ymin..=ymax {
+        for x in xmin..=xmax {
+            pts.push((x as u32, y as u32));
+        }
+    }
+    pts
+}
+
 /// Axis-aligned ellipse bounded by the corners `(x0,y0)`/`(x1,y1)`.
 pub fn ellipse_points(x0: i32, y0: i32, x1: i32, y1: i32, filled: bool) -> Vec<(u32, u32)> {
     let cx = (x0 + x1) as f32 / 2.0;
