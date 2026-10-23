@@ -6,11 +6,12 @@ north star but is a large, ongoing effort; this lists the concrete next steps.
 ## P0 — next batch candidates
 
 *(Done: selection tools + add/subtract/intersect, magic-wand tolerance &
-all-layers, filled shapes, symmetry, OS clipboard, timeline thumbnails.)*
+all-layers, filled shapes, symmetry, gradient/spray/shade, OS clipboard,
+timeline thumbnails.)*
 
-- **Toolset** — gradient (linear/radial), spray, shade, blur, contour.
 - **Selection transforms** — flip/rotate the selected content (currently
   transforms are whole-sprite only).
+- **Blur + contour tools** (the remaining toolset items).
 - **Layer groups & masks.**
 - **Aseprite format fidelity** — linked cels, cel opacity, indexed-color export.
 

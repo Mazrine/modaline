@@ -114,6 +114,9 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             (Tool::Line, "Line"),
             (Tool::Rect, "Rect"),
             (Tool::Ellipse, "Ellip"),
+            (Tool::Gradient, "Grad"),
+            (Tool::Shade, "Shade"),
+            (Tool::Spray, "Spray"),
             (Tool::Lasso, "Lasso"),
             (Tool::Polygon, "Poly"),
         ] {
@@ -131,6 +134,10 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
         if ui.selectable_label(editor.filled_shapes, "fill").clicked() {
             editor.toggle_filled_shapes();
+        }
+        let gmode = if editor.gradient_radial { "grad:rad" } else { "grad:lin" };
+        if ui.selectable_label(editor.gradient_radial, gmode).clicked() {
+            editor.gradient_radial = !editor.gradient_radial;
         }
         if ui
             .selectable_label(
@@ -505,6 +512,12 @@ fn draw_pending(painter: &egui::Painter, editor: &Editor, view: &View) {
                 editor.cursor.1 as i32,
                 false,
             ),
+            Shape::Gradient => line_points(
+                p.start.0 as i32,
+                p.start.1 as i32,
+                editor.cursor.0 as i32,
+                editor.cursor.1 as i32,
+            ),
         };
         let z = view.zoom as f32;
         let color = Color32::from_rgba_unmultiplied(255, 255, 255, 130);
@@ -742,7 +755,7 @@ fn paint_at(
     {
         editor.cursor = (x, y);
         if use_bg {
-            editor.paint_pixel(x, y, editor.bg);
+            editor.paint_secondary(x, y);
         } else {
             editor.paint_with_tool(x, y);
         }
@@ -792,6 +805,7 @@ const HELP: &[&str] = &[
     "  r / space          paint pixel (fg)",
     "  b / e / f / c      pencil / eraser / bucket / picker",
     "  d / R / o          line / rect / ellipse (Enter commits, Esc cancels)",
+    "  z / a / q          gradient / spray / shade",
     "  v                  visual select (V = all)   then:",
     "    y                yank (copy)      x   cut",
     "    m                move (cut + float)   p   paste",
@@ -817,5 +831,6 @@ const HELP: &[&str] = &[
     "  :newlayer / :dellayer / :layerup / :layerdown / :layername <name>",
     "  :fliph   :flipv   :rot90   :sym none|horizontal|vertical|both",
     "  :wand <0-255>   :wandall on|off   :selop replace|add|subtract|intersect",
+    "  :grad linear|radial",
     "  :export out.png|.ase   :import in.png   :open proj.vpx|.ase|.png",
 ];

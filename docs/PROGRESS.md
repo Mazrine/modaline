@@ -5,11 +5,11 @@
 
 ## Status snapshot
 
-- `cargo test` → **15 tests green**
+- `cargo test` → **16 tests green**
 - `cargo clippy --all-targets` → **clean**
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **filled shapes + magic-wand tolerance + selection ops**.
+- Last completed batch: **gradient / spray / shade tools**.
 
 ## How to resume
 
@@ -45,19 +45,21 @@ Read, in order:
 8. **Shapes + selection-quality batch** — filled rect/ellipse (`t`), magic-wand
    tolerance + all-layers, and selection ops (replace/add/subtract/intersect).
    2 new tests.
+9. **Toolset batch** — gradient (linear/radial, `z`), spray (`a`), shade (`q`,
+   right-click lightens). 1 new test.
 
 ## Next step (exact)
 
-### 1. Toolset
-
-- gradient (linear/radial between fg and bg), spray, shade, blur, contour.
-- Gradient: reuse the two-point `pending` machinery (like line), then
-  interpolate fg→bg across the dragged span (over the selection if present).
-
-### 2. Selection transforms
+### 1. Selection transforms
 
 - flip / rotate the **selected content** (active cel), not the whole sprite.
-- Single-cel, so it can record one undo step via `paint_pixel`.
+- Single-cel, so it records one undo step. Flip H/V can be mask-aware; rotate
+  maps the bbox dimensions (w×h → h×w).
+
+### 2. Blur + contour tools
+
+- blur: average neighboring pixels (box blur, radius 1) under the cursor.
+- contour: outline the selected / contiguous region.
 
 ### 3. Layer groups & masks
 
@@ -88,5 +90,5 @@ Read, in order:
 Interaction paths are compiled + unit-tested and the app launches, but **not
 hand-tested on a live display** in this environment. First manual pass should
 cover: draw/erase, `v` marquee → `m` move, `w` wand, `L` lasso drag, `P` polygon
-+ `Enter`, `s` symmetry painting, `Ctrl-c` in another app → `Ctrl-v` here,
-`:w x.ase` then reopen.
++ `Enter`, `s` symmetry painting, `z` gradient, `a` spray, `q` shade,
+`Ctrl-c` in another app → `Ctrl-v` here, `:w x.ase` then reopen.

@@ -22,6 +22,9 @@ pub enum Tool {
     Line,
     Rect,
     Ellipse,
+    Gradient,
+    Shade,
+    Spray,
     Lasso,
     Polygon,
 }
@@ -89,6 +92,7 @@ pub enum Shape {
     Line,
     Rect,
     Ellipse,
+    Gradient,
 }
 
 /// A selected region of the sprite: a bounding box plus a per-pixel mask.
@@ -173,6 +177,8 @@ pub struct Editor {
     pub lasso_points: Vec<(u32, u32)>,
     pub selection_op: SelectionOp,
     pub filled_shapes: bool,
+    pub gradient_radial: bool,
+    pub spray_seed: u64,
     pub wand_tolerance: u8,
     pub wand_all_layers: bool,
     pub undo: Vec<UndoStep>,
@@ -213,6 +219,8 @@ impl Editor {
             lasso_points: Vec::new(),
             selection_op: SelectionOp::Replace,
             filled_shapes: false,
+            gradient_radial: false,
+            spray_seed: 0x9E37_79B9_7F4A_7C15,
             wand_tolerance: 0,
             wand_all_layers: false,
             undo: Vec::new(),
@@ -283,12 +291,96 @@ impl Editor {
         self.record(l, f, x, y, old, color);
     }
 
-    /// What the active tool does to a pixel when dragged/clicked.
+    /// What the active tool does to a pixel when dragged/clicked (primary).
     pub fn paint_with_tool(&mut self, x: u32, y: u32) {
         match self.tool {
             Tool::Eraser => self.paint_symmetric(x, y, Rgba::TRANSPARENT),
+            Tool::Shade => self.shade_at(x, y, true),
+            Tool::Spray => self.spray_at(x, y),
             _ => self.paint_symmetric(x, y, self.fg),
         }
+    }
+
+    /// Secondary action (right mouse button): bg color, or lighten for Shade.
+    pub fn paint_secondary(&mut self, x: u32, y: u32) {
+        match self.tool {
+            Tool::Shade => self.shade_at(x, y, false),
+            _ => self.paint_symmetric(x, y, self.bg),
+        }
+    }
+
+    /// Darken (or lighten) the existing pixel(s) under the cursor, keeping alpha.
+    pub fn shade_at(&mut self, x: u32, y: u32, darken: bool) {
+        for (px, py) in self.symmetry_points(x, y) {
+            let (l, f) = (self.active_layer, self.active_frame);
+            let old = self.sprite.get(l, f, px, py);
+            if old.is_transparent() {
+                continue;
+            }
+            self.paint_pixel(px, py, shade_color(old, darken));
+        }
+    }
+
+    /// Scatter a few random dots around the cursor (airbrush).
+    pub fn spray_at(&mut self, x: u32, y: u32) {
+        let r = 3i32;
+        for _ in 0..6 {
+            let dx = self.next_rand() % (2 * r + 1) - r;
+            let dy = self.next_rand() % (2 * r + 1) - r;
+            let px = x as i32 + dx;
+            let py = y as i32 + dy;
+            if px >= 0 && py >= 0 && (px as u32) < self.sprite.width && (py as u32) < self.sprite.height
+            {
+                self.paint_symmetric(px as u32, py as u32, self.fg);
+            }
+        }
+    }
+
+    fn next_rand(&mut self) -> i32 {
+        self.spray_seed = self
+            .spray_seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        ((self.spray_seed >> 33) as u32 & 0x7fff_ffff) as i32
+    }
+
+    /// Fill the selection (or whole cel) with a gradient from `start` to the cursor.
+    pub fn paint_gradient(&mut self, start: (u32, u32)) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let sel = self.current_selection();
+        let (ax, ay) = (start.0 as f32 + 0.5, start.1 as f32 + 0.5);
+        let (bx, by) = (self.cursor.0 as f32 + 0.5, self.cursor.1 as f32 + 0.5);
+        let dx = bx - ax;
+        let dy = by - ay;
+        let len2 = dx * dx + dy * dy;
+        let len = len2.sqrt();
+        let radial = self.gradient_radial;
+        let (fg, bg) = (self.fg, self.bg);
+        self.begin_stroke();
+        for y in 0..h {
+            for x in 0..w {
+                if let Some(s) = &sel
+                    && !s.contains(x, y)
+                {
+                    continue;
+                }
+                let px = x as f32 + 0.5;
+                let py = y as f32 + 0.5;
+                let t = if radial {
+                    if len < 0.001 {
+                        0.0
+                    } else {
+                        (((px - ax).powi(2) + (py - ay).powi(2)).sqrt() / len).clamp(0.0, 1.0)
+                    }
+                } else if len2 < 0.001 {
+                    0.0
+                } else {
+                    (((px - ax) * dx + (py - ay) * dy) / len2).clamp(0.0, 1.0)
+                };
+                self.paint_pixel(x, y, lerp_rgba(fg, bg, t));
+            }
+        }
+        self.end_stroke();
     }
 
     /// Paint `color` at `(x, y)` and at every mirrored symmetry point.
@@ -350,41 +442,47 @@ impl Editor {
     }
 
     pub fn commit_shape(&mut self, color: Rgba) {
-        if let Some(p) = self.pending.take() {
-            let filled = self.filled_shapes;
-            let pts = match p.shape {
-                Shape::Line => line_points(
-                    p.start.0 as i32,
-                    p.start.1 as i32,
-                    self.cursor.0 as i32,
-                    self.cursor.1 as i32,
-                ),
-                Shape::Rect if filled => rect_filled_points(
-                    p.start.0 as i32,
-                    p.start.1 as i32,
-                    self.cursor.0 as i32,
-                    self.cursor.1 as i32,
-                ),
-                Shape::Rect => rect_points(
-                    p.start.0 as i32,
-                    p.start.1 as i32,
-                    self.cursor.0 as i32,
-                    self.cursor.1 as i32,
-                ),
-                Shape::Ellipse => ellipse_points(
-                    p.start.0 as i32,
-                    p.start.1 as i32,
-                    self.cursor.0 as i32,
-                    self.cursor.1 as i32,
-                    filled,
-                ),
-            };
-            self.begin_stroke();
-            for (x, y) in pts {
-                self.paint_symmetric(x, y, color);
-            }
-            self.end_stroke();
+        let Some(p) = self.pending.take() else {
+            return;
+        };
+        if p.shape == Shape::Gradient {
+            self.paint_gradient(p.start);
+            return;
         }
+        let filled = self.filled_shapes;
+        let pts = match p.shape {
+            Shape::Line => line_points(
+                p.start.0 as i32,
+                p.start.1 as i32,
+                self.cursor.0 as i32,
+                self.cursor.1 as i32,
+            ),
+            Shape::Rect if filled => rect_filled_points(
+                p.start.0 as i32,
+                p.start.1 as i32,
+                self.cursor.0 as i32,
+                self.cursor.1 as i32,
+            ),
+            Shape::Rect => rect_points(
+                p.start.0 as i32,
+                p.start.1 as i32,
+                self.cursor.0 as i32,
+                self.cursor.1 as i32,
+            ),
+            Shape::Ellipse => ellipse_points(
+                p.start.0 as i32,
+                p.start.1 as i32,
+                self.cursor.0 as i32,
+                self.cursor.1 as i32,
+                filled,
+            ),
+            Shape::Gradient => unreachable!(),
+        };
+        self.begin_stroke();
+        for (x, y) in pts {
+            self.paint_symmetric(x, y, color);
+        }
+        self.end_stroke();
     }
 
     pub fn pick_color(&mut self, x: u32, y: u32) {
@@ -960,6 +1058,19 @@ fn color_close(a: Rgba, b: Rgba, tol: u8) -> bool {
         && (a.3 as i16 - b.3 as i16).abs() <= t
 }
 
+/// Darken (`f = 0.8`) or lighten (`f = 1.25`) a color, keeping alpha.
+fn shade_color(c: Rgba, darken: bool) -> Rgba {
+    let f = if darken { 0.8 } else { 1.25 };
+    let ch = |v: u8| (v as f32 * f).round().clamp(0.0, 255.0) as u8;
+    Rgba(ch(c.0), ch(c.1), ch(c.2), c.3)
+}
+
+/// Linear interpolation between two colors, `t` in 0..1.
+fn lerp_rgba(a: Rgba, b: Rgba, t: f32) -> Rgba {
+    let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round().clamp(0.0, 255.0) as u8;
+    Rgba(l(a.0, b.0), l(a.1, b.1), l(a.2, b.2), l(a.3, b.3))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1010,5 +1121,21 @@ mod tests {
         assert!(color_close(Rgba(100, 100, 100, 255), Rgba(105, 98, 100, 255), 8));
         assert!(!color_close(Rgba(100, 100, 100, 255), Rgba(120, 100, 100, 255), 8));
         assert!(color_close(Rgba::TRANSPARENT, Rgba::TRANSPARENT, 0));
+    }
+
+    #[test]
+    fn gradient_and_shade_helpers() {
+        assert_eq!(
+            lerp_rgba(Rgba(0, 0, 0, 255), Rgba(255, 255, 255, 255), 0.0),
+            Rgba(0, 0, 0, 255)
+        );
+        assert_eq!(
+            lerp_rgba(Rgba(0, 0, 0, 255), Rgba(255, 255, 255, 255), 1.0),
+            Rgba(255, 255, 255, 255)
+        );
+        let mid = lerp_rgba(Rgba(0, 0, 0, 255), Rgba(255, 255, 255, 255), 0.5);
+        assert!((mid.0 as i32 - 128).abs() <= 1);
+        assert!(shade_color(Rgba(100, 100, 100, 255), true).0 < 100);
+        assert!(shade_color(Rgba(100, 100, 100, 255), false).0 > 100);
     }
 }

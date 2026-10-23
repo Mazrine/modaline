@@ -326,6 +326,15 @@ fn handle_char(editor: &mut Editor, ch: char) {
         }
         'L' => editor.set_tool(Tool::Lasso),
         'P' => editor.set_tool(Tool::Polygon),
+        'z' => {
+            editor.set_tool(Tool::Gradient);
+            editor.pending = Some(Pending {
+                shape: Shape::Gradient,
+                start: editor.cursor,
+            });
+        }
+        'a' => editor.set_tool(Tool::Spray),
+        'q' => editor.set_tool(Tool::Shade),
         ',' => editor.cycle_color(-1),
         '.' => editor.cycle_color(1),
         '<' => editor.cycle_layer(-1),
@@ -475,6 +484,17 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     editor.msg = "usage: :selop replace|add|subtract|intersect".into();
                 }
         }
+        "grad" | "gradient" => match arg {
+            Some("radial") | Some("rad") => {
+                editor.gradient_radial = true;
+                editor.msg = "gradient: radial".into();
+            }
+            Some("linear") | Some("lin") => {
+                editor.gradient_radial = false;
+                editor.msg = "gradient: linear".into();
+            }
+            _ => editor.msg = "usage: :grad linear|radial".into(),
+        },
         "export" => {
             if let Some(p) = arg {
                 let path = PathBuf::from(p);

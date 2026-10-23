@@ -39,6 +39,7 @@ Modal, like vim. Start in **normal** mode.
 | `f` | bucket fill |
 | `c` | color picker (eyedropper) |
 | `d` / `R` / `o` | line / rectangle / ellipse — move, then `Enter` commits, `Esc` cancels |
+| `z` / `a` / `q` | gradient / spray (airbrush) / shade (darken; right-click lightens) |
 | `v` | **visual select** (marquee) — `V` selects the whole canvas |
 | `w` | **magic wand** — select the same-color region under the cursor |
 | `L` / `P` | **lasso** (freehand) / **polygon** (click vertices) selection |
@@ -92,6 +93,7 @@ middle-drag pan. (The editor is keyboard-first, but the mouse is fully wired.)
 | `:sym none\|h\|v\|both` | set symmetry (mirror painting) |
 | `:wand <0-255>` / `:wandall on\|off` | magic-wand tolerance / match all layers |
 | `:selop replace\|add\|subtract\|intersect` | how new selections combine |
+| `:grad linear\|radial` | gradient mode |
 | `:export out.png\|out.ase` | export current frame as PNG, or the sprite as `.ase` |
 | `:import in.png` | import a PNG as a new sprite |
 | `:open proj.vpx\|proj.ase\|in.png` | load a project / `.ase` / PNG (by extension) |
@@ -160,6 +162,7 @@ Implemented: truecolor canvas with real alpha + checkerboard, zoom + pixel grid,
 onion skinning, animation playback with timeline thumbnails, layers
 (visibility/opacity/**blend modes**/reorder/rename/add/remove), palette + RGB
 picker, pencil/eraser/bucket/picker/line/rect/ellipse with **filled shapes**,
+**gradient (linear/radial), spray, shade**,
 **marquee + magic-wand (tolerance, all-layers) + lasso + polygon selection**
 with **add/subtract/intersect** and copy/cut/paste/move, **symmetry painting**,
 flip H/V + rotate 90°, stroke-grouped undo/redo, **`.ase`/`.aseprite` + PNG +
