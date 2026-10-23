@@ -40,6 +40,7 @@ Modal, like vim. Start in **normal** mode.
 | `c` | color picker (eyedropper) |
 | `d` / `R` / `o` | line / rectangle / ellipse — move, then `Enter` commits, `Esc` cancels |
 | `z` / `a` / `q` | gradient / spray (airbrush) / shade (darken; right-click lightens) |
+| `n` / `C` | blur / contour (outline the selection or region under the cursor) |
 | `v` | **visual select** (marquee) — `V` selects the whole canvas |
 | `w` | **magic wand** — select the same-color region under the cursor |
 | `L` / `P` | **lasso** (freehand) / **polygon** (click vertices) selection |
@@ -89,7 +90,7 @@ middle-drag pan. (The editor is keyboard-first, but the mouse is fully wired.)
 | `:newlayer` / `:dellayer` | add / remove layer |
 | `:layerup` / `:layerdown` | move the active layer up / down |
 | `:layername <name>` | rename the active layer |
-| `:fliph` / `:flipv` / `:rot90` | mirror H / V / rotate 90° (whole sprite) |
+| `:fliph` / `:flipv` / `:rot90` | mirror H / V / rotate 90° (selection if any, else whole sprite) |
 | `:sym none\|h\|v\|both` | set symmetry (mirror painting) |
 | `:wand <0-255>` / `:wandall on\|off` | magic-wand tolerance / match all layers |
 | `:selop replace\|add\|subtract\|intersect` | how new selections combine |
@@ -162,12 +163,12 @@ Implemented: truecolor canvas with real alpha + checkerboard, zoom + pixel grid,
 onion skinning, animation playback with timeline thumbnails, layers
 (visibility/opacity/**blend modes**/reorder/rename/add/remove), palette + RGB
 picker, pencil/eraser/bucket/picker/line/rect/ellipse with **filled shapes**,
-**gradient (linear/radial), spray, shade**,
+**gradient (linear/radial), spray, shade, blur, contour**,
 **marquee + magic-wand (tolerance, all-layers) + lasso + polygon selection**
 with **add/subtract/intersect** and copy/cut/paste/move, **symmetry painting**,
-flip H/V + rotate 90°, stroke-grouped undo/redo, **`.ase`/`.aseprite` + PNG +
-`.vpx` import/export**, **OS clipboard**, full vim keymap (normal/draw/visual/
-paste/command modes).
+flip H/V + rotate 90° (**selection-aware**), stroke-grouped undo/redo,
+**`.ase`/`.aseprite` + PNG + `.vpx` import/export**, **OS clipboard**, full vim
+keymap (normal/draw/visual/paste/command modes).
 
 Not yet (Aseprite parity gaps): selection modifiers (add/subtract), selection
 transforms, tile mode, custom palette files, frame thumbnail previews in the

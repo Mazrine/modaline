@@ -117,6 +117,7 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             (Tool::Gradient, "Grad"),
             (Tool::Shade, "Shade"),
             (Tool::Spray, "Spray"),
+            (Tool::Blur, "Blur"),
             (Tool::Lasso, "Lasso"),
             (Tool::Polygon, "Poly"),
         ] {
@@ -806,6 +807,7 @@ const HELP: &[&str] = &[
     "  b / e / f / c      pencil / eraser / bucket / picker",
     "  d / R / o          line / rect / ellipse (Enter commits, Esc cancels)",
     "  z / a / q          gradient / spray / shade",
+    "  n / C              blur / contour outline",
     "  v                  visual select (V = all)   then:",
     "    y                yank (copy)      x   cut",
     "    m                move (cut + float)   p   paste",
@@ -831,6 +833,6 @@ const HELP: &[&str] = &[
     "  :newlayer / :dellayer / :layerup / :layerdown / :layername <name>",
     "  :fliph   :flipv   :rot90   :sym none|horizontal|vertical|both",
     "  :wand <0-255>   :wandall on|off   :selop replace|add|subtract|intersect",
-    "  :grad linear|radial",
+    "  :grad linear|radial   :contour",
     "  :export out.png|.ase   :import in.png   :open proj.vpx|.ase|.png",
 ];

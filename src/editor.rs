@@ -25,6 +25,7 @@ pub enum Tool {
     Gradient,
     Shade,
     Spray,
+    Blur,
     Lasso,
     Polygon,
 }
@@ -93,6 +94,14 @@ pub enum Shape {
     Rect,
     Ellipse,
     Gradient,
+}
+
+/// A region transform for the selection.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Xform {
+    FlipH,
+    FlipV,
+    Rot90,
 }
 
 /// A selected region of the sprite: a bounding box plus a per-pixel mask.
@@ -297,6 +306,7 @@ impl Editor {
             Tool::Eraser => self.paint_symmetric(x, y, Rgba::TRANSPARENT),
             Tool::Shade => self.shade_at(x, y, true),
             Tool::Spray => self.spray_at(x, y),
+            Tool::Blur => self.blur_at(x, y),
             _ => self.paint_symmetric(x, y, self.fg),
         }
     }
@@ -342,6 +352,111 @@ impl Editor {
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         ((self.spray_seed >> 33) as u32 & 0x7fff_ffff) as i32
+    }
+
+    /// 3x3 alpha-weighted box blur of the pixel(s) under the cursor.
+    pub fn blur_at(&mut self, x: u32, y: u32) {
+        for (px, py) in self.symmetry_points(x, y) {
+            let (l, f) = (self.active_layer, self.active_frame);
+            let (w, h) = (self.sprite.width, self.sprite.height);
+            let (mut sr, mut sg, mut sb, mut sa, mut count) = (0u32, 0u32, 0u32, 0u32, 0u32);
+            for dy in -1..=1i32 {
+                for dx in -1..=1i32 {
+                    let nx = px as i32 + dx;
+                    let ny = py as i32 + dy;
+                    if nx >= 0 && ny >= 0 && (nx as u32) < w && (ny as u32) < h {
+                        let c = self.sprite.get(l, f, nx as u32, ny as u32);
+                        let a = c.3 as u32;
+                        sr += c.0 as u32 * a;
+                        sg += c.1 as u32 * a;
+                        sb += c.2 as u32 * a;
+                        sa += a;
+                        count += 1;
+                    }
+                }
+            }
+            if sa == 0 {
+                continue;
+            }
+            let out = Rgba(
+                (sr / sa) as u8,
+                (sg / sa) as u8,
+                (sb / sa) as u8,
+                (sa / count.max(1)) as u8,
+            );
+            self.paint_pixel(px, py, out);
+        }
+    }
+
+    /// Draw an outline (in fg) around the selection, or around the contiguous
+    /// opaque region under the cursor when there is no selection.
+    pub fn contour_at(&mut self, x: u32, y: u32) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let region = self.region_mask(x, y);
+        let color = self.fg;
+        self.begin_stroke();
+        for y in 0..h {
+            for x in 0..w {
+                if region[(y * w + x) as usize] {
+                    continue;
+                }
+                let neighbors = [
+                    (x.wrapping_sub(1), y),
+                    (x + 1, y),
+                    (x, y.wrapping_sub(1)),
+                    (x, y + 1),
+                ];
+                if neighbors
+                    .iter()
+                    .any(|&(nx, ny)| nx < w && ny < h && region[(ny * w + nx) as usize])
+                {
+                    self.paint_pixel(x, y, color);
+                }
+            }
+        }
+        self.end_stroke();
+    }
+
+    /// Region used by `contour_at`: the selection, else the contiguous opaque
+    /// region (composite) around `(x, y)`.
+    fn region_mask(&self, x: u32, y: u32) -> Vec<bool> {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let mut mask = vec![false; (w * h) as usize];
+        if let Some(sel) = self.current_selection() {
+            for yy in sel.y..(sel.y + sel.h).min(h) {
+                for xx in sel.x..(sel.x + sel.w).min(w) {
+                    if sel.contains(xx, yy) {
+                        mask[(yy * w + xx) as usize] = true;
+                    }
+                }
+            }
+            return mask;
+        }
+        let comp = self.sprite.composite(self.active_frame);
+        if comp[(y * w + x) as usize].is_transparent() {
+            return mask;
+        }
+        let mut seen = vec![false; (w * h) as usize];
+        let mut stack = vec![(x, y)];
+        seen[(y * w + x) as usize] = true;
+        while let Some((cx, cy)) = stack.pop() {
+            mask[(cy * w + cx) as usize] = true;
+            for (nx, ny) in [
+                (cx.wrapping_sub(1), cy),
+                (cx + 1, cy),
+                (cx, cy.wrapping_sub(1)),
+                (cx, cy + 1),
+            ] {
+                if nx < w && ny < h {
+                    let i = (ny * w + nx) as usize;
+                    if !seen[i] && !comp[i].is_transparent() {
+                        seen[i] = true;
+                        stack.push((nx, ny));
+                    }
+                }
+            }
+        }
+        mask
     }
 
     /// Fill the selection (or whole cel) with a gradient from `start` to the cursor.
@@ -957,21 +1072,125 @@ impl Editor {
     }
 
     pub fn flip_h(&mut self) {
-        self.sprite.flip_h();
-        self.dirty = true;
+        if let Some(sel) = self.current_selection() {
+            self.transform_selection(&sel, Xform::FlipH);
+        } else {
+            self.sprite.flip_h();
+            self.dirty = true;
+        }
     }
 
     pub fn flip_v(&mut self) {
-        self.sprite.flip_v();
-        self.dirty = true;
+        if let Some(sel) = self.current_selection() {
+            self.transform_selection(&sel, Xform::FlipV);
+        } else {
+            self.sprite.flip_v();
+            self.dirty = true;
+        }
     }
 
     pub fn rotate_cw(&mut self) {
-        self.sprite.rotate_cw();
-        self.cursor = (
-            self.cursor.0.min(self.sprite.width - 1),
-            self.cursor.1.min(self.sprite.height - 1),
-        );
+        if let Some(sel) = self.current_selection() {
+            self.transform_selection(&sel, Xform::Rot90);
+        } else {
+            self.sprite.rotate_cw();
+            self.cursor = (
+                self.cursor.0.min(self.sprite.width - 1),
+                self.cursor.1.min(self.sprite.height - 1),
+            );
+            self.dirty = true;
+        }
+    }
+
+    /// Transform the selected pixels inside the active cel (one undo step).
+    fn transform_selection(&mut self, sel: &Selection, kind: Xform) {
+        let (ox, oy) = (sel.x, sel.y);
+        let (w, h) = (sel.w, sel.h);
+        let (nw, nh) = match kind {
+            Xform::Rot90 => (h, w),
+            _ => (w, h),
+        };
+        // Union region (shared origin) holding both the old and new bboxes.
+        let uw = w.max(nw).min(self.sprite.width.saturating_sub(ox));
+        let uh = h.max(nh).min(self.sprite.height.saturating_sub(oy));
+        if uw == 0 || uh == 0 {
+            return;
+        }
+        // Clamped new-bbox size for the updated selection.
+        let snw = nw.min(self.sprite.width.saturating_sub(ox));
+        let snh = nh.min(self.sprite.height.saturating_sub(oy));
+
+        let (l, f) = (self.active_layer, self.active_frame);
+        let mut orig = vec![Rgba::TRANSPARENT; (uw * uh) as usize];
+        for yy in 0..uh {
+            for xx in 0..uw {
+                orig[(yy * uw + xx) as usize] = self.sprite.get(l, f, ox + xx, oy + yy);
+            }
+        }
+        let mut final_grid = orig.clone();
+
+        let map = |xx: u32, yy: u32| -> (u32, u32) {
+            match kind {
+                Xform::FlipH => (w - 1 - xx, yy),
+                Xform::FlipV => (xx, h - 1 - yy),
+                Xform::Rot90 => (h - 1 - yy, xx),
+            }
+        };
+
+        // Vacate the selected pixels, then place them at their mapped positions.
+        for yy in 0..h {
+            for xx in 0..w {
+                if sel.selected(xx, yy) {
+                    final_grid[(yy * uw + xx) as usize] = Rgba::TRANSPARENT;
+                }
+            }
+        }
+        for yy in 0..h {
+            for xx in 0..w {
+                if sel.selected(xx, yy) {
+                    let (nx, ny) = map(xx, yy);
+                    if nx < uw && ny < uh {
+                        final_grid[(ny * uw + nx) as usize] = orig[(yy * uw + xx) as usize];
+                    }
+                }
+            }
+        }
+
+        self.begin_stroke();
+        for yy in 0..uh {
+            for xx in 0..uw {
+                let i = (yy * uw + xx) as usize;
+                if final_grid[i] != orig[i] {
+                    self.paint_pixel(ox + xx, oy + yy, final_grid[i]);
+                }
+            }
+        }
+        self.end_stroke();
+
+        // Update the selection mask to the transformed shape.
+        let mut nmask = vec![false; (snw * snh) as usize];
+        for yy in 0..h {
+            for xx in 0..w {
+                if sel.selected(xx, yy) {
+                    let (nx, ny) = map(xx, yy);
+                    if nx < snw && ny < snh {
+                        nmask[(ny * snw + nx) as usize] = true;
+                    }
+                }
+            }
+        }
+        if nmask.iter().any(|&v| v) {
+            self.selection = Some(Selection {
+                x: ox,
+                y: oy,
+                w: snw,
+                h: snh,
+                mask: nmask,
+            });
+        } else {
+            self.selection = None;
+        }
+        self.select_anchor = None;
         self.dirty = true;
     }
 
@@ -1137,5 +1356,30 @@ mod tests {
         assert!((mid.0 as i32 - 128).abs() <= 1);
         assert!(shade_color(Rgba(100, 100, 100, 255), true).0 < 100);
         assert!(shade_color(Rgba(100, 100, 100, 255), false).0 > 100);
+    }
+
+    #[test]
+    fn selection_flip_h_moves_and_undoes() {
+        let mut e = Editor::new(4, 4);
+        e.sprite.set(0, 0, 0, 0, Rgba(255, 0, 0, 255));
+        e.sprite.set(0, 0, 1, 0, Rgba(0, 255, 0, 255));
+        e.selection = Some(Selection::rect(0, 0, 1, 0)); // 2x1
+        e.flip_h();
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba(0, 255, 0, 255));
+        assert_eq!(e.sprite.get(0, 0, 1, 0), Rgba(255, 0, 0, 255));
+        e.undo();
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
+        assert_eq!(e.sprite.get(0, 0, 1, 0), Rgba(0, 255, 0, 255));
+    }
+
+    #[test]
+    fn selection_rotate_swaps_dims() {
+        let mut e = Editor::new(4, 4);
+        e.sprite.set(0, 0, 0, 0, Rgba(1, 2, 3, 255));
+        e.selection = Some(Selection::rect(0, 0, 1, 2)); // 2w x 3h
+        e.rotate_cw();
+        assert_eq!(e.sprite.get(0, 0, 2, 0), Rgba(1, 2, 3, 255));
+        let sel = e.selection.as_ref().unwrap();
+        assert_eq!((sel.w, sel.h), (3, 2));
     }
 }

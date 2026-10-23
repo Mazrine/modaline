@@ -5,11 +5,11 @@
 
 ## Status snapshot
 
-- `cargo test` → **16 tests green**
+- `cargo test` → **18 tests green**
 - `cargo clippy --all-targets` → **clean**
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **gradient / spray / shade tools**.
+- Last completed batch: **selection transforms + blur/contour**.
 
 ## How to resume
 
@@ -47,27 +47,29 @@ Read, in order:
    2 new tests.
 9. **Toolset batch** — gradient (linear/radial, `z`), spray (`a`), shade (`q`,
    right-click lightens). 1 new test.
+10. **Transforms + blur/contour batch** — `:fliph`/`:flipv`/`:rot90` now transform
+    the selection's content (single cel, undoable) when a selection exists;
+    blur (`n`) and contour (`C`) tools. 2 new tests.
 
 ## Next step (exact)
 
-### 1. Selection transforms
+### 1. Layer groups & masks
 
-- flip / rotate the **selected content** (active cel), not the whole sprite.
-- Single-cel, so it records one undo step. Flip H/V can be mask-aware; rotate
-  maps the bbox dimensions (w×h → h×w).
+- Aseprite-style layer groups and per-layer alpha masks (affects compositing and
+  the layer panel).
 
-### 2. Blur + contour tools
-
-- blur: average neighboring pixels (box blur, radius 1) under the cursor.
-- contour: outline the selected / contiguous region.
-
-### 3. Layer groups & masks
-
-- Aseprite-style layer groups and per-layer alpha masks.
-
-### 4. Aseprite format fidelity
+### 2. Aseprite format fidelity
 
 - linked cels, cel opacity, and indexed-color export.
+
+### 3. Custom palettes
+
+- load/save `.gpl` / Aseprite `.pal` / `.hex`; palette management UI.
+
+### 4. Undo for whole-sprite transforms
+
+- `:fliph`/`:flipv`/`:rot90` with no selection mutate the sprite directly (not
+  undoable). Record a multi-cel undo step (or a sprite snapshot).
 
 ## Known limitations (do not forget)
 
@@ -76,8 +78,8 @@ Read, in order:
   wand (`w`).
 - Selection is single-layer for copy/cut/move (not merged across layers).
 - `.ase` export is depth-32 RGBA only (indexed import is supported).
-- Whole-sprite transforms (`:fliph`/`:flipv`/`:rot90`) are not undoable yet;
-  selection transforms will be.
+- Whole-sprite transforms (`:fliph`/`:flipv`/`:rot90` with no selection) are not
+  undoable; **selection** transforms are.
 - Timeline thumbnails rebuild every UI pass (fine for small sprites; cache by
   revision if it ever matters).
 - OS paste prefers clipboard *text* when present (egui behavior); image paste is
@@ -90,5 +92,6 @@ Read, in order:
 Interaction paths are compiled + unit-tested and the app launches, but **not
 hand-tested on a live display** in this environment. First manual pass should
 cover: draw/erase, `v` marquee → `m` move, `w` wand, `L` lasso drag, `P` polygon
-+ `Enter`, `s` symmetry painting, `z` gradient, `a` spray, `q` shade,
-`Ctrl-c` in another app → `Ctrl-v` here, `:w x.ase` then reopen.
++ `Enter`, `s` symmetry painting, `z` gradient, `a` spray, `q` shade, `n` blur,
+`C` contour, `:fliph` with a selection, `Ctrl-c` in another app → `Ctrl-v` here,
+`:w x.ase` then reopen.

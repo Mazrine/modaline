@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-10-22 — after the gradient/spray/shade batch.
+Last updated: 2026-10-22 — after the selection-transforms + blur/contour batch.
 
 ## Summary
 
@@ -26,10 +26,10 @@ shells (see `AGENTS.md` for the module map and invariants).
 ## Tools
 
 pencil, eraser, bucket (flood fill), picker (eyedropper), line, rectangle,
-ellipse (outline or **filled**), **gradient (linear/radial)**, **spray**, and
-**shade** (darken; right-click lightens) — all with live preview where
-applicable — plus **symmetry painting** (mirror across horizontal/vertical/both
-axes).
+ellipse (outline or **filled**), **gradient (linear/radial)**, **spray**,
+**shade** (darken; right-click lightens), **blur**, and **contour** (outline) —
+all with live preview where applicable — plus **symmetry painting** (mirror
+across horizontal/vertical/both axes).
 
 ## Selection & clipboard
 
@@ -92,6 +92,7 @@ axes).
 | `b` / `e` / `f` / `c` | pencil / eraser / bucket / picker |
 | `d` / `R` / `o` | line / rect / ellipse |
 | `z` / `a` / `q` | gradient / spray / shade |
+| `n` / `C` | blur / contour |
 | `v` / `V` | visual select / select all |
 | `w` | magic wand |
 | `L` / `P` | lasso / polygon selection |
@@ -115,12 +116,12 @@ middle-drag = pan.
 
 `w`/`save` · `q`/`q!`/`wq` · `new [w h]` · `resize w h` · `newframe`/`dupframe`/
 `delframe` · `newlayer`/`dellayer`/`layerup`/`layerdown`/`layername <name>` ·
-`fliph`/`flipv`/`rot90` · `sym <mode>` · `wand <0-255>` / `wandall on|off` ·
-`selop <op>` · `grad linear|radial` · `export <file>` · `import <png>` ·
-`open <file>` · `help`.
+`fliph`/`flipv`/`rot90` (selection-aware) · `sym <mode>` · `wand <0-255>` /
+`wandall on|off` · `selop <op>` · `grad linear|radial` · `contour` ·
+`export <file>` · `import <png>` · `open <file>` · `help`.
 
 ## Test status
 
-`cargo test` → 16 tests green; `cargo clippy --all-targets` → clean. Verified to
+`cargo test` → 18 tests green; `cargo clippy --all-targets` → clean. Verified to
 launch on NixOS via `steam-run`. (Interaction paths are compiled + unit-tested
 but not yet hand-tested on a live display.)

@@ -335,6 +335,11 @@ fn handle_char(editor: &mut Editor, ch: char) {
         }
         'a' => editor.set_tool(Tool::Spray),
         'q' => editor.set_tool(Tool::Shade),
+        'n' => editor.set_tool(Tool::Blur),
+        'C' => {
+            let (x, y) = editor.cursor;
+            editor.contour_at(x, y);
+        }
         ',' => editor.cycle_color(-1),
         '.' => editor.cycle_color(1),
         '<' => editor.cycle_layer(-1),
@@ -495,6 +500,10 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             }
             _ => editor.msg = "usage: :grad linear|radial".into(),
         },
+        "contour" | "outline" => {
+            let (x, y) = editor.cursor;
+            editor.contour_at(x, y);
+        }
         "export" => {
             if let Some(p) = arg {
                 let path = PathBuf::from(p);

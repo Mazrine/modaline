@@ -6,14 +6,13 @@ north star but is a large, ongoing effort; this lists the concrete next steps.
 ## P0 — next batch candidates
 
 *(Done: selection tools + add/subtract/intersect, magic-wand tolerance &
-all-layers, filled shapes, symmetry, gradient/spray/shade, OS clipboard,
-timeline thumbnails.)*
+all-layers, filled shapes, symmetry, gradient/spray/shade/blur/contour,
+selection transforms, OS clipboard, timeline thumbnails.)*
 
-- **Selection transforms** — flip/rotate the selected content (currently
-  transforms are whole-sprite only).
-- **Blur + contour tools** (the remaining toolset items).
 - **Layer groups & masks.**
 - **Aseprite format fidelity** — linked cels, cel opacity, indexed-color export.
+- **Custom palettes** (`.gpl` / Aseprite `.pal`).
+- **Undo for whole-sprite transforms** (only selection transforms record today).
 
 ## P1 — fill out the toolset & selection
 
@@ -66,6 +65,6 @@ timeline thumbnails.)*
 
 ## Suggested order
 
-1. OS clipboard + timeline thumbnails (daily-use ergonomics).
-2. Toolset/tolerance/modifiers, then layer groups & masks.
-3. Aseprite format fidelity, then palettes, then shaders/wgpu.
+1. Layer groups & masks.
+2. Aseprite format fidelity + custom palettes.
+3. Undo for whole-sprite transforms, then shaders/wgpu.
