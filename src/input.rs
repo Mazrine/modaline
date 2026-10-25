@@ -566,32 +566,47 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             editor.contour_at(x, y);
         }
         "pal" | "palette" => {
-            let Some(rest) = arg else {
-                editor.msg = "usage: :pal load|save <file>".into();
-                return;
-            };
+            let rest = arg.unwrap_or("");
             let (sub, path) = match rest.find(char::is_whitespace) {
                 Some(i) => (&rest[..i], rest[i..].trim_start()),
                 None => (rest, ""),
             };
-            if path.is_empty() {
-                editor.msg = "usage: :pal load|save <file>".into();
-            } else {
-                let p = std::path::Path::new(path);
-                match sub {
-                    "load" => match palette::load(p) {
-                        Ok(colors) => {
-                            let n = colors.len();
-                            editor.load_palette(colors);
-                            editor.msg = format!("palette: {n} colors");
+            match sub {
+                "from-sprite" | "sprite" => {
+                    editor.palette_from_sprite();
+                }
+                "lock" | "unlock" => {
+                    let on = match path {
+                        "" => sub == "lock",
+                        "on" | "true" | "1" => true,
+                        "off" | "false" | "0" => false,
+                        _ => {
+                            editor.msg = "usage: :pal lock on|off".into();
+                            return;
                         }
-                        Err(e) => editor.msg = format!("palette load failed: {e}"),
-                    },
-                    "save" => match palette::save(&editor.palette, p) {
-                        Ok(()) => editor.msg = "palette saved".into(),
-                        Err(e) => editor.msg = format!("palette save failed: {e}"),
-                    },
-                    _ => editor.msg = "usage: :pal load|save <file>".into(),
+                    };
+                    editor.set_palette_lock(on);
+                }
+                "load" | "save" if !path.is_empty() => {
+                    let p = std::path::Path::new(path);
+                    if sub == "load" {
+                        match palette::load(p) {
+                            Ok(colors) => {
+                                let n = colors.len();
+                                editor.load_palette(colors);
+                                editor.msg = format!("palette: {n} colors");
+                            }
+                            Err(e) => editor.msg = format!("palette load failed: {e}"),
+                        }
+                    } else {
+                        match palette::save(&editor.palette, p) {
+                            Ok(()) => editor.msg = "palette saved".into(),
+                            Err(e) => editor.msg = format!("palette save failed: {e}"),
+                        }
+                    }
+                }
+                _ => {
+                    editor.msg = "usage: :pal from-sprite | lock on|off | load|save <file>".into();
                 }
             }
         }

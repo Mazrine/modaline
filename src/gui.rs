@@ -199,17 +199,19 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         if editor.dirty {
             ui.colored_label(Color32::YELLOW, "●");
         }
-        if !editor.msg.is_empty() {
+    });
+
+    // The status line gets its own row: appended to the tool row it was pushed
+    // off the right edge at any normal window width, so every message (palette
+    // lock refusals included) was invisible.
+    ui.horizontal(|ui| {
+        if editor.mode == Mode::Command {
+            ui.label(egui::RichText::new(format!(":{}", editor.cmdline)).strong());
+            ui.label(egui::RichText::new("▏").weak());
+        } else {
             ui.label(&editor.msg);
         }
     });
-
-    if editor.mode == Mode::Command {
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(format!(":{}", editor.cmdline)).strong());
-            ui.label(egui::RichText::new("▏").weak());
-        });
-    }
 }
 
 // ---- bottom timeline ----
@@ -394,6 +396,22 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                 }
             });
         });
+    ui.horizontal(|ui| {
+        if ui
+            .small_button("from sprite")
+            .on_hover_text("palette = the frame's own colours (:pal from-sprite)")
+            .clicked()
+        {
+            editor.palette_from_sprite();
+        }
+        if ui
+            .selectable_label(editor.palette_lock, "lock")
+            .on_hover_text("refuse colours that are not in the palette (:pal lock)")
+            .clicked()
+        {
+            editor.set_palette_lock(!editor.palette_lock);
+        }
+    });
     ui.separator();
 
     ui.horizontal(|ui| {

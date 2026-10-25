@@ -217,6 +217,9 @@ pub struct Editor {
     /// are for, from the sidecar. Also marks the file as one whose `ref` layer
     /// must survive a save.
     pub bundle_stage: Option<String>,
+    /// Refuse to paint a colour that is not in the palette (VI-3). Off by
+    /// default: a plain sprite has no ramp to protect.
+    pub palette_lock: bool,
 }
 
 impl Editor {
@@ -262,6 +265,7 @@ impl Editor {
             g_prefix: false,
             path: None,
             bundle_stage: None,
+            palette_lock: false,
         }
     }
 
@@ -322,6 +326,10 @@ impl Editor {
         let (l, f) = (self.active_layer, self.active_frame);
         if !self.sprite.layer_editable(l) {
             self.msg = "layer is locked or hidden".into();
+            return;
+        }
+        if self.palette_lock && !color.is_transparent() && !self.palette.contains(&color) {
+            self.msg = "palette locked: that colour is not in it".into();
             return;
         }
         let old = self.sprite.get(l, f, x, y);
@@ -730,6 +738,39 @@ impl Editor {
         self.bg_idx = self.bg_idx.min(self.palette.len() - 1);
         self.fg = self.palette[self.fg_idx];
         self.bg = self.palette[self.bg_idx];
+    }
+
+    /// Replace the palette with the exact distinct opaque colours of the active
+    /// frame, most used first. A fix painted on the generator's own ramp cannot
+    /// drift off it.
+    pub fn palette_from_sprite(&mut self) -> usize {
+        let comp = self.sprite.composite(self.active_frame);
+        let mut counts: std::collections::HashMap<Rgba, usize> = std::collections::HashMap::new();
+        for c in comp {
+            if !c.is_transparent() {
+                *counts.entry(c).or_default() += 1;
+            }
+        }
+        let mut list: Vec<(Rgba, usize)> = counts.into_iter().collect();
+        list.sort_by(|a, b| {
+            b.1.cmp(&a.1)
+                .then(a.0.0.cmp(&b.0.0))
+                .then(a.0.1.cmp(&b.0.1))
+        });
+        let n = list.len();
+        self.load_palette(list.into_iter().map(|(c, _)| c).collect());
+        self.msg = format!("palette: {n} colours from the frame");
+        n
+    }
+
+    /// Turn the lock on/off, reporting what it means.
+    pub fn set_palette_lock(&mut self, on: bool) {
+        self.palette_lock = on;
+        self.msg = if on {
+            "palette locked: only these colours (and eraser)".into()
+        } else {
+            "palette unlocked".into()
+        };
     }
 
     pub fn add_palette_color(&mut self) {
@@ -1855,5 +1896,48 @@ mod tests {
         e.cursor = (0, 0);
         e.move_cursor(-1, -1);
         assert_eq!(e.cursor, (0, 0), "clamped when tile mode is off");
+    }
+
+    #[test]
+    fn palette_from_sprite_takes_the_frame_colours_most_used_first() {
+        let mut e = Editor::new(3, 2);
+        let a = Rgba(10, 20, 30, 255);
+        let b = Rgba(200, 100, 50, 255);
+        for x in 0..3 {
+            e.sprite.set(0, 0, x, 0, a);
+        }
+        e.sprite.set(0, 0, 0, 1, b);
+        assert_eq!(e.palette_from_sprite(), 2);
+        assert_eq!(e.palette, vec![a, b]);
+        assert!(e.palette.contains(&e.fg), "fg stays inside the palette");
+        // A frame with nothing on it leaves the palette alone rather than
+        // emptying it (paint_pixel needs at least one colour).
+        let mut blank = Editor::new(2, 2);
+        let before = blank.palette.clone();
+        assert_eq!(blank.palette_from_sprite(), 0);
+        assert_eq!(blank.palette, before);
+    }
+
+    #[test]
+    fn a_locked_palette_refuses_a_stray_colour_but_still_erases() {
+        let mut e = Editor::new(2, 2);
+        let in_ramp = Rgba(10, 20, 30, 255);
+        let stray = Rgba(1, 2, 3, 255);
+        e.load_palette(vec![in_ramp]);
+        e.sprite.set(0, 0, 0, 0, in_ramp);
+        e.set_palette_lock(true);
+
+        e.paint_pixel(1, 1, stray);
+        assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::TRANSPARENT);
+        assert!(e.msg.contains("palette locked"));
+
+        e.paint_pixel(1, 1, in_ramp);
+        assert_eq!(e.sprite.get(0, 0, 1, 1), in_ramp);
+        e.paint_pixel(0, 0, Rgba::TRANSPARENT);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::TRANSPARENT, "eraser wins");
+
+        e.set_palette_lock(false);
+        e.paint_pixel(1, 2 - 1, stray);
+        assert_eq!(e.sprite.get(0, 0, 1, 1), stray);
     }
 }
