@@ -435,8 +435,7 @@ impl Sprite {
             },
         );
         let cel = Cel::blank(self.area());
-        self.cels
-            .insert(idx + 1, vec![cel; self.frames.len()]);
+        self.cels.insert(idx + 1, vec![cel; self.frames.len()]);
     }
 
     /// Insert an empty group just above `idx`, at the same nesting level.
@@ -453,8 +452,7 @@ impl Sprite {
             },
         );
         let cel = Cel::blank(self.area());
-        self.cels
-            .insert(idx + 1, vec![cel; self.frames.len()]);
+        self.cels.insert(idx + 1, vec![cel; self.frames.len()]);
     }
 
     /// Remove layer `idx`; a group takes its whole subtree with it.
@@ -600,8 +598,12 @@ pub fn flood_fill(
 
     while let Some((cx, cy)) = stack.pop() {
         set_px(s, layer, frame, cx, cy, color, &mut changes);
-        for (nx, ny) in [(cx.wrapping_sub(1), cy), (cx + 1, cy), (cx, cy.wrapping_sub(1)), (cx, cy + 1)]
-        {
+        for (nx, ny) in [
+            (cx.wrapping_sub(1), cy),
+            (cx + 1, cy),
+            (cx, cy.wrapping_sub(1)),
+            (cx, cy + 1),
+        ] {
             if nx < w && ny < h {
                 let i = (ny * w + nx) as usize;
                 if !seen[i] && s.get(layer, frame, nx, ny) == target {
@@ -695,7 +697,10 @@ pub fn ellipse_points(x0: i32, y0: i32, x1: i32, y1: i32, filled: bool) -> Vec<(
                     pts.push((x as u32, y as u32));
                 }
             } else if d(x, y) <= 1.0
-                && (d(x - 1, y) > 1.0 || d(x + 1, y) > 1.0 || d(x, y - 1) > 1.0 || d(x, y + 1) > 1.0)
+                && (d(x - 1, y) > 1.0
+                    || d(x + 1, y) > 1.0
+                    || d(x, y - 1) > 1.0
+                    || d(x, y + 1) > 1.0)
             {
                 pts.push((x as u32, y as u32));
             }
@@ -819,7 +824,10 @@ mod tests {
         s.layers[0].visible = true;
         s.layers[0].opacity = 128;
         let c = s.composite(0)[0];
-        assert!(c.0 == 0 && c.1 > 100, "group opacity dips the child, got {c:?}");
+        assert!(
+            c.0 == 0 && c.1 > 100,
+            "group opacity dips the child, got {c:?}"
+        );
     }
 
     #[test]

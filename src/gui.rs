@@ -87,10 +87,7 @@ impl View {
         if x < -wf || y < -hf || x >= 2.0 * wf || y >= 2.0 * hf {
             None
         } else {
-            Some((
-                x.rem_euclid(wf) as u32,
-                y.rem_euclid(hf) as u32,
-            ))
+            Some((x.rem_euclid(wf) as u32, y.rem_euclid(hf) as u32))
         }
     }
 }
@@ -147,7 +144,10 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
 
         ui.separator();
         if ui
-            .selectable_label(editor.symmetry != Symmetry::None, format!("sym:{}", editor.symmetry.name()))
+            .selectable_label(
+                editor.symmetry != Symmetry::None,
+                format!("sym:{}", editor.symmetry.name()),
+            )
             .clicked()
         {
             editor.cycle_symmetry();
@@ -155,7 +155,11 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         if ui.selectable_label(editor.filled_shapes, "fill").clicked() {
             editor.toggle_filled_shapes();
         }
-        let gmode = if editor.gradient_radial { "grad:rad" } else { "grad:lin" };
+        let gmode = if editor.gradient_radial {
+            "grad:rad"
+        } else {
+            "grad:lin"
+        };
         if ui.selectable_label(editor.gradient_radial, gmode).clicked() {
             editor.gradient_radial = !editor.gradient_radial;
         }
@@ -186,7 +190,10 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
 
         ui.separator();
-        ui.label(format!("{}x{} ({},{})", editor.sprite.width, editor.sprite.height, editor.cursor.0, editor.cursor.1));
+        ui.label(format!(
+            "{}x{} ({},{})",
+            editor.sprite.width, editor.sprite.height, editor.cursor.0, editor.cursor.1
+        ));
 
         ui.separator();
         if editor.dirty {
@@ -362,28 +369,30 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             editor.remove_palette_color();
         }
     });
-    egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
-        ui.horizontal_wrapped(|ui| {
-            for (i, c) in editor.palette.iter().enumerate() {
-                let col = Color32::from_rgba_unmultiplied(c.0, c.1, c.2, 255);
-                let mut btn = egui::Button::new("").fill(col).min_size(Vec2::splat(20.0));
-                if i == editor.fg_idx {
-                    btn = btn.stroke(Stroke::new(2.0, Color32::WHITE));
+    egui::ScrollArea::vertical()
+        .max_height(180.0)
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                for (i, c) in editor.palette.iter().enumerate() {
+                    let col = Color32::from_rgba_unmultiplied(c.0, c.1, c.2, 255);
+                    let mut btn = egui::Button::new("").fill(col).min_size(Vec2::splat(20.0));
+                    if i == editor.fg_idx {
+                        btn = btn.stroke(Stroke::new(2.0, Color32::WHITE));
+                    }
+                    let resp = ui
+                        .add(btn)
+                        .on_hover_text(format!("#{:02x}{:02x}{:02x}", c.0, c.1, c.2));
+                    if resp.clicked() {
+                        editor.fg = *c;
+                        editor.fg_idx = i;
+                    }
+                    if resp.secondary_clicked() {
+                        editor.bg = *c;
+                        editor.bg_idx = i;
+                    }
                 }
-                let resp = ui
-                    .add(btn)
-                    .on_hover_text(format!("#{:02x}{:02x}{:02x}", c.0, c.1, c.2));
-                if resp.clicked() {
-                    editor.fg = *c;
-                    editor.fg_idx = i;
-                }
-                if resp.secondary_clicked() {
-                    editor.bg = *c;
-                    editor.bg_idx = i;
-                }
-            }
+            });
         });
-    });
     ui.separator();
 
     ui.horizontal(|ui| {
@@ -403,7 +412,11 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         if ui.button("grp").on_hover_text("new group").clicked() {
             editor.add_group();
         }
-        if ui.button("→").on_hover_text("indent into group above").clicked() {
+        if ui
+            .button("→")
+            .on_hover_text("indent into group above")
+            .clicked()
+        {
             editor.indent_layer(1);
         }
         if ui.button("←").on_hover_text("outdent").clicked() {
@@ -504,7 +517,12 @@ fn canvas(
     let (w, h) = (editor.sprite.width, editor.sprite.height);
     let panel = ui.max_rect();
 
-    upload(ui, texture, "canvas", frame_composite(editor, editor.active_frame));
+    upload(
+        ui,
+        texture,
+        "canvas",
+        frame_composite(editor, editor.active_frame),
+    );
 
     if !view.initialized {
         view.fit(panel, w, h);
@@ -580,7 +598,11 @@ fn canvas(
     } else {
         rect
     };
-    let resp = ui.interact(hit.intersect(panel), ui.scope_id().with("canvas"), Sense::click_and_drag());
+    let resp = ui.interact(
+        hit.intersect(panel),
+        ui.scope_id().with("canvas"),
+        Sense::click_and_drag(),
+    );
     canvas_input(ui, editor, view, resp, w, h);
 }
 
@@ -588,7 +610,10 @@ fn upload(ui: &egui::Ui, slot: &mut Option<TextureHandle>, name: &str, img: egui
     match slot {
         Some(t) => t.set(img, egui::TextureOptions::NEAREST),
         None => {
-            *slot = Some(ui.ctx().load_texture(name, img, egui::TextureOptions::NEAREST));
+            *slot = Some(
+                ui.ctx()
+                    .load_texture(name, img, egui::TextureOptions::NEAREST),
+            );
         }
     }
 }
@@ -681,10 +706,7 @@ fn draw_pending(painter: &egui::Painter, editor: &Editor, view: &View) {
         let color = Color32::from_rgba_unmultiplied(255, 255, 255, 130);
         for (x, y) in pts {
             painter.rect_filled(
-                Rect::from_min_size(
-                    view.pan + Vec2::new(x as f32, y as f32) * z,
-                    Vec2::splat(z),
-                ),
+                Rect::from_min_size(view.pan + Vec2::new(x as f32, y as f32) * z, Vec2::splat(z)),
                 0.0,
                 color,
             );
@@ -699,7 +721,12 @@ fn draw_cursor(painter: &egui::Painter, editor: &Editor, view: &View) {
         view.pan + Vec2::new(c.0 as f32, c.1 as f32) * z,
         Vec2::splat(z),
     );
-    painter.rect_stroke(rect, 0.0, Stroke::new(1.5, Color32::WHITE), StrokeKind::Inside);
+    painter.rect_stroke(
+        rect,
+        0.0,
+        Stroke::new(1.5, Color32::WHITE),
+        StrokeKind::Inside,
+    );
 }
 
 fn draw_lasso(painter: &egui::Painter, editor: &Editor, view: &View) {
@@ -729,11 +756,17 @@ fn draw_symmetry(painter: &egui::Painter, editor: &Editor, view: &View, rect: Re
     let stroke = Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 220, 0, 90));
     if matches!(editor.symmetry, Symmetry::Vertical | Symmetry::Both) {
         let cx = view.pan.x + (editor.sprite.width as f32 / 2.0) * z;
-        painter.line_segment([Pos2::new(cx, rect.min.y), Pos2::new(cx, rect.max.y)], stroke);
+        painter.line_segment(
+            [Pos2::new(cx, rect.min.y), Pos2::new(cx, rect.max.y)],
+            stroke,
+        );
     }
     if matches!(editor.symmetry, Symmetry::Horizontal | Symmetry::Both) {
         let cy = view.pan.y + (editor.sprite.height as f32 / 2.0) * z;
-        painter.line_segment([Pos2::new(rect.min.x, cy), Pos2::new(rect.max.x, cy)], stroke);
+        painter.line_segment(
+            [Pos2::new(rect.min.x, cy), Pos2::new(rect.max.x, cy)],
+            stroke,
+        );
     }
 }
 
@@ -830,22 +863,25 @@ fn canvas_input(
 
     let scroll = ui.input(|i| i.smooth_scroll_delta.y);
     if scroll != 0.0
-        && let Some(pos) = resp.hover_pos() {
-            view.zoom_at(pos, if scroll > 0.0 { 1 } else { -1 });
-        }
+        && let Some(pos) = resp.hover_pos()
+    {
+        view.zoom_at(pos, if scroll > 0.0 { 1 } else { -1 });
+    }
 
     // lasso / polygon selection tools
     let pos = resp.interact_pointer_pos().unwrap_or_default();
     match editor.tool {
         Tool::Lasso => {
             if resp.drag_started_by(PB::Primary)
-                && let Some((x, y)) = view.screen_to_pixel(pos, w, h) {
-                    editor.lasso_start(x, y);
-                }
+                && let Some((x, y)) = view.screen_to_pixel(pos, w, h)
+            {
+                editor.lasso_start(x, y);
+            }
             if resp.dragged_by(PB::Primary)
-                && let Some((x, y)) = view.screen_to_pixel(pos, w, h) {
-                    editor.lasso_add(x, y);
-                }
+                && let Some((x, y)) = view.screen_to_pixel(pos, w, h)
+            {
+                editor.lasso_add(x, y);
+            }
             if resp.drag_stopped_by(PB::Primary) {
                 editor.lasso_finish();
             }
@@ -853,9 +889,10 @@ fn canvas_input(
         }
         Tool::Polygon => {
             if resp.clicked_by(PB::Primary)
-                && let Some((x, y)) = view.screen_to_pixel(pos, w, h) {
-                    editor.lasso_add(x, y);
-                }
+                && let Some((x, y)) = view.screen_to_pixel(pos, w, h)
+            {
+                editor.lasso_add(x, y);
+            }
             return;
         }
         _ => {}
@@ -895,19 +932,19 @@ fn canvas_input(
 
     // middle click: pick color
     if resp.clicked_by(PB::Middle)
-        && let Some((x, y)) = pixel_at(editor, view, resp.interact_pointer_pos().unwrap_or_default(), w, h) {
-            editor.pick_color(x, y);
-        }
+        && let Some((x, y)) = pixel_at(
+            editor,
+            view,
+            resp.interact_pointer_pos().unwrap_or_default(),
+            w,
+            h,
+        )
+    {
+        editor.pick_color(x, y);
+    }
 }
 
-fn paint_at(
-    editor: &mut Editor,
-    view: &View,
-    pos: Option<Pos2>,
-    w: u32,
-    h: u32,
-    use_bg: bool,
-) {
+fn paint_at(editor: &mut Editor, view: &View, pos: Option<Pos2>, w: u32, h: u32, use_bg: bool) {
     if let Some(pos) = pos
         && let Some((x, y)) = pixel_at(editor, view, pos, w, h)
     {

@@ -7,8 +7,7 @@ use anyhow::{Context, Result, bail};
 use crate::color::Rgba;
 
 pub fn load(path: &Path) -> Result<Vec<Rgba>> {
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -63,11 +62,8 @@ fn parse_gpl(text: &str) -> Vec<Rgba> {
         }
         let v: Vec<&str> = line.split_whitespace().collect();
         if v.len() >= 3
-            && let (Ok(r), Ok(g), Ok(b)) = (
-                v[0].parse::<u8>(),
-                v[1].parse::<u8>(),
-                v[2].parse::<u8>(),
-            )
+            && let (Ok(r), Ok(g), Ok(b)) =
+                (v[0].parse::<u8>(), v[1].parse::<u8>(), v[2].parse::<u8>())
         {
             out.push(Rgba(r, g, b, 255));
         }
@@ -100,11 +96,8 @@ fn parse_jasc(text: &str) -> Vec<Rgba> {
     for line in text.lines() {
         let v: Vec<&str> = line.split_whitespace().collect();
         if v.len() >= 3
-            && let (Ok(r), Ok(g), Ok(b)) = (
-                v[0].parse::<u8>(),
-                v[1].parse::<u8>(),
-                v[2].parse::<u8>(),
-            )
+            && let (Ok(r), Ok(g), Ok(b)) =
+                (v[0].parse::<u8>(), v[1].parse::<u8>(), v[2].parse::<u8>())
         {
             out.push(Rgba(r, g, b, 255));
         }
@@ -145,12 +138,21 @@ mod tests {
     #[test]
     fn parses_all_formats() {
         let gpl = "GIMP Palette\nName: x\nColumns: 4\n#\n  1   2   3\tA\n255 128 0\tB\n";
-        assert_eq!(parse_gpl(gpl), vec![Rgba(1, 2, 3, 255), Rgba(255, 128, 0, 255)]);
+        assert_eq!(
+            parse_gpl(gpl),
+            vec![Rgba(1, 2, 3, 255), Rgba(255, 128, 0, 255)]
+        );
 
         let hex = "#112233\n#aabbcc80\n";
-        assert_eq!(parse_hex(hex), vec![Rgba(17, 34, 51, 255), Rgba(170, 187, 204, 128)]);
+        assert_eq!(
+            parse_hex(hex),
+            vec![Rgba(17, 34, 51, 255), Rgba(170, 187, 204, 128)]
+        );
 
         let jasc = "JASC-PAL\n0100\n2\n0 0 0\n255 255 255\n";
-        assert_eq!(parse_jasc(jasc), vec![Rgba(0, 0, 0, 255), Rgba(255, 255, 255, 255)]);
+        assert_eq!(
+            parse_jasc(jasc),
+            vec![Rgba(0, 0, 0, 255), Rgba(255, 255, 255, 255)]
+        );
     }
 }

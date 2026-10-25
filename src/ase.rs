@@ -340,7 +340,12 @@ impl Import {
                         2 => u16_at(&raw, off) as u32,
                         _ => u32_at(&raw, off),
                     };
-                    tiles.push((v & id_mask, v & x_mask != 0, v & y_mask != 0, v & d_mask != 0));
+                    tiles.push((
+                        v & id_mask,
+                        v & x_mask != 0,
+                        v & y_mask != 0,
+                        v & d_mask != 0,
+                    ));
                 }
                 self.tilemaps.push(TilemapCel {
                     layer: li,
@@ -371,7 +376,9 @@ impl Import {
             for xx in 0..cw {
                 let (x, y) = (ox + xx as i32, oy + yy as i32);
                 if x >= 0 && y >= 0 && (x as u32) < self.width && (y as u32) < self.height {
-                    let src = *px.get((yy * cw + xx) as usize).unwrap_or(&Rgba::TRANSPARENT);
+                    let src = *px
+                        .get((yy * cw + xx) as usize)
+                        .unwrap_or(&Rgba::TRANSPARENT);
                     full[(y as u32 * self.width + x as u32) as usize] = src;
                 }
             }
@@ -624,7 +631,11 @@ fn parse_layer(body: &[u8], has_uuid: bool) -> Result<(Layer, u32)> {
     };
     Ok((
         Layer {
-            name: if name.is_empty() { "Layer".into() } else { name },
+            name: if name.is_empty() {
+                "Layer".into()
+            } else {
+                name
+            },
             visible: flags & 1 != 0,
             opacity,
             blend,
@@ -651,7 +662,13 @@ fn blend_from_word(w: u16) -> BlendMode {
 }
 
 /// Decode a `cw x ch` block of pixel bytes into `(cw, ch, pixels)`.
-fn decode_pixels(raw: &[u8], depth: u16, cw: u32, ch: u32, palette: &[Rgba]) -> (u32, u32, Vec<Rgba>) {
+fn decode_pixels(
+    raw: &[u8],
+    depth: u16,
+    cw: u32,
+    ch: u32,
+    palette: &[Rgba],
+) -> (u32, u32, Vec<Rgba>) {
     let mut out = Vec::with_capacity((cw * ch) as usize);
     let mut i = 0usize;
     for _ in 0..cw * ch {
