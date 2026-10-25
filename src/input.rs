@@ -5,7 +5,7 @@ use eframe::egui::{self, Event, Key, Modifiers};
 use crate::color::Rgba;
 use crate::editor::{Clipboard, Editor, Mode, Pending, Shape, Tool};
 use crate::gui::View;
-use crate::{ase, io, palette};
+use crate::{ase, io, ops, palette};
 
 /// Read this frame's input events and translate them into editor/view actions.
 pub fn handle_input(editor: &mut Editor, view: &mut View, ui: &egui::Ui) {
@@ -565,6 +565,24 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             let (x, y) = editor.cursor;
             editor.contour_at(x, y);
         }
+        "ops" => {
+            let Some(path) = arg.filter(|p| !p.is_empty()) else {
+                editor.msg = "usage: :ops <file.json>".into();
+                return;
+            };
+            let parsed = std::fs::read_to_string(path)
+                .map_err(|e| e.to_string())
+                .and_then(|text| {
+                    serde_json::from_str::<Vec<ops::Op>>(&text).map_err(|e| e.to_string())
+                });
+            match parsed {
+                Ok(list) => {
+                    let changed = editor.apply(&list);
+                    editor.msg = format!("ops: {} applied, {changed} px", list.len());
+                }
+                Err(e) => editor.msg = format!("ops failed: {e}"),
+            }
+        }
         "pal" | "palette" => {
             let rest = arg.unwrap_or("");
             let (sub, path) = match rest.find(char::is_whitespace) {
@@ -664,5 +682,33 @@ fn parse_dims(arg: Option<&str>, dw: u32, dh: u32) -> (u32, u32) {
             (w, h)
         }
         None => (dw, dh),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ops_file(tag: &str, body: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("vixel-ops-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ops.json");
+        std::fs::write(&path, body).unwrap();
+        path
+    }
+
+    #[test]
+    fn the_ops_command_applies_a_json_list() {
+        let path = ops_file("dots", r#"[{"op":"px","x":2,"y":3,"color":[9,9,9,255]}]"#);
+        let mut editor = Editor::new(8, 8);
+        exec_command(&mut editor, &format!("ops {}", path.display()));
+        assert_eq!(editor.sprite.get(0, 0, 2, 3), Rgba::rgb(9, 9, 9));
+        assert!(editor.msg.contains("1 applied"), "{}", editor.msg);
+
+        exec_command(&mut editor, "ops");
+        assert!(editor.msg.contains("usage"), "{}", editor.msg);
+
+        exec_command(&mut editor, "ops /nonexistent/vixel-ops.json");
+        assert!(editor.msg.contains("ops failed"), "{}", editor.msg);
     }
 }

@@ -509,7 +509,7 @@ impl Sprite {
 }
 
 /// Straight-alpha blend of `src` (effective alpha `sa`) over `dst` with `mode`.
-fn blend_over(mode: BlendMode, src: Rgba, sa: u32, dst: Rgba) -> Rgba {
+pub(crate) fn blend_over(mode: BlendMode, src: Rgba, sa: u32, dst: Rgba) -> Rgba {
     let as_ = sa as f32 / 255.0;
     let ab = dst.3 as f32 / 255.0;
     let cs = [

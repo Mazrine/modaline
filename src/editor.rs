@@ -294,7 +294,15 @@ impl Editor {
 
     // ---- drawing ----
 
-    fn record(&mut self, layer: usize, frame: usize, x: u32, y: u32, old: Rgba, new: Rgba) {
+    pub(crate) fn record(
+        &mut self,
+        layer: usize,
+        frame: usize,
+        x: u32,
+        y: u32,
+        old: Rgba,
+        new: Rgba,
+    ) {
         if let Some(UndoStep::Cells { cells }) = &mut self.stroke {
             cells.push((layer, frame, x, y, old, new));
         } else {
@@ -669,7 +677,9 @@ impl Editor {
         if let Some(step) = self.undo.pop() {
             match &step {
                 UndoStep::Cells { cells } => {
-                    for &(l, f, x, y, before, _) in cells {
+                    // Reverse order: one stroke can write a pixel twice (drag
+                    // back over it), and only the first `before` is the truth.
+                    for &(l, f, x, y, before, _) in cells.iter().rev() {
                         self.sprite.set(l, f, x, y, before);
                     }
                 }

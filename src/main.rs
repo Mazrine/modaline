@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use eframe::egui;
 // The model lives in the library crate now. These names are what the shell
 // modules above reach through their `crate::…` paths.
-use vixel::{ase, color, editor, io, palette, sprite};
+use vixel::{ase, color, editor, io, ops, palette, sprite};
 
 fn main() -> eframe::Result {
     // Optional first argument: the file to open, so another tool can launch
