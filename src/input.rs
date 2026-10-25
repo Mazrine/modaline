@@ -372,7 +372,7 @@ fn save(editor: &mut Editor) {
         match io::save_project(&editor.sprite, &p) {
             Ok(()) => {
                 editor.dirty = false;
-                editor.msg = "saved".into();
+                editor.msg = editor.saved_note();
             }
             Err(err) => editor.msg = format!("save failed: {err}"),
         }
@@ -401,7 +401,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         Ok(()) => {
                             editor.path = Some(p);
                             editor.dirty = false;
-                            editor.msg = "saved".into();
+                            editor.msg = editor.saved_note();
                         }
                         Err(err) => editor.msg = format!("save failed: {err}"),
                     }

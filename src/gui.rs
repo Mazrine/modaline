@@ -370,6 +370,7 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     });
     egui::ScrollArea::vertical()
+        .id_salt("palette")
         .max_height(180.0)
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -426,39 +427,43 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     let count = editor.sprite.layers.len();
     let mut selected = editor.active_layer;
     let mut toggle_mask = None;
-    egui::ScrollArea::vertical().show(ui, |ui| {
-        for i in 0..count {
-            let layer = &mut editor.sprite.layers[i];
-            let indent = layer.child_level as f32 * 14.0;
-            ui.horizontal(|ui| {
-                ui.add_space(indent);
-                let label = if layer.group {
-                    format!("▾ {}", layer.name)
-                } else {
-                    layer.name.clone()
-                };
-                if ui.selectable_label(i == selected, label).clicked() {
-                    selected = i;
-                }
-                ui.checkbox(&mut layer.visible, "").on_hover_text("visible");
-                ui.checkbox(&mut layer.editable, "edit")
-                    .on_hover_text("editable (lock)");
-                if !layer.group
-                    && ui
-                        .selectable_label(layer.mask.is_some(), "M")
-                        .on_hover_text("alpha mask: from selection, or full; click to add/remove")
-                        .clicked()
-                {
-                    toggle_mask = Some(i);
-                }
-            });
-            ui.horizontal(|ui| {
-                ui.add_space(indent);
-                blend_combo(ui, i, &mut layer.blend);
-                ui.add(egui::Slider::new(&mut layer.opacity, 0..=255).text("op"));
-            });
-        }
-    });
+    egui::ScrollArea::vertical()
+        .id_salt("layers")
+        .show(ui, |ui| {
+            for i in 0..count {
+                let layer = &mut editor.sprite.layers[i];
+                let indent = layer.child_level as f32 * 14.0;
+                ui.horizontal(|ui| {
+                    ui.add_space(indent);
+                    let label = if layer.group {
+                        format!("▾ {}", layer.name)
+                    } else {
+                        layer.name.clone()
+                    };
+                    if ui.selectable_label(i == selected, label).clicked() {
+                        selected = i;
+                    }
+                    ui.checkbox(&mut layer.visible, "").on_hover_text("visible");
+                    ui.checkbox(&mut layer.editable, "edit")
+                        .on_hover_text("editable (lock)");
+                    if !layer.group
+                        && ui
+                            .selectable_label(layer.mask.is_some(), "M")
+                            .on_hover_text(
+                                "alpha mask: from selection, or full; click to add/remove",
+                            )
+                            .clicked()
+                    {
+                        toggle_mask = Some(i);
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.add_space(indent);
+                    blend_combo(ui, i, &mut layer.blend);
+                    ui.add(egui::Slider::new(&mut layer.opacity, 0..=255).text("op"));
+                });
+            }
+        });
     if let Some(i) = toggle_mask {
         editor.active_layer = i;
         if editor.sprite.layers[i].mask.is_some() {

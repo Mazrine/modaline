@@ -7,7 +7,9 @@ use crate::sprite::Sprite;
 
 /// Save the whole sprite (frames + layers + cels) as JSON.
 pub fn save_project(sprite: &Sprite, path: &Path) -> Result<()> {
-    let json = serde_json::to_string_pretty(sprite).context("serialize sprite")?;
+    // Compact: a 256² bundle is three 65k-pixel layers, and pretty-printing
+    // blows it up ~8×. Nothing diffs pixel arrays by eye anyway.
+    let json = serde_json::to_string(sprite).context("serialize sprite")?;
     std::fs::write(path, json).with_context(|| format!("write {}", path.display()))?;
     Ok(())
 }

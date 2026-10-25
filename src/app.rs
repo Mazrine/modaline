@@ -14,6 +14,8 @@ pub struct VixelApp {
     onion_next: Option<egui::TextureHandle>,
     playing: bool,
     next_frame: Instant,
+    /// Last title sent to the window manager, so a fix bundle names its part.
+    title: String,
 }
 
 impl VixelApp {
@@ -36,12 +38,22 @@ impl VixelApp {
             onion_next: None,
             playing: false,
             next_frame: Instant::now(),
+            title: "vixel".into(),
         }
     }
 }
 
 impl eframe::App for VixelApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let title = match &self.editor.bundle_stage {
+            Some(stage) => format!("vixel — {stage} fix"),
+            None => "vixel".to_string(),
+        };
+        if title != self.title {
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
+            self.title = title;
+        }
         input::handle_input(&mut self.editor, &mut self.view, ui);
 
         if self.playing {

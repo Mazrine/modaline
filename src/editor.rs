@@ -213,6 +213,10 @@ pub struct Editor {
     pub should_quit: bool,
     pub g_prefix: bool,
     pub path: Option<PathBuf>,
+    /// Set when the opened file is a another tool fix bundle: the part the strokes
+    /// are for, from the sidecar. Also marks the file as one whose `ref` layer
+    /// must survive a save.
+    pub bundle_stage: Option<String>,
 }
 
 impl Editor {
@@ -257,6 +261,7 @@ impl Editor {
             should_quit: false,
             g_prefix: false,
             path: None,
+            bundle_stage: None,
         }
     }
 
@@ -1486,6 +1491,7 @@ impl Editor {
     pub fn open_path(&mut self, path: &std::path::Path) -> anyhow::Result<()> {
         let sprite = crate::io::load_any(path)?;
         self.replace_sprite(sprite);
+        self.adopt_bundle(path);
         self.path = Some(path.to_path_buf());
         self.dirty = false;
         self.msg = "loaded".into();
@@ -1508,7 +1514,51 @@ impl Editor {
         self.paste_pos = None;
         self.lasso_points.clear();
         self.dirty = false;
+        self.bundle_stage = None;
     }
+
+    /// A fix bundle has a locked `base` and an editable `fix` layer. Land on
+    /// `fix` in draw mode, so the first keypress paints; a plain project is
+    /// left exactly as vixel has always opened it.
+    fn adopt_bundle(&mut self, path: &std::path::Path) {
+        let fix = self
+            .sprite
+            .layers
+            .iter()
+            .position(|l| l.name == "fix" && l.editable);
+        let base = self
+            .sprite
+            .layers
+            .iter()
+            .position(|l| l.name == "base" && !l.editable);
+        let (Some(fix), Some(_)) = (fix, base) else {
+            return;
+        };
+        let stage = sidecar_stage(path).unwrap_or_else(|| "fix".to_string());
+        self.active_layer = fix;
+        self.mode = Mode::Draw;
+        self.msg = format!("{stage} fix — painting on the `fix` layer");
+        self.bundle_stage = Some(stage);
+    }
+
+    /// What to report after a write. Losing `ref` is not fatal — the strokes
+    /// still composite — but the alignment frame is gone, so say it every time.
+    pub fn saved_note(&self) -> String {
+        let lost_ref = self.bundle_stage.is_some()
+            && !self.sprite.layers.iter().any(|layer| layer.name == "ref");
+        if lost_ref {
+            "saved — warning: ref layer removed, alignment lost".into()
+        } else {
+            "saved".into()
+        }
+    }
+}
+
+/// The `stage` field of a bundle's sidecar (`<name>.json` next to `<name>.vpx`).
+fn sidecar_stage(path: &std::path::Path) -> Option<String> {
+    let text = std::fs::read_to_string(path.with_extension("json")).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    value.get("stage")?.as_str().map(str::to_string)
 }
 
 /// Even-odd point-in-polygon test (ray cast along +x). `poly` is implicitly closed.
@@ -1591,6 +1641,68 @@ fn lerp_rgba(a: Rgba, b: Rgba, t: f32) -> Rgba {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn bundle_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("vixel-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn write_bundle(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+        use crate::sprite::{Cel, Layer};
+        let path = dir.join(format!("{name}.vpx"));
+        let mut sprite = Sprite::new(4, 4);
+        sprite.layers = vec![
+            Layer {
+                name: "fix".into(),
+                ..Default::default()
+            },
+            Layer {
+                name: "base".into(),
+                editable: false,
+                ..Default::default()
+            },
+            Layer {
+                name: "ref".into(),
+                editable: false,
+                ..Default::default()
+            },
+        ];
+        sprite.cels = (0..3).map(|_| vec![Cel::blank(16)]).collect();
+        crate::io::save_project(&sprite, &path).unwrap();
+        std::fs::write(dir.join(format!("{name}.json")), r#"{"stage":"face"}"#).unwrap();
+        path
+    }
+
+    #[test]
+    fn a_fix_bundle_opens_on_the_fix_layer_in_draw_mode() {
+        let dir = bundle_dir("bundle");
+        let path = write_bundle(&dir, "soft");
+        let mut e = Editor::new(8, 8);
+        e.open_path(&path).unwrap();
+        assert_eq!(e.active_layer, 0);
+        assert_eq!(e.mode, Mode::Draw);
+        assert_eq!(e.bundle_stage.as_deref(), Some("face"));
+        assert_eq!(e.saved_note(), "saved");
+        // A save after deleting `ref` still works, but says what was lost.
+        e.sprite.layers.retain(|layer| layer.name != "ref");
+        assert!(e.saved_note().contains("ref layer removed"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_plain_project_opens_the_way_it_always_did() {
+        let dir = bundle_dir("plain");
+        let path = dir.join("plain.vpx");
+        crate::io::save_project(&Sprite::new(4, 4), &path).unwrap();
+        let mut e = Editor::new(8, 8);
+        e.open_path(&path).unwrap();
+        assert_eq!(e.mode, Mode::Normal);
+        assert!(e.bundle_stage.is_none());
+        // A `fix` layer alone is not a bundle: no locked base, no adoption.
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn point_in_polygon_basic() {
