@@ -39,7 +39,8 @@ thin shells:
 | `input.rs` | vim keymap + `:` command line (reads `egui::Event`) |
 | `gui.rs` | `View` (zoom/pan), canvas drawing, panels, help overlay |
 | `app.rs` | `eframe::App`: event loop, playback timer, texture upload |
-| `main.rs` | `run_native` + module wiring |
+| `lib.rs` | The **model** half as a library (`ase`, `color`, `editor`, `io`, `palette`, `sprite`) with no GUI dependency, so another tool can read/composite/write a `.vpx` without launching the editor |
+| `main.rs` | `run_native` + shell module wiring; takes an optional file path argument |
 
 **Core invariants (do not break):**
 
@@ -69,8 +70,9 @@ thin shells:
 - vim keys go in `input.rs`; tool/shape names go through `Tool`/`Shape` enums in
   `editor.rs`. Add new tools to the enums, `input.rs`, and the toolbar in
   `gui.rs` together.
-- `:` commands live in `input.rs::exec_command`, dispatched by extension where
-  relevant (`.ase`, `.png`, else `.vpx`).
+- `:` commands live in `input.rs::exec_command`. Opening a file dispatches on
+  the extension in **one** place, `io::load_any` (`.ase`, `.png`, else `.vpx`),
+  shared by `:open` and the command-line argument.
 
 ## egui 0.37 gotchas (this version changed things)
 

@@ -17,10 +17,19 @@ pub struct VixelApp {
 }
 
 impl VixelApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    /// `path` is the optional file from the command line. A file that will not
+    /// load is reported in the status line instead of blocking startup: a bad
+    /// argument must still give you an editor.
+    pub fn new(cc: &eframe::CreationContext<'_>, path: Option<std::path::PathBuf>) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        let mut editor = Editor::new(32, 32);
+        if let Some(path) = path
+            && let Err(e) = editor.open_path(&path)
+        {
+            editor.msg = format!("open failed: {e}");
+        }
         Self {
-            editor: Editor::new(32, 32),
+            editor,
             view: View::new(),
             texture: None,
             onion_prev: None,

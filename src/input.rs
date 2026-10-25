@@ -392,7 +392,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             let path = arg.map(PathBuf::from).or_else(|| editor.path.clone());
             match path {
                 Some(p) => {
-                    let res = if is_ase(&p) {
+                    let res = if io::is_ase(&p) {
                         ase::save(&editor.sprite, &p)
                     } else {
                         io::save_project(&editor.sprite, &p)
@@ -419,10 +419,11 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "q!" => editor.should_quit = true,
         "wq" => {
             if let Some(p) = arg.map(PathBuf::from).or_else(|| editor.path.clone())
-                && io::save_project(&editor.sprite, &p).is_ok() {
-                    editor.path = Some(p);
-                    editor.dirty = false;
-                }
+                && io::save_project(&editor.sprite, &p).is_ok()
+            {
+                editor.path = Some(p);
+                editor.dirty = false;
+            }
             editor.should_quit = true;
         }
         "new" => {
@@ -516,11 +517,12 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "rot90" => editor.rotate_cw(),
         "sym" | "symmetry" => {
             if let Some(name) = arg
-                && editor.set_symmetry(name) {
-                    editor.msg = format!("symmetry: {}", editor.symmetry.name());
-                } else {
-                    editor.msg = "usage: :sym none|horizontal|vertical|both".into();
-                }
+                && editor.set_symmetry(name)
+            {
+                editor.msg = format!("symmetry: {}", editor.symmetry.name());
+            } else {
+                editor.msg = "usage: :sym none|horizontal|vertical|both".into();
+            }
         }
         "wand" | "tolerance" => {
             if let Some(n) = arg.and_then(|s| s.parse::<u8>().ok()) {
@@ -541,11 +543,12 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         }
         "selop" | "selection" => {
             if let Some(name) = arg
-                && editor.set_selection_op(name) {
-                    editor.msg = format!("selection: {}", editor.selection_op.name());
-                } else {
-                    editor.msg = "usage: :selop replace|add|subtract|intersect".into();
-                }
+                && editor.set_selection_op(name)
+            {
+                editor.msg = format!("selection: {}", editor.selection_op.name());
+            } else {
+                editor.msg = "usage: :selop replace|add|subtract|intersect".into();
+            }
         }
         "grad" | "gradient" => match arg {
             Some("radial") | Some("rad") => {
@@ -595,7 +598,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "export" => {
             if let Some(p) = arg {
                 let path = PathBuf::from(p);
-                let res = if is_ase(&path) {
+                let res = if io::is_ase(&path) {
                     ase::save(&editor.sprite, &path)
                 } else {
                     io::export_png(&editor.sprite, editor.active_frame, &path)
@@ -623,19 +626,8 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         }
         "open" | "load" => {
             if let Some(p) = arg {
-                let path = PathBuf::from(p);
-                let res = if is_ase(&path) {
-                    ase::load(&path)
-                } else if is_png(&path) {
-                    io::import_png(&path)
-                } else {
-                    io::load_project(&path)
-                };
-                match res {
-                    Ok(s) => {
-                        editor.replace_sprite(s);
-                        editor.msg = "loaded".into();
-                    }
+                match editor.open_path(PathBuf::from(p).as_path()) {
+                    Ok(()) => {}
                     Err(err) => editor.msg = format!("load failed: {err}"),
                 }
             } else {
@@ -658,16 +650,4 @@ fn parse_dims(arg: Option<&str>, dw: u32, dh: u32) -> (u32, u32) {
         }
         None => (dw, dh),
     }
-}
-
-fn is_ase(p: &std::path::Path) -> bool {
-    p.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| e.eq_ignore_ascii_case("ase") || e.eq_ignore_ascii_case("aseprite"))
-}
-
-fn is_png(p: &std::path::Path) -> bool {
-    p.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| e.eq_ignore_ascii_case("png"))
 }

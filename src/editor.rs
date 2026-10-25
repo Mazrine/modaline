@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use crate::color::Rgba;
-use crate::sprite::{Sprite, ellipse_points, flood_fill, line_points, rect_filled_points, rect_points};
+use crate::sprite::{
+    Sprite, ellipse_points, flood_fill, line_points, rect_filled_points, rect_points,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -365,7 +367,10 @@ impl Editor {
             let dy = self.next_rand() % (2 * r + 1) - r;
             let px = x as i32 + dx;
             let py = y as i32 + dy;
-            if px >= 0 && py >= 0 && (px as u32) < self.sprite.width && (py as u32) < self.sprite.height
+            if px >= 0
+                && py >= 0
+                && (px as u32) < self.sprite.width
+                && (py as u32) < self.sprite.height
             {
                 self.paint_symmetric(px as u32, py as u32, self.fg);
             }
@@ -578,7 +583,11 @@ impl Editor {
         let changes = flood_fill(&mut self.sprite, l, f, x, y, color);
         let n = changes.len();
         if let Some(UndoStep::Cells { cells }) = &mut self.stroke {
-            cells.extend(changes.into_iter().map(|(x, y, old, new)| (l, f, x, y, old, new)));
+            cells.extend(
+                changes
+                    .into_iter()
+                    .map(|(x, y, old, new)| (l, f, x, y, old, new)),
+            );
         }
         if n > 0 {
             self.dirty = true;
@@ -821,14 +830,12 @@ impl Editor {
                 i
             }
             None => {
-                self.sprite
-                    .tags
-                    .push(crate::sprite::Tag {
-                        name: name.to_string(),
-                        from: a,
-                        to: b,
-                        color: Rgba(120, 170, 255, 255),
-                    });
+                self.sprite.tags.push(crate::sprite::Tag {
+                    name: name.to_string(),
+                    from: a,
+                    to: b,
+                    color: Rgba(120, 170, 255, 255),
+                });
                 self.sprite.tags.len() - 1
             }
         };
@@ -1472,6 +1479,19 @@ impl Editor {
         self.replace_sprite(Sprite::new(w, h));
     }
 
+    /// Load a sprite by extension (`.ase`/`.aseprite`, `.png`, else the JSON
+    /// project) and reset transient editor state. Shared by `:open` and the
+    /// command line, so `vixel foo.vpx` and `:open foo.vpx` are one code path.
+    /// The path is remembered, so `:w` with no argument writes it back.
+    pub fn open_path(&mut self, path: &std::path::Path) -> anyhow::Result<()> {
+        let sprite = crate::io::load_any(path)?;
+        self.replace_sprite(sprite);
+        self.path = Some(path.to_path_buf());
+        self.dirty = false;
+        self.msg = "loaded".into();
+        Ok(())
+    }
+
     /// Swap in an already-built sprite and reset transient editor state.
     pub fn replace_sprite(&mut self, s: Sprite) {
         self.sprite = s;
@@ -1560,7 +1580,11 @@ fn shade_color(c: Rgba, darken: bool) -> Rgba {
 
 /// Linear interpolation between two colors, `t` in 0..1.
 fn lerp_rgba(a: Rgba, b: Rgba, t: f32) -> Rgba {
-    let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round().clamp(0.0, 255.0) as u8;
+    let l = |x: u8, y: u8| {
+        (x as f32 + (y as f32 - x as f32) * t)
+            .round()
+            .clamp(0.0, 255.0) as u8
+    };
     Rgba(l(a.0, b.0), l(a.1, b.1), l(a.2, b.2), l(a.3, b.3))
 }
 
@@ -1611,8 +1635,16 @@ mod tests {
 
     #[test]
     fn wand_tolerance_matches_close_colors() {
-        assert!(color_close(Rgba(100, 100, 100, 255), Rgba(105, 98, 100, 255), 8));
-        assert!(!color_close(Rgba(100, 100, 100, 255), Rgba(120, 100, 100, 255), 8));
+        assert!(color_close(
+            Rgba(100, 100, 100, 255),
+            Rgba(105, 98, 100, 255),
+            8
+        ));
+        assert!(!color_close(
+            Rgba(100, 100, 100, 255),
+            Rgba(120, 100, 100, 255),
+            8
+        ));
         assert!(color_close(Rgba::TRANSPARENT, Rgba::TRANSPARENT, 0));
     }
 
