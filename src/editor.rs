@@ -1159,6 +1159,36 @@ impl Editor {
         self.select_anchor.is_some() || self.selection.is_some()
     }
 
+    /// Convert the sprite between sRGB and linear light. The palette, fg and bg
+    /// convert with it: painting an sRGB palette colour into a linear sprite
+    /// would mix spaces.
+    pub fn set_color_profile(&mut self, to: crate::sprite::ColorProfile) {
+        use crate::sprite::ColorProfile;
+        if to == self.sprite.color_profile {
+            self.msg = format!("profile: {}", to.name());
+            return;
+        }
+        let before = self.sprite.clone();
+        self.sprite.convert_profile(to);
+        let after = self.sprite.clone();
+        self.undo.push(UndoStep::Snapshot {
+            before: Box::new(before),
+            after: Box::new(after),
+        });
+        self.redo.clear();
+        let f = match to {
+            ColorProfile::Linear => crate::color::srgb_to_linear,
+            ColorProfile::Srgb => crate::color::linear_to_srgb,
+        };
+        for c in self.palette.iter_mut() {
+            *c = Rgba(f(c.0), f(c.1), f(c.2), c.3);
+        }
+        self.fg = Rgba(f(self.fg.0), f(self.fg.1), f(self.fg.2), self.fg.3);
+        self.bg = Rgba(f(self.bg.0), f(self.bg.1), f(self.bg.2), self.bg.3);
+        self.dirty = true;
+        self.msg = format!("profile: {}", to.name());
+    }
+
     // ---- sprite properties ----
 
     /// Set the declared colour mode. `Grayscale` converts the pixels (one undo
@@ -2506,6 +2536,35 @@ mod tests {
         assert_eq!(e.sprite.get(l, f, 11, 5), Rgba::rgb(0, 0, 200));
         // Outside the selection nothing is touched.
         assert_eq!(e.sprite.get(l, f, 0, 0), Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn the_colour_profile_converts_the_sprite_and_the_palette_together() {
+        use crate::sprite::ColorProfile;
+        let mut e = Editor::new(2, 2);
+        let (l, f) = (e.active_layer, e.active_frame);
+        e.paint_pixel(0, 0, Rgba::rgb(128, 128, 128));
+        let palette_before = e.palette.clone();
+
+        e.set_color_profile(ColorProfile::Linear);
+        let p = e.sprite.get(l, f, 0, 0);
+        assert!((54..=57).contains(&p.0), "128 sRGB -> {} linear", p.0);
+        assert_eq!(e.sprite.color_profile, ColorProfile::Linear);
+        assert_ne!(e.palette[0], palette_before[0], "the palette converted too");
+
+        e.undo();
+        assert_eq!(
+            e.sprite.get(l, f, 0, 0),
+            Rgba::rgb(128, 128, 128),
+            "one undo"
+        );
+        assert_eq!(e.sprite.color_profile, ColorProfile::Srgb);
+
+        // Converting twice is a no-op, not a second conversion.
+        e.set_color_profile(ColorProfile::Linear);
+        let once = e.sprite.get(l, f, 0, 0);
+        e.set_color_profile(ColorProfile::Linear);
+        assert_eq!(e.sprite.get(l, f, 0, 0), once);
     }
 
     #[test]

@@ -150,6 +150,9 @@ pub fn export_meta(sprite: &Sprite, sheet: Sheet, image: &str, path: &Path) -> R
         "columns": sheet.columns,
         "rows": sheet.rows,
         "fps": (fps * 100.0).round() / 100.0,
+        "profile": sprite.color_profile.name(),
+        "color_mode": sprite.color_mode.name(),
+        "pixel_aspect": [sprite.pixel_aspect.0, sprite.pixel_aspect.1],
         "frames": sprite.frames,
     });
     let text = serde_json::to_string_pretty(&meta).context("serialize meta")?;

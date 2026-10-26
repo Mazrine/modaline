@@ -470,6 +470,20 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     });
     ui.horizontal(|ui| {
+        let mut profile = editor.sprite.color_profile;
+        egui::ComboBox::from_id_salt("profile")
+            .selected_text(profile.name())
+            .show_ui(ui, |ui| {
+                for p in [
+                    crate::sprite::ColorProfile::Srgb,
+                    crate::sprite::ColorProfile::Linear,
+                ] {
+                    ui.selectable_value(&mut profile, p, p.name());
+                }
+            });
+        if profile != editor.sprite.color_profile {
+            editor.set_color_profile(profile);
+        }
         ui.label("grid");
         ui.add(egui::Slider::new(&mut editor.grid, 1..=64));
         ui.checkbox(&mut editor.snap, "snap");
@@ -1428,6 +1442,7 @@ const HELP: &[&str] = &[
     "  :filter invert|brightness|contrast|hue|saturation|outline|blur|sharpen [amount]",
     "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   (free transform)",
     "  :mode auto|rgba|grayscale|indexed   :aspect <x> <y>   :sgrid <w> <h>",
+    "  :profile srgb|linear   (converts the pixels; the palette follows)",
     "  :slices <dir> [cols rows]   (one png per grid cell + a slices.json)",
     "  :grad linear|radial   :contour",
     "  :export out.png|.ase|stem   :import in.png   :open proj.vpx|.ase|.png",

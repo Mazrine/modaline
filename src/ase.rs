@@ -587,6 +587,9 @@ pub fn load(path: &Path) -> Result<Sprite> {
         },
         pixel_aspect: pixel_aspect.unwrap_or((1, 1)),
         grid: (0, 0),
+        // Aseprite files carry an optional ICC/gamma chunk; this build reads
+        // the pixels as-is, which is sRGB for anything Aseprite writes.
+        color_profile: crate::sprite::ColorProfile::Srgb,
     };
     sprite.normalize_levels();
     sprite.clamp_tags();

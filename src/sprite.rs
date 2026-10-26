@@ -145,6 +145,37 @@ pub struct Sprite {
     /// properties dialog shows.
     #[serde(default)]
     pub grid: (u32, u32),
+    /// Which transfer function the pixel values are in.
+    #[serde(default)]
+    pub color_profile: ColorProfile,
+}
+
+/// The two working spaces this editor understands. A sprite authored in linear
+/// light round-trips: converting is a real per-pixel edit, and the declared
+/// profile goes into the export metadata.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ColorProfile {
+    #[default]
+    Srgb,
+    Linear,
+}
+
+impl ColorProfile {
+    pub fn name(self) -> &'static str {
+        match self {
+            ColorProfile::Srgb => "srgb",
+            ColorProfile::Linear => "linear",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<ColorProfile> {
+        Some(match s.to_lowercase().as_str() {
+            "srgb" | "s-rgb" => ColorProfile::Srgb,
+            "linear" | "lin" => ColorProfile::Linear,
+            _ => return None,
+        })
+    }
 }
 
 /// What an indexed/gray file means for this sprite.
@@ -207,7 +238,29 @@ impl Sprite {
             color_mode: ColorMode::Auto,
             pixel_aspect: (1, 1),
             grid: (0, 0),
+            color_profile: ColorProfile::Srgb,
         }
+    }
+
+    /// Convert the pixel values between transfer functions. Colours that are
+    /// already in the target space are left alone, so this is idempotent.
+    pub fn convert_profile(&mut self, to: ColorProfile) {
+        if self.color_profile == to {
+            return;
+        }
+        let f = match to {
+            ColorProfile::Linear => crate::color::srgb_to_linear,
+            ColorProfile::Srgb => crate::color::linear_to_srgb,
+        };
+        for cel in self.cels.iter_mut().flatten() {
+            for p in cel.pixels.iter_mut() {
+                if p.3 == 0 {
+                    continue;
+                }
+                *p = Rgba(f(p.0), f(p.1), f(p.2), p.3);
+            }
+        }
+        self.color_profile = to;
     }
 
     /// Convert every pixel to its luminance, keeping alpha. Colour mode

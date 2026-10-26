@@ -598,6 +598,10 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "usage: :wandall on|off".into();
             }
         }
+        "profile" | "colorspace" => match arg.and_then(crate::sprite::ColorProfile::parse) {
+            Some(p) => editor.set_color_profile(p),
+            None => editor.msg = "usage: :profile srgb|linear".into(),
+        },
         "mode" | "colormode" => match arg.and_then(crate::sprite::ColorMode::parse) {
             Some(m) => editor.set_color_mode(m),
             None => editor.msg = "usage: :mode auto|rgba|grayscale|indexed".into(),

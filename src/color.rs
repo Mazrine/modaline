@@ -16,6 +16,28 @@ impl Rgba {
     }
 }
 
+/// sRGB transfer function, encoded -> linear light, as an 8-bit result.
+pub fn srgb_to_linear(c: u8) -> u8 {
+    let v = c as f32 / 255.0;
+    let lin = if v <= 0.04045 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    };
+    (lin * 255.0).round().clamp(0.0, 255.0) as u8
+}
+
+/// Linear light -> sRGB, the inverse of [`srgb_to_linear`].
+pub fn linear_to_srgb(c: u8) -> u8 {
+    let v = c as f32 / 255.0;
+    let enc = if v <= 0.003_130_8 {
+        v * 12.92
+    } else {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    };
+    (enc * 255.0).round().clamp(0.0, 255.0) as u8
+}
+
 /// Default palette: the "Sweetie 16" set, a small hand-curated 16-color ramp.
 pub fn default_palette() -> Vec<Rgba> {
     vec![
@@ -99,6 +121,29 @@ pub fn from_hsv(h: f32, s: f32, v: f32) -> Rgba {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn srgb_and_linear_are_inverses() {
+        // shortcut: 8-bit linear is coarse in the shadows - the worst round-trip
+        // error is 6/255 (at sRGB 6), and it is exact within 1 from 64 up. That
+        // is the format, not the maths: store linear in u16 if a linear-sprite
+        // pipeline ever needs the darks.
+        let mut worst = 0;
+        for c in 0..=255u8 {
+            let back = linear_to_srgb(srgb_to_linear(c));
+            let err = back.abs_diff(c);
+            worst = worst.max(err);
+            if c >= 64 {
+                assert!(err <= 1, "{c} -> {back}");
+            }
+        }
+        assert_eq!(worst, 6);
+        assert_eq!(srgb_to_linear(0), 0);
+        assert_eq!(srgb_to_linear(255), 255);
+        // Mid grey is much darker in linear light: 128 -> ~55.
+        let mid = srgb_to_linear(128);
+        assert!((54..=57).contains(&mid), "128 -> {mid}");
+    }
 
     #[test]
     fn hex_and_hsv_round_trip() {
