@@ -395,6 +395,24 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     });
     ui.checkbox(&mut editor.tile_mode, "tile mode (3x3, wraps)");
     ui.horizontal(|ui| {
+        ui.label("text");
+        ui.add(egui::TextEdit::singleline(&mut editor.text).desired_width(120.0));
+        ui.add(
+            egui::DragValue::new(&mut editor.text_scale)
+                .range(1..=8)
+                .prefix("x"),
+        );
+        if ui
+            .button("stamp")
+            .on_hover_text("stamp at the cursor (:text)")
+            .clicked()
+        {
+            let (x, y) = editor.cursor;
+            let text = editor.text.clone();
+            editor.stamp_text(&text, x, y);
+        }
+    });
+    ui.horizontal(|ui| {
         ui.label("grid");
         ui.add(egui::Slider::new(&mut editor.grid, 1..=64));
         ui.checkbox(&mut editor.snap, "snap");

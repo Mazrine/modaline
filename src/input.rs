@@ -550,6 +550,15 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 _ => editor.msg = "usage: :symcenter cursor|reset|<x> <y>".into(),
             }
         }
+        "text" | "t" => {
+            let Some(text) = arg.filter(|t| !t.is_empty()) else {
+                editor.msg = "usage: :text <string> (stamps at the cursor)".into();
+                return;
+            };
+            let (x, y) = editor.cursor;
+            editor.text = text.to_string();
+            editor.stamp_text(text, x, y);
+        }
         "grid" => match arg.and_then(|v| v.parse::<u32>().ok()) {
             Some(n) => {
                 editor.grid = n.max(1);

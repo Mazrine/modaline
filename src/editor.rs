@@ -211,6 +211,10 @@ pub struct Editor {
     /// it. The pixel grid is a separate view flag.
     pub grid: u32,
     pub snap: bool,
+    /// Bitmap-font text stamp: the scale (1 = 8x8 px) and the last string
+    /// typed, so the panel keeps it between stamps.
+    pub text_scale: u32,
+    pub text: String,
     /// Playback: wrap at the end of the range, bounce instead of wrapping, and
     /// the current direction for the bounce.
     pub play_loop: bool,
@@ -271,6 +275,8 @@ impl Editor {
             tile_mode: false,
             grid: 8,
             snap: false,
+            text_scale: 1,
+            text: String::new(),
             play_loop: true,
             play_pingpong: false,
             play_dir: 1,
@@ -585,6 +591,57 @@ impl Editor {
         for (px, py) in self.symmetry_points(x, y) {
             self.paint_pixel(px, py, color);
         }
+    }
+
+    /// Stamp `text` with the 8x8 bitmap font, top-left at `(x, y)`, in the
+    /// current fg, as one undoable stroke. Glyphs advance 8 px (plus one space)
+    /// and scale by an integer factor, so the pixels stay on grid.
+    pub fn stamp_text(&mut self, text: &str, x: u32, y: u32) {
+        if text.is_empty() {
+            return;
+        }
+        let scale = self.text_scale.clamp(1, 8) as usize;
+        self.begin_stroke();
+        let mut pen = x;
+        let mut line = y;
+        let mut any = false;
+        for ch in text.chars() {
+            if ch == '\n' {
+                pen = x;
+                line += 9 * scale as u32;
+                continue;
+            }
+            use font8x8::UnicodeFonts;
+            let glyph = font8x8::BASIC_FONTS.get(ch);
+            if let Some(bits) = glyph {
+                for (col, rows) in bits.iter().enumerate() {
+                    for row in 0..8 {
+                        if rows & (1 << row) == 0 {
+                            continue;
+                        }
+                        for sy in 0..scale as u32 {
+                            for sx in 0..scale as u32 {
+                                let px = pen + col as u32 * scale as u32 + sx;
+                                let py = line + row as u32 * scale as u32 + sy;
+                                if px < self.sprite.width && py < self.sprite.height {
+                                    self.paint_pixel(px, py, self.fg);
+                                    any = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            pen += 9 * scale as u32;
+            if pen >= self.sprite.width {
+                break;
+            }
+        }
+        self.end_stroke();
+        self.msg = format!(
+            "text: {text:?} ({} px)",
+            if any { "stamped" } else { "empty" }
+        );
     }
 
     /// Round a sprite pixel down to the design grid, when snapping is on.
@@ -2035,6 +2092,34 @@ mod tests {
         e.del_tag(Some("walk"));
         assert_eq!(e.play_range(), (0, 2));
         assert!(e.active_tag.is_none());
+    }
+
+    #[test]
+    fn text_stamps_the_bitmap_font_inside_the_sprite() {
+        let mut e = Editor::new(24, 16);
+        e.fg = Rgba::rgb(255, 255, 255);
+        e.stamp_text("A", 0, 0);
+        let (l, f) = (e.active_layer, e.active_frame);
+        let painted = (0..16)
+            .flat_map(|y| (0..24).map(move |x| (x, y)))
+            .filter(|(x, y)| !e.sprite.get(l, f, *x, *y).is_transparent())
+            .count();
+        assert!(painted > 10, "A painted {painted} px");
+        assert!(
+            (0..16).all(|y| (8..24).all(|x| e.sprite.get(l, f, x, y).is_transparent())),
+            "the glyph is 8 px wide"
+        );
+        // Undo takes the whole string out as one step.
+        e.undo();
+        assert!(
+            (0..24).all(|x| e.sprite.get(l, f, x, 0).is_transparent()),
+            "one undo removes the stamp"
+        );
+        // Multi-line and a scale that would run past the edge must not panic.
+        e.text_scale = 2;
+        e.stamp_text("ab\ncd", 20, 12);
+        e.text_scale = 4;
+        e.stamp_text("wide", 22, 14);
     }
 
     #[test]
