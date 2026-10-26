@@ -1,4 +1,5 @@
 mod app;
+mod config;
 mod gui;
 mod input;
 
@@ -13,9 +14,15 @@ fn main() -> eframe::Result {
     // Optional first argument: the file to open, so another tool can launch
     // `vixel assets/fixes/<look>.vpx` instead of making the user press `:open`.
     let path = std::env::args_os().nth(1).map(PathBuf::from);
+    // The window opens at the size it was last left at.
+    let saved = config::Config::load();
+    let size = (
+        saved.window.0.clamp(640.0, 7680.0),
+        saved.window.1.clamp(480.0, 4320.0),
+    );
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1280.0, 800.0])
+            .with_inner_size([size.0, size.1])
             .with_title("vixel"),
         renderer: eframe::Renderer::Glow,
         ..Default::default()

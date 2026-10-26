@@ -34,6 +34,10 @@ pub struct View {
     pub pan: Pos2,
     pub initialized: bool,
     pub show_grid: bool,
+    /// The window's inner size as of the last frame, persisted on exit.
+    pub window: (f32, f32),
+    /// "dark" or "light"; applied to the whole context when it changes.
+    pub theme: String,
     /// Mirrored from the editor each frame: 0 = no snapping.
     pub snap_grid: u32,
     pub onion: Onion,
@@ -61,6 +65,8 @@ impl View {
             pan: Pos2::ZERO,
             initialized: false,
             show_grid: true,
+            window: (1280.0, 800.0),
+            theme: "dark".into(),
             snap_grid: 0,
             onion: Onion::default(),
             drag_frame: None,
@@ -150,6 +156,9 @@ pub fn draw(
     onion_next: &mut Option<TextureHandle>,
     playing: &mut bool,
 ) {
+    // Remember the window size for the config file.
+    let screen = ui.ctx().content_rect().size();
+    view.window = (screen.x, screen.y);
     egui::Panel::top("toolbar").show(ui, |ui| toolbar(ui, editor, view));
     egui::Panel::bottom("timeline").show(ui, |ui| timeline(ui, editor, playing, view));
     egui::Panel::right("side").show(ui, |ui| side(ui, editor, view));
@@ -406,6 +415,21 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
 // ---- right side panel ----
 
 fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
+    ui.horizontal(|ui| {
+        let light = view.theme == "light";
+        if ui
+            .selectable_label(light, "light")
+            .on_hover_text("theme (saved in the config)")
+            .clicked()
+        {
+            view.theme = if light { "dark".into() } else { "light".into() };
+            ui.ctx().set_visuals(if light {
+                egui::Visuals::dark()
+            } else {
+                egui::Visuals::light()
+            });
+        }
+    });
     ui.checkbox(&mut view.show_grid, "pixel grid");
     ui.checkbox(&mut view.onion.enabled, "onion skin");
     if view.onion.enabled {

@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 
+use crate::config::Config;
 use crate::editor::Editor;
 use crate::gui::{self, View};
 use crate::input;
@@ -16,6 +17,8 @@ pub struct VixelApp {
     next_frame: Instant,
     /// Last title sent to the window manager, so a fix bundle names its part.
     title: String,
+    /// Settings loaded at start; written back on exit and on `:wq`.
+    config: Config,
 }
 
 impl VixelApp {
@@ -23,8 +26,22 @@ impl VixelApp {
     /// load is reported in the status line instead of blocking startup: a bad
     /// argument must still give you an editor.
     pub fn new(cc: &eframe::CreationContext<'_>, path: Option<std::path::PathBuf>) -> Self {
-        cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        let config = Config::load();
+        cc.egui_ctx.set_visuals(if config.theme == "light" {
+            egui::Visuals::light()
+        } else {
+            egui::Visuals::dark()
+        });
         let mut editor = Editor::new(32, 32);
+        editor.grid = config.grid.max(1);
+        editor.snap = config.snap;
+        editor.play_loop = config.play_loop;
+        editor.play_pingpong = config.play_pingpong;
+        let mut view = View::new();
+        view.zoom = config.zoom.clamp(1, 64);
+        view.show_grid = config.show_grid;
+        view.onion = config.onion.into();
+        view.theme = config.theme.clone();
         if let Some(path) = path
             && let Err(e) = editor.open_path(&path)
         {
@@ -32,14 +49,30 @@ impl VixelApp {
         }
         Self {
             editor,
-            view: View::new(),
+            view,
             texture: None,
             onion_prev: None,
             onion_next: None,
             playing: false,
             next_frame: Instant::now(),
             title: "vixel".into(),
+            config,
         }
+    }
+
+    /// Snapshot the live settings into the config and write it. Called on quit
+    /// and whenever the window is closed by the manager.
+    fn save_config(&mut self) {
+        self.config.window = self.view.window;
+        self.config.zoom = self.view.zoom;
+        self.config.show_grid = self.view.show_grid;
+        self.config.grid = self.editor.grid;
+        self.config.snap = self.editor.snap;
+        self.config.onion = self.view.onion.into();
+        self.config.play_loop = self.editor.play_loop;
+        self.config.play_pingpong = self.editor.play_pingpong;
+        self.config.theme = self.view.theme.clone();
+        let _ = self.config.save();
     }
 }
 
@@ -79,7 +112,12 @@ impl eframe::App for VixelApp {
         );
 
         if self.editor.should_quit {
+            self.save_config();
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
         }
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.save_config();
     }
 }
