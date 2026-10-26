@@ -387,6 +387,40 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     });
     ui.checkbox(&mut editor.tile_mode, "tile mode (3x3, wraps)");
     ui.horizontal(|ui| {
+        ui.label("symmetry");
+        for (label, mode) in [
+            ("off", Symmetry::None),
+            ("h", Symmetry::Horizontal),
+            ("v", Symmetry::Vertical),
+            ("both", Symmetry::Both),
+            ("radial", Symmetry::Radial),
+        ] {
+            if ui
+                .selectable_label(editor.symmetry == mode, label)
+                .clicked()
+            {
+                editor.symmetry = mode;
+            }
+        }
+    });
+    if editor.symmetry == Symmetry::Radial {
+        ui.add(egui::Slider::new(&mut editor.sym_axes, 2..=16).text("axes"));
+    }
+    ui.horizontal(|ui| {
+        let (cx, cy) = editor.symmetry_center();
+        ui.label(format!("centre {cx:.0},{cy:.0}"));
+        if ui
+            .small_button("cursor")
+            .on_hover_text("mirror about the cursor")
+            .clicked()
+        {
+            editor.sym_center = Some(editor.cursor);
+        }
+        if ui.small_button("reset").clicked() {
+            editor.sym_center = None;
+        }
+    });
+    ui.horizontal(|ui| {
         ui.label("wand tol");
         ui.add(egui::Slider::new(&mut editor.wand_tolerance, 0..=255));
     });
@@ -898,19 +932,25 @@ fn draw_lasso(painter: &egui::Painter, editor: &Editor, view: &View) {
 fn draw_symmetry(painter: &egui::Painter, editor: &Editor, view: &View, rect: Rect) {
     let z = view.zoom as f32;
     let stroke = Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 220, 0, 90));
+    let (cx, cy) = editor.symmetry_center();
+    let at = |x: f32, y: f32| view.pan + Vec2::new(x, y) * z;
     if matches!(editor.symmetry, Symmetry::Vertical | Symmetry::Both) {
-        let cx = view.pan.x + (editor.sprite.width as f32 / 2.0) * z;
-        painter.line_segment(
-            [Pos2::new(cx, rect.min.y), Pos2::new(cx, rect.max.y)],
-            stroke,
-        );
+        let x = at(cx + 0.5, 0.0).x;
+        painter.line_segment([Pos2::new(x, rect.min.y), Pos2::new(x, rect.max.y)], stroke);
     }
     if matches!(editor.symmetry, Symmetry::Horizontal | Symmetry::Both) {
-        let cy = view.pan.y + (editor.sprite.height as f32 / 2.0) * z;
-        painter.line_segment(
-            [Pos2::new(rect.min.x, cy), Pos2::new(rect.max.x, cy)],
-            stroke,
-        );
+        let y = at(0.0, cy + 0.5).y;
+        painter.line_segment([Pos2::new(rect.min.x, y), Pos2::new(rect.max.x, y)], stroke);
+    }
+    if matches!(editor.symmetry, Symmetry::Radial) {
+        let center = at(cx + 0.5, cy + 0.5);
+        let n = editor.sym_axes.max(2) as f32;
+        let r = rect.width().max(rect.height());
+        for k in 0..n as u32 {
+            let a = k as f32 * std::f32::consts::TAU / n;
+            let d = Vec2::new(a.cos(), a.sin()) * r;
+            painter.line_segment([center - d, center + d], stroke);
+        }
     }
 }
 

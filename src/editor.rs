@@ -38,6 +38,8 @@ pub enum Symmetry {
     Horizontal,
     Vertical,
     Both,
+    /// N-fold rotation about the symmetry centre.
+    Radial,
 }
 
 impl Symmetry {
@@ -47,6 +49,7 @@ impl Symmetry {
             Symmetry::Horizontal => "horizontal",
             Symmetry::Vertical => "vertical",
             Symmetry::Both => "both",
+            Symmetry::Radial => "radial",
         }
     }
 }
@@ -190,6 +193,11 @@ pub struct Editor {
     /// Index into `sprite.tags`; playback is restricted to it when set.
     pub active_tag: Option<usize>,
     pub symmetry: Symmetry,
+    /// Axes for `Symmetry::Radial`.
+    pub sym_axes: u8,
+    /// Mirror/rotation origin. `None` is the sprite centre, which is what the
+    /// plain horizontal/vertical/both modes have always used.
+    pub sym_center: Option<(u32, u32)>,
     pub lasso_points: Vec<(u32, u32)>,
     pub selection_op: SelectionOp,
     pub filled_shapes: bool,
@@ -247,6 +255,8 @@ impl Editor {
             active_frame: 0,
             active_tag: None,
             symmetry: Symmetry::None,
+            sym_axes: 6,
+            sym_center: None,
             lasso_points: Vec::new(),
             selection_op: SelectionOp::Replace,
             filled_shapes: false,
@@ -565,17 +575,50 @@ impl Editor {
         }
     }
 
+    /// The mirror/rotation origin. `None` is the sprite centre, so the plain
+    /// modes behave exactly as before.
+    pub fn symmetry_center(&self) -> (f32, f32) {
+        match self.sym_center {
+            Some((x, y)) => (x as f32, y as f32),
+            None => (
+                (self.sprite.width as f32 - 1.0) * 0.5,
+                (self.sprite.height as f32 - 1.0) * 0.5,
+            ),
+        }
+    }
+
     fn symmetry_points(&self, x: u32, y: u32) -> Vec<(u32, u32)> {
-        let (w, h) = (self.sprite.width, self.sprite.height);
-        let mut pts = vec![(x, y)];
+        let (w, h) = (self.sprite.width as f32, self.sprite.height as f32);
+        let (cx, cy) = self.symmetry_center();
+        let (x, y) = (x as f32, y as f32);
+        let mut pts: Vec<(u32, u32)> = Vec::new();
+        let mut push = |px: f32, py: f32| {
+            let (px, py) = (px.round(), py.round());
+            if px >= 0.0 && py >= 0.0 && px < w && py < h {
+                let p = (px as u32, py as u32);
+                if !pts.contains(&p) {
+                    pts.push(p);
+                }
+            }
+        };
+        push(x, y);
         match self.symmetry {
             Symmetry::None => {}
-            Symmetry::Horizontal => pts.push((w - 1 - x, y)),
-            Symmetry::Vertical => pts.push((x, h - 1 - y)),
+            Symmetry::Horizontal => push(2.0 * cx - x, y),
+            Symmetry::Vertical => push(x, 2.0 * cy - y),
             Symmetry::Both => {
-                pts.push((w - 1 - x, y));
-                pts.push((x, h - 1 - y));
-                pts.push((w - 1 - x, h - 1 - y));
+                push(2.0 * cx - x, y);
+                push(x, 2.0 * cy - y);
+                push(2.0 * cx - x, 2.0 * cy - y);
+            }
+            Symmetry::Radial => {
+                let n = self.sym_axes.max(2) as u32;
+                let (dx, dy) = (x - cx, y - cy);
+                for k in 1..n {
+                    let a = k as f32 * std::f32::consts::TAU / n as f32;
+                    let (s, c) = a.sin_cos();
+                    push(cx + dx * c - dy * s, cy + dx * s + dy * c);
+                }
             }
         }
         pts
@@ -586,7 +629,8 @@ impl Editor {
             Symmetry::None => Symmetry::Horizontal,
             Symmetry::Horizontal => Symmetry::Vertical,
             Symmetry::Vertical => Symmetry::Both,
-            Symmetry::Both => Symmetry::None,
+            Symmetry::Both => Symmetry::Radial,
+            Symmetry::Radial => Symmetry::None,
         };
     }
 
@@ -596,6 +640,7 @@ impl Editor {
             "horizontal" | "h" | "x" => Symmetry::Horizontal,
             "vertical" | "v" | "y" => Symmetry::Vertical,
             "both" | "b" => Symmetry::Both,
+            "radial" | "r" => Symmetry::Radial,
             _ => return false,
         };
         true
@@ -1970,6 +2015,40 @@ mod tests {
         e.del_tag(Some("walk"));
         assert_eq!(e.play_range(), (0, 2));
         assert!(e.active_tag.is_none());
+    }
+
+    #[test]
+    fn symmetry_mirrors_about_the_centre_and_rotates_n_fold() {
+        let mut e = Editor::new(7, 7);
+        // The default centre is the sprite centre: w-1-x, as it always was.
+        e.symmetry = Symmetry::Horizontal;
+        let mut p = e.symmetry_points(1, 2);
+        p.sort();
+        assert_eq!(p, vec![(1, 2), (5, 2)]);
+
+        // Moved centre: mirror about x=3.
+        e.sym_center = Some((3, 3));
+        let mut p = e.symmetry_points(1, 2);
+        p.sort();
+        assert_eq!(p, vec![(1, 2), (5, 2)]);
+
+        // Radial, 4 axes, one point right of the centre: four points, no
+        // duplicates from the rounding.
+        e.symmetry = Symmetry::Radial;
+        e.sym_axes = 4;
+        let mut p = e.symmetry_points(4, 3);
+        p.sort();
+        assert_eq!(p, vec![(2, 3), (3, 2), (3, 4), (4, 3)]);
+
+        // A 8-axis rotation is still deduplicated, and stays in bounds.
+        e.sym_axes = 8;
+        for x in 0..7 {
+            for y in 0..7 {
+                let pts = e.symmetry_points(x, y);
+                assert!(pts.len() <= 8);
+                assert!(pts.iter().all(|(x, y)| *x < 7 && *y < 7));
+            }
+        }
     }
 
     #[test]

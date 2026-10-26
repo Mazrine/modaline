@@ -516,12 +516,38 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "flipv" => editor.flip_v(),
         "rot90" => editor.rotate_cw(),
         "sym" | "symmetry" => {
-            if let Some(name) = arg
-                && editor.set_symmetry(name)
-            {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            let name = it.next().unwrap_or("");
+            if editor.set_symmetry(name) {
+                if let Some(n) = it.next().and_then(|v| v.parse::<u8>().ok()) {
+                    editor.sym_axes = n.clamp(2, 16);
+                }
                 editor.msg = format!("symmetry: {}", editor.symmetry.name());
             } else {
-                editor.msg = "usage: :sym none|horizontal|vertical|both".into();
+                editor.msg = "usage: :sym none|horizontal|vertical|both|radial [axes]".into();
+            }
+        }
+        "symcenter" | "symorigin" => {
+            let arg = arg.unwrap_or("");
+            let parts: Vec<&str> = arg.split_whitespace().collect();
+            match parts.as_slice() {
+                ["cursor"] | [] => {
+                    editor.sym_center = Some(editor.cursor);
+                    let (x, y) = editor.sym_center.unwrap();
+                    editor.msg = format!("symmetry centre: {x},{y}");
+                }
+                ["reset"] => {
+                    editor.sym_center = None;
+                    editor.msg = "symmetry centre: sprite centre".into();
+                }
+                [x, y] => match (x.parse::<u32>(), y.parse::<u32>()) {
+                    (Ok(x), Ok(y)) => {
+                        editor.sym_center = Some((x, y));
+                        editor.msg = format!("symmetry centre: {x},{y}");
+                    }
+                    _ => editor.msg = "usage: :symcenter cursor|reset|<x> <y>".into(),
+                },
+                _ => editor.msg = "usage: :symcenter cursor|reset|<x> <y>".into(),
             }
         }
         "wand" | "tolerance" => {
