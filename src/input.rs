@@ -598,6 +598,23 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "usage: :wandall on|off".into();
             }
         }
+        "rotate" => match arg.and_then(|v| v.parse::<f32>().ok()) {
+            Some(deg) => editor.free_transform(deg, 1.0, 1.0, 0.0),
+            None => editor.msg = "usage: :rotate <degrees>".into(),
+        },
+        "scale" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            let sx = it.next().and_then(|v| v.parse::<f32>().ok());
+            let sy = it.next().and_then(|v| v.parse::<f32>().ok());
+            match (sx, sy) {
+                (Some(sx), sy) => editor.free_transform(0.0, sx, sy.unwrap_or(sx), 0.0),
+                _ => editor.msg = "usage: :scale <sx> [sy]".into(),
+            }
+        }
+        "skew" => match arg.and_then(|v| v.parse::<f32>().ok()) {
+            Some(deg) => editor.free_transform(0.0, 1.0, 1.0, deg),
+            None => editor.msg = "usage: :skew <degrees>".into(),
+        },
         "filter" | "fx" => {
             let mut it = arg.unwrap_or("").split_whitespace();
             let name = it.next().unwrap_or("");

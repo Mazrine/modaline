@@ -48,6 +48,10 @@ pub struct View {
     /// Index into `crate::editor::FILTERS`, and the amount its button applies.
     filter: usize,
     filter_amount: f32,
+    /// Free-transform fields: degrees, uniform scale, degrees of skew.
+    rot: f32,
+    scale: f32,
+    skew: f32,
 }
 
 impl View {
@@ -65,6 +69,9 @@ impl View {
             bg_hex: (String::new(), Rgba(0, 0, 0, 0)),
             filter: 0,
             filter_amount: 24.0,
+            rot: 0.0,
+            scale: 1.0,
+            skew: 0.0,
         }
     }
 
@@ -494,6 +501,30 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     if bg != editor.bg {
         editor.set_bg(bg);
     }
+    ui.separator();
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Transform").strong());
+    });
+    ui.horizontal(|ui| {
+        ui.label("rot");
+        ui.add(egui::DragValue::new(&mut view.rot).speed(1.0).suffix("°"));
+        ui.label("scale");
+        ui.add(
+            egui::DragValue::new(&mut view.scale)
+                .speed(0.05)
+                .range(0.05..=8.0),
+        );
+        ui.label("skew");
+        ui.add(egui::DragValue::new(&mut view.skew).speed(1.0).suffix("°"));
+    });
+    if ui
+        .button("apply transform")
+        .on_hover_text("rotate / scale / skew the selection (or the layer) about its centre")
+        .clicked()
+    {
+        editor.free_transform(view.rot, view.scale, view.scale, view.skew);
+    }
+
     ui.separator();
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new("Filter").strong());
@@ -1334,6 +1365,7 @@ const HELP: &[&str] = &[
     "  :wand <0-255>   :wandall on|off   :selop replace|add|subtract|intersect",
     "  :sel expand|contract|border|feather <n>   :sel invert|none|all",
     "  :filter invert|brightness|contrast|hue|saturation|outline|blur|sharpen [amount]",
+    "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   (free transform)",
     "  :grad linear|radial   :contour",
     "  :export out.png|.ase|stem   :import in.png   :open proj.vpx|.ase|.png",
 ];

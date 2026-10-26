@@ -1154,6 +1154,68 @@ impl Editor {
         self.select_anchor.is_some() || self.selection.is_some()
     }
 
+    // ---- free transform ----
+
+    /// Rotate, scale and skew the selection (or the whole cel) about its own
+    /// centre, nearest-neighbour, clipped to the sprite. One undo step. All
+    /// three are one affine map, so they compose in the order rotate, scale,
+    /// skew; the inverse map is what samples the source.
+    pub fn free_transform(&mut self, angle_deg: f32, sx: f32, sy: f32, skew_deg: f32) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let (l, f) = (self.active_layer, self.active_frame);
+        let sel = self.current_selection();
+        let (rx, ry, rw, rh) = match &sel {
+            Some(s) => (s.x, s.y, s.w, s.h),
+            None => (0, 0, w, h),
+        };
+        let (sx, sy) = (sx.abs().max(0.01), sy.abs().max(0.01));
+        let (cx, cy) = (rx as f32 + rw as f32 / 2.0, ry as f32 + rh as f32 / 2.0);
+        let (sin, cos) = (-angle_deg).to_radians().sin_cos();
+        let tan = (-skew_deg).to_radians().tan();
+        let src: Vec<Rgba> = (0..w * h)
+            .map(|i| self.sprite.get(l, f, i % w, i / w))
+            .collect();
+        let inside = |x: u32, y: u32| match &sel {
+            Some(s) => s.contains(x, y),
+            None => true,
+        };
+        self.begin_stroke();
+        // Vacate the region first: a rotated shape must not leave the old one.
+        for y in ry..ry + rh {
+            for x in rx..rx + rw {
+                if inside(x, y) && y < h && x < w {
+                    self.paint_pixel(x, y, Rgba::TRANSPARENT);
+                }
+            }
+        }
+        for y in ry..ry + rh {
+            for x in rx..rx + rw {
+                if !inside(x, y) || x >= w || y >= h {
+                    continue;
+                }
+                let (mut dx, mut dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+                dx -= tan * dy;
+                dx /= sx;
+                dy /= sy;
+                let (sxf, syf) = (dx * cos - dy * sin, dx * sin + dy * cos);
+                let (px, py) = ((cx + sxf).floor(), (cy + syf).floor());
+                if px < 0.0 || py < 0.0 || px >= w as f32 || py >= h as f32 {
+                    continue;
+                }
+                let (px, py) = (px as u32, py as u32);
+                let c = src[(py * w + px) as usize];
+                if c.3 > 0 && inside(px, py) {
+                    self.paint_pixel(x, y, c);
+                }
+            }
+        }
+        self.end_stroke();
+        self.dirty = true;
+        self.msg = format!(
+            "transform: rotate {angle_deg:.0} deg, scale {sx:.2}x{sy:.2}, skew {skew_deg:.0} deg"
+        );
+    }
+
     // ---- filters ----
 
     /// One filter over the selection (or the whole cel when there is none), as
@@ -2343,6 +2405,44 @@ mod tests {
         assert!(p.3 > 0);
         e.undo();
         e.filter(Filter::Sharpen(1.0));
+    }
+
+    #[test]
+    fn free_transform_rotates_scales_and_skews_about_the_centre() {
+        let mut e = Editor::new(16, 16);
+        let (l, f) = (e.active_layer, e.active_frame);
+        // A 9x9 selection centred on pixel 8,8 with one marker left of centre.
+        e.selection = Some(Selection::rect(4, 4, 12, 12));
+        e.paint_pixel(7, 8, Rgba::rgb(200, 0, 0));
+        e.paint_pixel(8, 8, Rgba::rgb(0, 200, 0));
+
+        // Identity leaves everything alone.
+        e.free_transform(0.0, 1.0, 1.0, 0.0);
+        assert_eq!(e.sprite.get(l, f, 7, 8), Rgba::rgb(200, 0, 0));
+
+        // 180 degrees about the region centre (8.5, 8.5): pixel 7 -> 9.
+        e.free_transform(180.0, 1.0, 1.0, 0.0);
+        assert_eq!(e.sprite.get(l, f, 7, 8), Rgba::TRANSPARENT);
+        assert_eq!(e.sprite.get(l, f, 9, 8), Rgba::rgb(200, 0, 0));
+        e.undo();
+        assert_eq!(e.sprite.get(l, f, 7, 8), Rgba::rgb(200, 0, 0), "one undo");
+
+        // Scale 2 pushes the marker twice as far out from the centre.
+        e.free_transform(0.0, 2.0, 2.0, 0.0);
+        assert_eq!(e.sprite.get(l, f, 6, 8), Rgba::rgb(200, 0, 0));
+        e.undo();
+
+        // Skew 45 degrees: a pixel 3 rows above the centre slides 3 px right.
+        e.paint_pixel(8, 5, Rgba::rgb(0, 0, 200));
+        e.free_transform(0.0, 1.0, 1.0, 45.0);
+        assert_eq!(
+            e.sprite.get(l, f, 8, 5),
+            Rgba::TRANSPARENT,
+            "the pixel moved"
+        );
+        assert_eq!(e.sprite.get(l, f, 11, 5), Rgba::rgb(0, 0, 200));
+        // Outside the selection nothing is touched.
+        assert_eq!(e.sprite.get(l, f, 0, 0), Rgba::TRANSPARENT);
     }
 
     #[test]
