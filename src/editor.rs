@@ -172,8 +172,13 @@ pub enum UndoStep {
     Cells {
         cells: Vec<(usize, usize, u32, u32, Rgba, Rgba)>,
     },
-    /// Whole-sprite snapshot (for whole-sprite transforms).
-    Snapshot { before: Sprite, after: Sprite },
+    /// Whole-sprite snapshot (for whole-sprite transforms and mode changes).
+    /// Boxed: two sprites are much larger than a cell list, and the enum is
+    /// moved around on every undo push.
+    Snapshot {
+        before: Box<Sprite>,
+        after: Box<Sprite>,
+    },
 }
 
 /// The sprite model plus the interaction state (modes, tools, undo, colors).
@@ -814,7 +819,7 @@ impl Editor {
                     }
                 }
                 UndoStep::Snapshot { before, .. } => {
-                    self.sprite = before.clone();
+                    self.sprite = (**before).clone();
                     self.clamp_cursor();
                 }
             }
@@ -832,7 +837,7 @@ impl Editor {
                     }
                 }
                 UndoStep::Snapshot { after, .. } => {
-                    self.sprite = after.clone();
+                    self.sprite = (**after).clone();
                     self.clamp_cursor();
                 }
             }
@@ -1170,7 +1175,10 @@ impl Editor {
                 let before = self.sprite.clone();
                 self.sprite.to_grayscale();
                 let after = self.sprite.clone();
-                self.undo.push(UndoStep::Snapshot { before, after });
+                self.undo.push(UndoStep::Snapshot {
+                    before: Box::new(before),
+                    after: Box::new(after),
+                });
                 self.redo.clear();
                 self.palette_lock = true;
             }
@@ -1825,8 +1833,8 @@ impl Editor {
     /// Mask ops are whole-sprite snapshots so they undo as one step.
     fn snapshot(&mut self, before: Sprite) {
         self.undo.push(UndoStep::Snapshot {
-            before,
-            after: self.sprite.clone(),
+            before: Box::new(before),
+            after: Box::new(self.sprite.clone()),
         });
         self.redo.clear();
         self.dirty = true;
@@ -1932,7 +1940,10 @@ impl Editor {
             Xform::Rot90 => self.sprite.rotate_cw(),
         }
         let after = self.sprite.clone();
-        self.undo.push(UndoStep::Snapshot { before, after });
+        self.undo.push(UndoStep::Snapshot {
+            before: Box::new(before),
+            after: Box::new(after),
+        });
         self.redo.clear();
         self.clamp_cursor();
         self.selection = None;
