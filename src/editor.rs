@@ -810,6 +810,44 @@ impl Editor {
         }
     }
 
+    /// Move a palette entry, keeping fg/bg pointing at the same colour.
+    pub fn move_palette(&mut self, from: usize, to: usize) {
+        if from >= self.palette.len() || to >= self.palette.len() || from == to {
+            return;
+        }
+        let c = self.palette.remove(from);
+        self.palette.insert(to, c);
+        let track = |idx: usize| {
+            if idx == from {
+                to
+            } else if from < idx && idx <= to {
+                idx - 1
+            } else if to <= idx && idx < from {
+                idx + 1
+            } else {
+                idx
+            }
+        };
+        self.fg_idx = track(self.fg_idx);
+        self.bg_idx = track(self.bg_idx);
+        self.msg = format!("palette {from} -> {to}");
+    }
+
+    /// Set fg/bg from `#rrggbb`, as the picker's hex field and `:fg` do.
+    pub fn set_fg(&mut self, colour: Rgba) {
+        self.fg = colour;
+        if let Some(i) = self.palette.iter().position(|c| *c == colour) {
+            self.fg_idx = i;
+        }
+    }
+
+    pub fn set_bg(&mut self, colour: Rgba) {
+        self.bg = colour;
+        if let Some(i) = self.palette.iter().position(|c| *c == colour) {
+            self.bg_idx = i;
+        }
+    }
+
     pub fn cycle_layer(&mut self, dir: i32) {
         let n = self.sprite.layers.len() as i32;
         let mut i = self.active_layer as i32 + dir;
@@ -1932,6 +1970,22 @@ mod tests {
         e.del_tag(Some("walk"));
         assert_eq!(e.play_range(), (0, 2));
         assert!(e.active_tag.is_none());
+    }
+
+    #[test]
+    fn palette_reorder_keeps_fg_and_bg_on_their_colours() {
+        let mut e = Editor::new(1, 1);
+        let (a, b, c) = (Rgba::rgb(1, 2, 3), Rgba::rgb(4, 5, 6), Rgba::rgb(7, 8, 9));
+        e.load_palette(vec![a, b, c]);
+        e.fg_idx = 2;
+        e.bg_idx = 0;
+        e.move_palette(2, 0);
+        assert_eq!(e.palette, vec![c, a, b]);
+        assert_eq!(e.palette[e.fg_idx], c, "fg follows its colour");
+        assert_eq!(e.palette[e.bg_idx], a, "bg follows its colour");
+        e.move_palette(0, 1);
+        assert_eq!(e.palette, vec![a, c, b]);
+        assert_eq!(e.palette[e.fg_idx], c);
     }
 
     #[test]

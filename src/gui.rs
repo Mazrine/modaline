@@ -39,6 +39,10 @@ pub struct View {
     drag_frame: Option<usize>,
     /// Cached per-frame timeline thumbnails (rebuilt each UI pass).
     thumbs: Vec<Option<TextureHandle>>,
+    /// Hex text fields for fg/bg, and the colour they were last filled from,
+    /// so typing is not overwritten by the next frame's echo.
+    fg_hex: (String, Rgba),
+    bg_hex: (String, Rgba),
 }
 
 impl View {
@@ -51,6 +55,8 @@ impl View {
             onion: Onion::default(),
             drag_frame: None,
             thumbs: Vec::new(),
+            fg_hex: (String::new(), Rgba(0, 0, 0, 0)),
+            bg_hex: (String::new(), Rgba(0, 0, 0, 0)),
         }
     }
 
@@ -387,20 +393,16 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.checkbox(&mut editor.wand_all_layers, "wand: all layers");
     ui.separator();
 
-    ui.horizontal(|ui| {
-        ui.label("fg");
-        let mut srgb = [editor.fg.0, editor.fg.1, editor.fg.2];
-        if ui.color_edit_button_srgb(&mut srgb).changed() {
-            editor.fg = Rgba(srgb[0], srgb[1], srgb[2], 255);
-        }
-    });
-    ui.horizontal(|ui| {
-        ui.label("bg");
-        let mut srgb = [editor.bg.0, editor.bg.1, editor.bg.2];
-        if ui.color_edit_button_srgb(&mut srgb).changed() {
-            editor.bg = Rgba(srgb[0], srgb[1], srgb[2], 255);
-        }
-    });
+    let mut fg = editor.fg;
+    color_editor(ui, "fg", &mut fg, &mut view.fg_hex);
+    if fg != editor.fg {
+        editor.set_fg(fg);
+    }
+    let mut bg = editor.bg;
+    color_editor(ui, "bg", &mut bg, &mut view.bg_hex);
+    if bg != editor.bg {
+        editor.set_bg(bg);
+    }
     ui.separator();
 
     ui.horizontal(|ui| {
@@ -417,23 +419,36 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         .max_height(180.0)
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                for (i, c) in editor.palette.iter().enumerate() {
+                let mut drop: Option<(usize, usize)> = None;
+                for (i, c) in editor.palette.clone().into_iter().enumerate() {
                     let col = Color32::from_rgba_unmultiplied(c.0, c.1, c.2, 255);
                     let mut btn = egui::Button::new("").fill(col).min_size(Vec2::splat(20.0));
                     if i == editor.fg_idx {
                         btn = btn.stroke(Stroke::new(2.0, Color32::WHITE));
                     }
-                    let resp = ui
-                        .add(btn)
-                        .on_hover_text(format!("#{:02x}{:02x}{:02x}", c.0, c.1, c.2));
+                    // A swatch drags onto another to reorder; plain clicks still
+                    // pick fg (left) and bg (right).
+                    let src = ui.dnd_drag_source(egui::Id::unique(("swatch", i)), i, |ui| {
+                        ui.add(btn)
+                            .on_hover_text(format!("#{:02x}{:02x}{:02x}", c.0, c.1, c.2))
+                    });
+                    let resp = src.inner;
                     if resp.clicked() {
-                        editor.fg = *c;
+                        editor.fg = c;
                         editor.fg_idx = i;
                     }
                     if resp.secondary_clicked() {
-                        editor.bg = *c;
+                        editor.bg = c;
                         editor.bg_idx = i;
                     }
+                    if let Some(payload) = src.response.dnd_hover_payload::<usize>()
+                        && src.response.dnd_release_payload::<usize>().is_some()
+                    {
+                        drop = Some((*payload, i));
+                    }
+                }
+                if let Some((from, to)) = drop {
+                    editor.move_palette(from, to);
                 }
             });
         });
@@ -553,6 +568,42 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     }
     editor.active_layer = selected;
+}
+
+/// A colour row: the swatch button, a hex field, and HSV drag values. The hex
+/// buffer only refills when the colour changed elsewhere, so a half-typed value
+/// survives the frame.
+fn color_editor(ui: &mut egui::Ui, label: &str, color: &mut Rgba, hex: &mut (String, Rgba)) {
+    ui.horizontal(|ui| {
+        ui.label(label);
+        let mut srgb = [color.0, color.1, color.2];
+        if ui.color_edit_button_srgb(&mut srgb).changed() {
+            *color = Rgba(srgb[0], srgb[1], srgb[2], 255);
+        }
+        if hex.1 != *color {
+            hex.0 = format!("#{:02x}{:02x}{:02x}", color.0, color.1, color.2);
+            hex.1 = *color;
+        }
+        if ui
+            .add(egui::TextEdit::singleline(&mut hex.0).desired_width(70.0))
+            .changed()
+            && let Some(c) = crate::color::parse_hex(&hex.0)
+        {
+            *color = c;
+            hex.1 = c;
+        }
+    });
+    let (h, s, v) = crate::color::to_hsv(*color);
+    let (mut nh, mut ns, mut nv) = (h, s * 100.0, v * 100.0);
+    ui.horizontal(|ui| {
+        ui.label("hsv");
+        let a = ui.add(egui::DragValue::new(&mut nh).range(0.0..=360.0).speed(1.0));
+        let b = ui.add(egui::DragValue::new(&mut ns).range(0.0..=100.0).speed(1.0));
+        let c = ui.add(egui::DragValue::new(&mut nv).range(0.0..=100.0).speed(1.0));
+        if a.changed() || b.changed() || c.changed() {
+            *color = crate::color::from_hsv(nh, ns / 100.0, nv / 100.0);
+        }
+    });
 }
 
 fn blend_combo(ui: &mut egui::Ui, i: usize, blend: &mut BlendMode) {

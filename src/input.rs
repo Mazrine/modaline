@@ -561,6 +561,17 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             }
             _ => editor.msg = "usage: :grad linear|radial".into(),
         },
+        "fg" | "bg" => match arg.and_then(crate::color::parse_hex) {
+            Some(c) => {
+                if name == "fg" {
+                    editor.set_fg(c);
+                } else {
+                    editor.set_bg(c);
+                }
+                editor.msg = format!("{name}: #{:02x}{:02x}{:02x}", c.0, c.1, c.2);
+            }
+            None => editor.msg = format!("usage: :{name} #rrggbb"),
+        },
         "contour" | "outline" => {
             let (x, y) = editor.cursor;
             editor.contour_at(x, y);
@@ -605,6 +616,15 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     };
                     editor.set_palette_lock(on);
                 }
+                "move" if !path.is_empty() => {
+                    let mut it = path
+                        .split_whitespace()
+                        .filter_map(|v| v.parse::<usize>().ok());
+                    match (it.next(), it.next()) {
+                        (Some(from), Some(to)) => editor.move_palette(from, to),
+                        _ => editor.msg = "usage: :pal move <from> <to>".into(),
+                    }
+                }
                 "load" | "save" if !path.is_empty() => {
                     let p = std::path::Path::new(path);
                     if sub == "load" {
@@ -624,7 +644,9 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     }
                 }
                 _ => {
-                    editor.msg = "usage: :pal from-sprite | lock on|off | load|save <file>".into();
+                    editor.msg =
+                        "usage: :pal from-sprite | lock on|off | move <from> <to> | load|save <file>"
+                            .into();
                 }
             }
         }
