@@ -778,6 +778,33 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 }
             }
         }
+        "slices" | "slice" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            let dir = it.next().unwrap_or("").to_string();
+            let cols: u32 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+            let rows: u32 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+            if dir.is_empty() {
+                editor.msg = "usage: :slices <dir> [cols rows]".into();
+            } else {
+                let stem = editor
+                    .path
+                    .as_ref()
+                    .and_then(|p| p.file_stem())
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "sprite".into());
+                match io::export_slices(
+                    &editor.sprite,
+                    editor.active_frame,
+                    std::path::Path::new(&dir),
+                    &stem,
+                    cols,
+                    rows,
+                ) {
+                    Ok(paths) => editor.msg = format!("slices: {} files in {dir}", paths.len()),
+                    Err(e) => editor.msg = format!("slices failed: {e}"),
+                }
+            }
+        }
         "export" => {
             if let Some(p) = arg {
                 let path = PathBuf::from(p);

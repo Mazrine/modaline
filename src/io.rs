@@ -157,6 +157,87 @@ pub fn export_meta(sprite: &Sprite, sheet: Sheet, image: &str, path: &Path) -> R
     Ok(())
 }
 
+/// A named region of the sprite: a grid cell, or the whole sprite.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Slice {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+}
+
+/// Cut the sprite into a `cols` x `rows` grid of slices. The grid does not
+/// have to divide the sprite evenly: the last column and row absorb the
+/// remainder, so no pixel is lost. `cols`/`rows` of 0 mean "use the sprite's
+/// own grid bounds, else the whole sprite".
+pub fn slices(sprite: &Sprite, cols: u32, rows: u32) -> Vec<Slice> {
+    let (w, h) = (sprite.width, sprite.height);
+    let (cols, rows) = match (cols, rows) {
+        (0, _) | (_, 0) => match sprite.grid {
+            (gw, gh) if gw > 0 && gh > 0 => (gw.min(w).max(1), gh.min(h).max(1)),
+            _ => (1, 1),
+        },
+        (c, r) => (c.max(1).min(w), r.max(1).min(h)),
+    };
+    let mut out = Vec::with_capacity((cols * rows) as usize);
+    for r in 0..rows {
+        for c in 0..cols {
+            let x0 = w * c / cols;
+            let y0 = h * r / rows;
+            let x1 = w * (c + 1) / cols;
+            let y1 = h * (r + 1) / rows;
+            out.push(Slice {
+                x: x0,
+                y: y0,
+                w: x1 - x0,
+                h: y1 - y0,
+            });
+        }
+    }
+    out
+}
+
+/// Write each slice of the active frame as `<dir>/<stem>_r<row>c<col>.png`,
+/// plus `<stem>.slices.json` naming the rects. Returns the files written.
+pub fn export_slices(
+    sprite: &Sprite,
+    frame: usize,
+    dir: &Path,
+    stem: &str,
+    cols: u32,
+    rows: u32,
+) -> Result<Vec<PathBuf>> {
+    std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
+    let cell = frame_image(sprite, frame);
+    let grid = slices(sprite, cols, rows);
+    let columns = if cols > 0 { cols } else { sprite.grid.0.max(1) };
+    let mut paths = Vec::new();
+    let mut named = Vec::new();
+    for (i, s) in grid.iter().enumerate() {
+        let columns = columns.max(1);
+        let (r, c) = (i as u32 / columns, i as u32 % columns);
+        let path = dir.join(format!("{stem}_r{r}c{c}.png"));
+        image::imageops::crop_imm(&cell, s.x, s.y, s.w, s.h)
+            .to_image()
+            .save(&path)
+            .with_context(|| format!("save {}", path.display()))?;
+        named.push(serde_json::json!({
+            "name": format!("r{r}c{c}"),
+            "x": s.x,
+            "y": s.y,
+            "w": s.w,
+            "h": s.h,
+            "file": path.file_name().map(|n| n.to_string_lossy().into_owned()),
+        }));
+        paths.push(path);
+    }
+    let meta = dir.join(format!("{stem}.slices.json"));
+    let text = serde_json::to_string_pretty(&named).context("serialize slices")?;
+    std::fs::write(&meta, text).with_context(|| format!("write {}", meta.display()))?;
+    paths.push(meta);
+    Ok(paths)
+}
+
 /// Export an animation: `<stem>.sheet.png`, `<stem>.gif`, `<stem>.json`.
 pub fn export_animation(
     sprite: &Sprite,
@@ -203,6 +284,74 @@ pub fn import_png(path: &Path) -> Result<Sprite> {
 mod tests {
     use super::*;
     use crate::color::Rgba;
+
+    #[test]
+    fn slices_cover_the_sprite_even_when_the_grid_does_not_divide_it() {
+        let mut s = Sprite::new(10, 7);
+        assert_eq!(
+            slices(&s, 0, 0),
+            vec![Slice {
+                x: 0,
+                y: 0,
+                w: 10,
+                h: 7
+            }]
+        );
+
+        s.grid = (3, 3);
+        let g = slices(&s, 0, 0);
+        assert_eq!(g.len(), 9);
+        // Every pixel is in exactly one slice, and the last row/column absorb
+        // the remainder (10/3 = 3,3,4 and 7/3 = 2,2,3).
+        let area: u32 = g.iter().map(|s| s.w * s.h).sum();
+        assert_eq!(area, 70);
+        assert_eq!(g[2].w, 4);
+        assert_eq!(g[6].h, 3);
+
+        // Explicit columns/rows win over the sprite grid.
+        let by_two = slices(&s, 2, 2);
+        assert_eq!(by_two.len(), 4);
+        assert_eq!(
+            by_two[0],
+            Slice {
+                x: 0,
+                y: 0,
+                w: 5,
+                h: 3
+            }
+        );
+        assert_eq!(
+            by_two[3],
+            Slice {
+                x: 5,
+                y: 3,
+                w: 5,
+                h: 4
+            }
+        );
+    }
+
+    #[test]
+    fn slice_export_writes_one_png_per_cell_and_a_sidecar() {
+        let mut s = Sprite::new(4, 2);
+        s.set(0, 0, 0, 0, Rgba(255, 0, 0, 255));
+        s.set(0, 0, 3, 1, Rgba(0, 0, 255, 255));
+        s.grid = (2, 2);
+        let dir = std::env::temp_dir().join(format!("vixel-slices-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let paths = export_slices(&s, 0, &dir, "art", 0, 0).expect("slices");
+        assert_eq!(paths.len(), 5, "4 cells + the sidecar");
+        let pngs = paths
+            .iter()
+            .filter(|p| p.extension().unwrap() == "png")
+            .count();
+        assert_eq!(pngs, 4);
+        let meta = std::fs::read_to_string(dir.join("art.slices.json")).unwrap();
+        assert!(meta.contains("\"w\": 2") && meta.contains("r1c1"));
+        let cell = image::open(dir.join("art_r0c0.png")).unwrap().to_rgba8();
+        assert_eq!(cell.get_pixel(0, 0), &image::Rgba([255, 0, 0, 255]));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn png_round_trip() {

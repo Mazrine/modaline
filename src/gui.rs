@@ -1404,6 +1404,7 @@ const HELP: &[&str] = &[
     "  :filter invert|brightness|contrast|hue|saturation|outline|blur|sharpen [amount]",
     "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   (free transform)",
     "  :mode auto|rgba|grayscale|indexed   :aspect <x> <y>   :sgrid <w> <h>",
+    "  :slices <dir> [cols rows]   (one png per grid cell + a slices.json)",
     "  :grad linear|radial   :contour",
     "  :export out.png|.ase|stem   :import in.png   :open proj.vpx|.ase|.png",
 ];
