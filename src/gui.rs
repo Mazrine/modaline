@@ -414,7 +414,16 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
 
 // ---- right side panel ----
 
+/// The side panel scrolls: the settings, the palette, the layers and the sprite
+/// tools together are taller than any window, and a layer list below the fold
+/// is a layer you cannot click.
 fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| side_body(ui, editor, view));
+}
+
+fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.horizontal(|ui| {
         let light = view.theme == "light";
         if ui
@@ -539,91 +548,6 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     if bg != editor.bg {
         editor.set_bg(bg);
     }
-    ui.separator();
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Sprite").strong());
-        let mut mode = editor.sprite.color_mode;
-        egui::ComboBox::from_id_salt("colormode")
-            .selected_text(mode.name())
-            .show_ui(ui, |ui| {
-                for m in [
-                    crate::sprite::ColorMode::Auto,
-                    crate::sprite::ColorMode::Rgba,
-                    crate::sprite::ColorMode::Grayscale,
-                    crate::sprite::ColorMode::Indexed,
-                ] {
-                    ui.selectable_value(&mut mode, m, m.name());
-                }
-            });
-        if mode != editor.sprite.color_mode {
-            editor.set_color_mode(mode);
-        }
-    });
-    ui.horizontal(|ui| {
-        ui.label("px ratio");
-        let (mut ax, mut ay) = editor.sprite.pixel_aspect;
-        let cx = ui.add(egui::DragValue::new(&mut ax).range(1..=255));
-        let cy = ui.add(egui::DragValue::new(&mut ay).range(1..=255));
-        if (cx.changed() || cy.changed()) && (ax, ay) != editor.sprite.pixel_aspect {
-            editor.set_pixel_aspect(ax, ay);
-        }
-        ui.label("grid");
-        let (mut gx, mut gy) = editor.sprite.grid;
-        let g1 = ui.add(egui::DragValue::new(&mut gx).range(0..=1024));
-        let g2 = ui.add(egui::DragValue::new(&mut gy).range(0..=1024));
-        if (g1.changed() || g2.changed()) && (gx, gy) != editor.sprite.grid {
-            editor.set_sprite_grid(gx, gy);
-        }
-    });
-
-    ui.separator();
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Transform").strong());
-    });
-    ui.horizontal(|ui| {
-        ui.label("rot");
-        ui.add(egui::DragValue::new(&mut view.rot).speed(1.0).suffix("°"));
-        ui.label("scale");
-        ui.add(
-            egui::DragValue::new(&mut view.scale)
-                .speed(0.05)
-                .range(0.05..=8.0),
-        );
-        ui.label("skew");
-        ui.add(egui::DragValue::new(&mut view.skew).speed(1.0).suffix("°"));
-    });
-    if ui
-        .button("apply transform")
-        .on_hover_text("rotate / scale / skew the selection (or the layer) about its centre")
-        .clicked()
-    {
-        editor.free_transform(view.rot, view.scale, view.scale, view.skew);
-    }
-
-    ui.separator();
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Filter").strong());
-        egui::ComboBox::from_id_salt("filter")
-            .selected_text(crate::editor::FILTERS[view.filter])
-            .show_ui(ui, |ui| {
-                for (i, name) in crate::editor::FILTERS.iter().enumerate() {
-                    ui.selectable_value(&mut view.filter, i, *name);
-                }
-            });
-        ui.add(egui::DragValue::new(&mut view.filter_amount).speed(1.0));
-        if ui
-            .button("apply")
-            .on_hover_text("apply to the selection, or the whole layer (:filter)")
-            .clicked()
-        {
-            let name = crate::editor::FILTERS[view.filter];
-            let amount = format!("{:.2}", view.filter_amount);
-            if let Some(f) = crate::editor::Filter::parse(name, Some(&amount)) {
-                editor.filter(f);
-            }
-        }
-    });
-
     ui.separator();
 
     ui.horizontal(|ui| {
@@ -789,6 +713,91 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     }
     editor.active_layer = selected;
+
+    ui.separator();
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Sprite").strong());
+        let mut mode = editor.sprite.color_mode;
+        egui::ComboBox::from_id_salt("colormode")
+            .selected_text(mode.name())
+            .show_ui(ui, |ui| {
+                for m in [
+                    crate::sprite::ColorMode::Auto,
+                    crate::sprite::ColorMode::Rgba,
+                    crate::sprite::ColorMode::Grayscale,
+                    crate::sprite::ColorMode::Indexed,
+                ] {
+                    ui.selectable_value(&mut mode, m, m.name());
+                }
+            });
+        if mode != editor.sprite.color_mode {
+            editor.set_color_mode(mode);
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("px ratio");
+        let (mut ax, mut ay) = editor.sprite.pixel_aspect;
+        let cx = ui.add(egui::DragValue::new(&mut ax).range(1..=255));
+        let cy = ui.add(egui::DragValue::new(&mut ay).range(1..=255));
+        if (cx.changed() || cy.changed()) && (ax, ay) != editor.sprite.pixel_aspect {
+            editor.set_pixel_aspect(ax, ay);
+        }
+        ui.label("grid");
+        let (mut gx, mut gy) = editor.sprite.grid;
+        let g1 = ui.add(egui::DragValue::new(&mut gx).range(0..=1024));
+        let g2 = ui.add(egui::DragValue::new(&mut gy).range(0..=1024));
+        if (g1.changed() || g2.changed()) && (gx, gy) != editor.sprite.grid {
+            editor.set_sprite_grid(gx, gy);
+        }
+    });
+
+    ui.separator();
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Transform").strong());
+    });
+    ui.horizontal(|ui| {
+        ui.label("rot");
+        ui.add(egui::DragValue::new(&mut view.rot).speed(1.0).suffix("°"));
+        ui.label("scale");
+        ui.add(
+            egui::DragValue::new(&mut view.scale)
+                .speed(0.05)
+                .range(0.05..=8.0),
+        );
+        ui.label("skew");
+        ui.add(egui::DragValue::new(&mut view.skew).speed(1.0).suffix("°"));
+    });
+    if ui
+        .button("apply transform")
+        .on_hover_text("rotate / scale / skew the selection (or the layer) about its centre")
+        .clicked()
+    {
+        editor.free_transform(view.rot, view.scale, view.scale, view.skew);
+    }
+
+    ui.separator();
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Filter").strong());
+        egui::ComboBox::from_id_salt("filter")
+            .selected_text(crate::editor::FILTERS[view.filter])
+            .show_ui(ui, |ui| {
+                for (i, name) in crate::editor::FILTERS.iter().enumerate() {
+                    ui.selectable_value(&mut view.filter, i, *name);
+                }
+            });
+        ui.add(egui::DragValue::new(&mut view.filter_amount).speed(1.0));
+        if ui
+            .button("apply")
+            .on_hover_text("apply to the selection, or the whole layer (:filter)")
+            .clicked()
+        {
+            let name = crate::editor::FILTERS[view.filter];
+            let amount = format!("{:.2}", view.filter_amount);
+            if let Some(f) = crate::editor::Filter::parse(name, Some(&amount)) {
+                editor.filter(f);
+            }
+        }
+    });
 }
 
 /// A colour row: the swatch button, a hex field, and HSV drag values. The hex

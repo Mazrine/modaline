@@ -22,6 +22,8 @@ steam-run cargo run --release      # or: cargo build --release && steam-run ./ta
 ```
 
 Read, in order:
+0. `docs/TESTING.md` — how to drive the GUI headlessly and what the last pass
+   proved (twm is required: without a window manager, keys never arrive).
 1. `AGENTS.md` — module map + invariants (must not break these).
 2. `docs/CURRENT_STATE.md` — what is implemented today.
 3. `docs/ROADMAP.md` — planned work, ordered by priority.

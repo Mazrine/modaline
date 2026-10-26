@@ -76,6 +76,9 @@ Nothing left in P0 — promote from P1.
 - Multi-document / tabbed interface.
 - Plugins / scripting (Aseprite's Lua API).
 
+Verification: `docs/TESTING.md` drives the real GUI under Xvfb with a window
+manager and records what each pass proved.
+
 Nothing in P1-P3 is open except the three explicitly deferred sub-items
 (ICC embedding, custom shaders, keymap customization), each with the condition
 that would re-open it.
