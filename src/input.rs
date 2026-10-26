@@ -607,11 +607,9 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 "wgpu" => {
                     editor.msg = "renderer: wgpu (needs a build with --features wgpu; restart vixel with --wgpu)".into();
                 }
-                _ => {
-                    editor.msg =
-                        "usage: :renderer glow|wgpu   (wgpu also needs --features wgpu at build time)"
-                            .into()
-                }
+                _ => editor.msg =
+                    "usage: :renderer glow|wgpu   (wgpu also needs --features wgpu at build time)"
+                        .into(),
             }
         }
         "profile" | "colorspace" => match arg.and_then(crate::sprite::ColorProfile::parse) {
@@ -923,5 +921,67 @@ mod tests {
 
         exec_command(&mut editor, "ops /nonexistent/vixel-ops.json");
         assert!(editor.msg.contains("ops failed"), "{}", editor.msg);
+    }
+
+    #[test]
+    fn the_new_commands_reach_their_editor_op() {
+        let mut e = Editor::new(16, 16);
+        // text -> pixels at the cursor
+        exec_command(&mut e, "text A");
+        assert!(
+            (0..16).any(|x| !e.sprite.get(0, 0, x, 0).is_transparent()),
+            "text stamped nothing"
+        );
+        // filter invert round-trips: two inverts restore the pixel
+        let (l, f) = (e.active_layer, e.active_frame);
+        let painted = (0..16)
+            .find_map(|x| {
+                (0..16)
+                    .find(|y| !e.sprite.get(l, f, x, *y).is_transparent())
+                    .map(|y| (x, y))
+            })
+            .expect("the text stamp left a pixel");
+        let before = e.sprite.get(l, f, painted.0, painted.1);
+        exec_command(&mut e, "filter invert");
+        assert_ne!(e.sprite.get(l, f, painted.0, painted.1), before);
+        exec_command(&mut e, "filter invert");
+        assert_eq!(e.sprite.get(l, f, painted.0, painted.1), before);
+        // selection ops on a freshly made selection
+        exec_command(&mut e, "sel all");
+        exec_command(&mut e, "sel contract 2");
+        assert!(e.current_selection().is_some());
+        exec_command(&mut e, "sel none");
+        assert!(e.current_selection().is_none());
+        // sprite properties and the profile
+        exec_command(&mut e, "mode grayscale");
+        assert_eq!(e.sprite.color_mode.name(), "grayscale");
+        exec_command(&mut e, "profile linear");
+        assert_eq!(e.sprite.color_profile.name(), "linear");
+        exec_command(&mut e, "aspect 2 1");
+        assert_eq!(e.sprite.pixel_aspect, (2, 1));
+        exec_command(&mut e, "sgrid 4 4");
+        assert_eq!(e.sprite.grid, (4, 4));
+        // grid/snap and the free transform
+        exec_command(&mut e, "grid 4");
+        exec_command(&mut e, "snap on");
+        assert!(e.snap && e.grid == 4);
+        exec_command(&mut e, "rotate 90");
+        // usage strings, not panics, on bad arguments
+        for bad in [
+            "text",
+            "filter nope",
+            "rotate",
+            "scale",
+            "skew x",
+            "sel",
+            "aspect 1",
+        ] {
+            exec_command(&mut e, bad);
+            assert!(
+                e.msg.contains("usage") || e.msg.starts_with("text:"),
+                "{bad} -> {}",
+                e.msg
+            );
+        }
     }
 }
