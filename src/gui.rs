@@ -45,6 +45,9 @@ pub struct View {
     /// so typing is not overwritten by the next frame's echo.
     fg_hex: (String, Rgba),
     bg_hex: (String, Rgba),
+    /// Index into `crate::editor::FILTERS`, and the amount its button applies.
+    filter: usize,
+    filter_amount: f32,
 }
 
 impl View {
@@ -60,6 +63,8 @@ impl View {
             thumbs: Vec::new(),
             fg_hex: (String::new(), Rgba(0, 0, 0, 0)),
             bg_hex: (String::new(), Rgba(0, 0, 0, 0)),
+            filter: 0,
+            filter_amount: 24.0,
         }
     }
 
@@ -489,6 +494,30 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     if bg != editor.bg {
         editor.set_bg(bg);
     }
+    ui.separator();
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Filter").strong());
+        egui::ComboBox::from_id_salt("filter")
+            .selected_text(crate::editor::FILTERS[view.filter])
+            .show_ui(ui, |ui| {
+                for (i, name) in crate::editor::FILTERS.iter().enumerate() {
+                    ui.selectable_value(&mut view.filter, i, *name);
+                }
+            });
+        ui.add(egui::DragValue::new(&mut view.filter_amount).speed(1.0));
+        if ui
+            .button("apply")
+            .on_hover_text("apply to the selection, or the whole layer (:filter)")
+            .clicked()
+        {
+            let name = crate::editor::FILTERS[view.filter];
+            let amount = format!("{:.2}", view.filter_amount);
+            if let Some(f) = crate::editor::Filter::parse(name, Some(&amount)) {
+                editor.filter(f);
+            }
+        }
+    });
+
     ui.separator();
 
     ui.horizontal(|ui| {
@@ -1304,6 +1333,7 @@ const HELP: &[&str] = &[
     "  :fliph   :flipv   :rot90   :sym none|horizontal|vertical|both",
     "  :wand <0-255>   :wandall on|off   :selop replace|add|subtract|intersect",
     "  :sel expand|contract|border|feather <n>   :sel invert|none|all",
+    "  :filter invert|brightness|contrast|hue|saturation|outline|blur|sharpen [amount]",
     "  :grad linear|radial   :contour",
     "  :export out.png|.ase|stem   :import in.png   :open proj.vpx|.ase|.png",
 ];

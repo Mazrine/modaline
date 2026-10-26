@@ -598,6 +598,19 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "usage: :wandall on|off".into();
             }
         }
+        "filter" | "fx" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            let name = it.next().unwrap_or("");
+            let amount = it.next();
+            match crate::editor::Filter::parse(name, amount) {
+                Some(f) => editor.filter(f),
+                None => {
+                    editor.msg =
+                        "usage: :filter invert|brightness|contrast|hue|saturation|outline|blur|sharpen [amount]"
+                            .into()
+                }
+            }
+        }
         "sel" => {
             let mut it = arg.unwrap_or("").split_whitespace();
             let op = it.next().unwrap_or("");

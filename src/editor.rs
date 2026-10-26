@@ -1154,6 +1154,39 @@ impl Editor {
         self.select_anchor.is_some() || self.selection.is_some()
     }
 
+    // ---- filters ----
+
+    /// One filter over the selection (or the whole cel when there is none), as
+    /// a single undo step. Transparent pixels stay transparent: a filter is for
+    /// the art, not for the empty space around it. `Outline` is the exception,
+    /// because its whole job is to grow into that space.
+    pub fn filter(&mut self, f: Filter) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let (l, frame) = (self.active_layer, self.active_frame);
+        let src: Vec<Rgba> = (0..w * h)
+            .map(|i| self.sprite.get(l, frame, i % w, i / w))
+            .collect();
+        let dst = apply_filter(&src, w, h, f, self.fg);
+        let sel = self.current_selection();
+        self.begin_stroke();
+        let mut changed = 0;
+        for i in 0..src.len() {
+            if dst[i] == src[i] {
+                continue;
+            }
+            let (x, y) = (i as u32 % w, i as u32 / w);
+            if let Some(s) = &sel
+                && !s.contains(x, y)
+            {
+                continue;
+            }
+            self.paint_pixel(x, y, dst[i]);
+            changed += 1;
+        }
+        self.end_stroke();
+        self.msg = format!("filter: {} ({changed} px)", f.name());
+    }
+
     // ---- selection shape ----
 
     /// The selection as a sprite-sized grid. Shape operations work here rather
@@ -2043,6 +2076,177 @@ fn lerp_rgba(a: Rgba, b: Rgba, t: f32) -> Rgba {
     Rgba(l(a.0, b.0), l(a.1, b.1), l(a.2, b.2), l(a.3, b.3))
 }
 
+/// A one-shot colour filter. `amount` is per filter: brightness -255..255,
+/// contrast 0..3 as a factor, hue in degrees, saturation as a factor, outline
+/// and blur as a pixel radius, sharpen as a strength.
+/// The filter names, in the order the combo box lists them.
+pub const FILTERS: [&str; 8] = [
+    "invert",
+    "brightness",
+    "contrast",
+    "hue",
+    "saturation",
+    "outline",
+    "blur",
+    "sharpen",
+];
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Filter {
+    Invert,
+    Brightness(i32),
+    Contrast(f32),
+    Hue(f32),
+    Saturation(f32),
+    Outline(u32),
+    Blur(u32),
+    Sharpen(f32),
+}
+
+impl Filter {
+    pub fn name(self) -> String {
+        match self {
+            Filter::Invert => "invert".into(),
+            Filter::Brightness(v) => format!("brightness {v}"),
+            Filter::Contrast(v) => format!("contrast {v:.2}"),
+            Filter::Hue(v) => format!("hue {v:.0}"),
+            Filter::Saturation(v) => format!("saturation {v:.2}"),
+            Filter::Outline(v) => format!("outline {v}"),
+            Filter::Blur(v) => format!("blur {v}"),
+            Filter::Sharpen(v) => format!("sharpen {v:.2}"),
+        }
+    }
+
+    /// Parse `name [amount]`, the same table the `:filter` command uses.
+    pub fn parse(name: &str, amount: Option<&str>) -> Option<Filter> {
+        let a = amount.and_then(|v| v.parse::<f32>().ok());
+        Some(match name {
+            "invert" | "inv" => Filter::Invert,
+            "brightness" | "bri" => Filter::Brightness(a.unwrap_or(24.0) as i32),
+            "contrast" | "con" => Filter::Contrast(a.unwrap_or(1.2)),
+            "hue" => Filter::Hue(a.unwrap_or(30.0)),
+            "saturation" | "sat" => Filter::Saturation(a.unwrap_or(1.3)),
+            "outline" | "out" => Filter::Outline(a.unwrap_or(1.0).max(1.0) as u32),
+            "blur" => Filter::Blur(a.unwrap_or(1.0).max(1.0) as u32),
+            "sharpen" | "sharp" => Filter::Sharpen(a.unwrap_or(1.0)),
+            _ => return None,
+        })
+    }
+}
+
+fn apply_filter(src: &[Rgba], w: u32, h: u32, f: Filter, fg: Rgba) -> Vec<Rgba> {
+    let idx = |x: u32, y: u32| (y * w + x) as usize;
+    let mut out = src.to_vec();
+    match f {
+        Filter::Invert => {
+            for (i, p) in src.iter().enumerate() {
+                if p.3 > 0 {
+                    out[i] = Rgba(255 - p.0, 255 - p.1, 255 - p.2, p.3);
+                }
+            }
+        }
+        Filter::Brightness(d) => {
+            for (i, p) in src.iter().enumerate() {
+                if p.3 > 0 {
+                    let add = |c: u8| (c as i32 + d).clamp(0, 255) as u8;
+                    out[i] = Rgba(add(p.0), add(p.1), add(p.2), p.3);
+                }
+            }
+        }
+        Filter::Contrast(k) => {
+            for (i, p) in src.iter().enumerate() {
+                if p.3 > 0 {
+                    let f = |c: u8| ((c as f32 - 128.0) * k + 128.0).clamp(0.0, 255.0) as u8;
+                    out[i] = Rgba(f(p.0), f(p.1), f(p.2), p.3);
+                }
+            }
+        }
+        Filter::Hue(deg) => {
+            for (i, p) in src.iter().enumerate() {
+                if p.3 > 0 {
+                    let (hh, s, v) = crate::color::to_hsv(*p);
+                    let c = crate::color::from_hsv(hh + deg, s, v);
+                    out[i] = Rgba(c.0, c.1, c.2, p.3);
+                }
+            }
+        }
+        Filter::Saturation(k) => {
+            for (i, p) in src.iter().enumerate() {
+                if p.3 > 0 {
+                    let (hh, s, v) = crate::color::to_hsv(*p);
+                    let c = crate::color::from_hsv(hh, s * k, v);
+                    out[i] = Rgba(c.0, c.1, c.2, p.3);
+                }
+            }
+        }
+        Filter::Outline(n) => {
+            // Grow the opaque silhouette by `n` into the transparent pixels.
+            let mut solid: Vec<bool> = src.iter().map(|p| p.3 > 0).collect();
+            for _ in 0..n {
+                solid = dilate(&solid, w, h);
+            }
+            for i in 0..src.len() {
+                if solid[i] && src[i].3 == 0 {
+                    out[i] = fg;
+                }
+            }
+        }
+        Filter::Blur(n) => out = box_blur(src, w, h, n),
+        Filter::Sharpen(k) => {
+            let soft = box_blur(src, w, h, 1);
+            for i in 0..src.len() {
+                let (p, b) = (src[i], soft[i]);
+                if p.3 == 0 {
+                    continue;
+                }
+                let f =
+                    |c: u8, bc: u8| (c as f32 + k * (c as f32 - bc as f32)).clamp(0.0, 255.0) as u8;
+                out[i] = Rgba(f(p.0, b.0), f(p.1, b.1), f(p.2, b.2), p.3);
+            }
+        }
+    }
+    let _ = idx;
+    out
+}
+
+/// Box blur over alpha-weighted colour, so a blur softens the edge instead of
+/// leaving a hard one: transparent neighbours pull alpha down, they do not just
+/// get skipped.
+fn box_blur(src: &[Rgba], w: u32, h: u32, r: u32) -> Vec<Rgba> {
+    let r = r.clamp(1, 32) as i32;
+    let mut out = src.to_vec();
+    for y in 0..h as i32 {
+        for x in 0..w as i32 {
+            let (mut sr, mut sg, mut sb, mut sa, mut n) = (0u32, 0u32, 0u32, 0u32, 0u32);
+            for dy in -r..=r {
+                for dx in -r..=r {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                        continue;
+                    }
+                    let p = src[(ny as u32 * w + nx as u32) as usize];
+                    sr += p.0 as u32 * p.3 as u32;
+                    sg += p.1 as u32 * p.3 as u32;
+                    sb += p.2 as u32 * p.3 as u32;
+                    sa += p.3 as u32;
+                    n += 1;
+                }
+            }
+            let i = (y as u32 * w + x as u32) as usize;
+            if src[i].3 == 0 || sa == 0 || n == 0 {
+                continue;
+            }
+            out[i] = Rgba(
+                (sr / sa) as u8,
+                (sg / sa) as u8,
+                (sb / sa) as u8,
+                (sa / n) as u8,
+            );
+        }
+    }
+    out
+}
+
 /// One 4-neighbour dilation step on a sprite-sized grid.
 fn dilate(g: &[bool], w: u32, h: u32) -> Vec<bool> {
     let mut out = g.to_vec();
@@ -2090,6 +2294,74 @@ fn erode(g: &[bool], w: u32, h: u32) -> Vec<bool> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn filters_are_undoable_and_keep_alpha() {
+        let mut e = Editor::new(4, 4);
+        let (l, f) = (e.active_layer, e.active_frame);
+        e.fg = Rgba::rgb(10, 20, 30);
+        // A hard vertical edge: two columns transparent, two opaque.
+        for y in 0..4 {
+            for x in 2..4 {
+                e.paint_pixel(x, y, Rgba::rgb(200, 60, 40));
+            }
+        }
+        e.undo.clear();
+
+        e.filter(Filter::Invert);
+        assert_eq!(e.sprite.get(l, f, 3, 0), Rgba::rgb(55, 195, 215));
+        assert_eq!(
+            e.sprite.get(l, f, 0, 0),
+            Rgba::TRANSPARENT,
+            "clear stays clear"
+        );
+        e.undo();
+        assert_eq!(e.sprite.get(l, f, 3, 0), Rgba::rgb(200, 60, 40), "one undo");
+
+        // Outline grows into the transparent pixels in fg and is clipped at the edge.
+        e.filter(Filter::Outline(1));
+        assert_eq!(e.sprite.get(l, f, 1, 0), Rgba::rgb(10, 20, 30));
+        e.undo();
+
+        // Brightness clamps instead of wrapping.
+        e.filter(Filter::Brightness(100));
+        assert_eq!(e.sprite.get(l, f, 3, 0), Rgba::rgb(255, 160, 140));
+        e.undo();
+
+        // Contrast about 128, hue and saturation round-trip by identity values.
+        let before = e.sprite.get(l, f, 3, 1);
+        e.filter(Filter::Contrast(1.0));
+        assert_eq!(e.sprite.get(l, f, 3, 1), before);
+        e.filter(Filter::Hue(360.0));
+        let after = e.sprite.get(l, f, 3, 1);
+        assert!(after.0.abs_diff(before.0) <= 2 && after.1.abs_diff(before.1) <= 2);
+        e.filter(Filter::Saturation(1.0));
+
+        // Blur softens the edge: the pixel next to it changed, alpha kept.
+        e.filter(Filter::Blur(1));
+        let p = e.sprite.get(l, f, 2, 0);
+        assert!(p.3 < 255, "the blurred edge softens into the clear side");
+        assert!(p.3 > 0);
+        e.undo();
+        e.filter(Filter::Sharpen(1.0));
+    }
+
+    #[test]
+    fn filters_only_touch_the_selection() {
+        let mut e = Editor::new(4, 1);
+        let (l, f) = (e.active_layer, e.active_frame);
+        for x in 0..4 {
+            e.paint_pixel(x, 0, Rgba::rgb(10, 10, 10));
+        }
+        e.selection = Some(Selection::rect(0, 0, 1, 0));
+        e.filter(Filter::Invert);
+        assert_eq!(e.sprite.get(l, f, 0, 0), Rgba::rgb(245, 245, 245));
+        assert_eq!(
+            e.sprite.get(l, f, 2, 0),
+            Rgba::rgb(10, 10, 10),
+            "outside is untouched"
+        );
+    }
+
     #[test]
     fn selection_shape_ops_grow_shrink_ring_and_flip() {
         let mut e = Editor::new(16, 16);
