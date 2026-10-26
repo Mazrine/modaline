@@ -602,10 +602,14 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             let name = arg.unwrap_or("").to_lowercase();
             match name.as_str() {
                 "glow" | "opengl" | "gl" => {
-                    editor.msg = "renderer: glow".into();
+                    editor.renderer = "glow".into();
+                    editor.msg = "renderer: glow (applies on restart)".into();
                 }
                 "wgpu" => {
-                    editor.msg = "renderer: wgpu (needs a build with --features wgpu; restart vixel with --wgpu)".into();
+                    editor.renderer = "wgpu".into();
+                    editor.msg =
+                        "renderer: wgpu (applies on restart; needs a build with --features wgpu)"
+                            .into();
                 }
                 _ => editor.msg =
                     "usage: :renderer glow|wgpu   (wgpu also needs --features wgpu at build time)"
@@ -962,6 +966,11 @@ mod tests {
         exec_command(&mut e, "sgrid 4 4");
         assert_eq!(e.sprite.grid, (4, 4));
         // grid/snap and the free transform
+        exec_command(&mut e, "renderer wgpu");
+        assert_eq!(e.renderer, "wgpu");
+        assert!(e.msg.contains("restart"), "{}", e.msg);
+        exec_command(&mut e, "renderer nope");
+        assert!(e.msg.contains("usage"), "{}", e.msg);
         exec_command(&mut e, "grid 4");
         exec_command(&mut e, "snap on");
         assert!(e.snap && e.grid == 4);

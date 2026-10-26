@@ -37,6 +37,7 @@ impl VixelApp {
         editor.snap = config.snap;
         editor.play_loop = config.play_loop;
         editor.play_pingpong = config.play_pingpong;
+        editor.renderer = config.renderer.clone();
         let mut view = View::new();
         view.zoom = config.zoom.clamp(1, 64);
         view.show_grid = config.show_grid;
@@ -72,6 +73,7 @@ impl VixelApp {
         self.config.play_loop = self.editor.play_loop;
         self.config.play_pingpong = self.editor.play_pingpong;
         self.config.theme = self.view.theme.clone();
+        self.config.renderer = self.editor.renderer.clone();
         let _ = self.config.save();
     }
 }

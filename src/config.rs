@@ -25,6 +25,10 @@ pub struct Config {
     pub play_pingpong: bool,
     /// "dark" or "light".
     pub theme: String,
+    /// The renderer asked for at startup: "glow" (default) or "wgpu". The
+    /// request is honoured only by a build with the `wgpu` feature; otherwise
+    /// vixel says so and falls back to glow.
+    pub renderer: String,
     /// Free-form entries a future build can read; round-tripped, never guessed.
     pub extra: BTreeMap<String, String>,
 }
@@ -90,6 +94,7 @@ impl Default for Config {
             play_loop: true,
             play_pingpong: false,
             theme: "dark".into(),
+            renderer: "glow".into(),
             extra: BTreeMap::new(),
         }
     }
@@ -142,6 +147,14 @@ mod tests {
         let newer = r#"{"zoom": 2, "future_knob": true}"#;
         let c: Config = serde_json::from_str(newer).expect("unknown keys are ignored");
         assert_eq!(c.zoom, 2);
+    }
+
+    #[test]
+    fn the_renderer_request_is_a_first_class_field_and_old_files_still_load() {
+        let c: Config = serde_json::from_str(r#"{"renderer": "wgpu"}"#).unwrap();
+        assert_eq!(c.renderer, "wgpu");
+        let old: Config = serde_json::from_str(r#"{"theme": "light"}"#).unwrap();
+        assert_eq!(old.renderer, "glow", "a config from before the field");
     }
 
     #[test]

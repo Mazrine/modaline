@@ -41,6 +41,8 @@ fn main() -> eframe::Result {
     // `--wgpu` or `renderer: wgpu` in the config picks the backend. The drawing
     // goes through egui::TextureHandle only, so nothing else changes.
     let want_wgpu = std::env::args().any(|a| a == "--wgpu")
+        || saved.renderer.eq_ignore_ascii_case("wgpu")
+        // A hand-edited `extra` entry from before the field existed.
         || saved.extra.get("renderer").is_some_and(|r| r == "wgpu");
     let renderer = pick_renderer(want_wgpu);
     let size = (

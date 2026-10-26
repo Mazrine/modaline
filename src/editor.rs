@@ -246,6 +246,9 @@ pub struct Editor {
     /// Refuse to paint a colour that is not in the palette (VI-3). Off by
     /// default: a plain sprite has no ramp to protect.
     pub palette_lock: bool,
+    /// The renderer the user asked for. Applied at startup, so changing it here
+    /// only takes effect on the next launch.
+    pub renderer: String,
 }
 
 impl Editor {
@@ -301,6 +304,7 @@ impl Editor {
             path: None,
             bundle_stage: None,
             palette_lock: false,
+            renderer: "glow".into(),
         }
     }
 
