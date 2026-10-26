@@ -1154,6 +1154,58 @@ impl Editor {
         self.select_anchor.is_some() || self.selection.is_some()
     }
 
+    // ---- sprite properties ----
+
+    /// Set the declared colour mode. `Grayscale` converts the pixels (one undo
+    /// step); `Indexed` also locks painting to the palette, because a colour
+    /// that cannot be indexed is not paintable in that mode.
+    pub fn set_color_mode(&mut self, mode: crate::sprite::ColorMode) {
+        use crate::sprite::ColorMode;
+        if mode == self.sprite.color_mode {
+            self.msg = format!("mode: {}", mode.name());
+            return;
+        }
+        match mode {
+            ColorMode::Grayscale => {
+                let before = self.sprite.clone();
+                self.sprite.to_grayscale();
+                let after = self.sprite.clone();
+                self.undo.push(UndoStep::Snapshot { before, after });
+                self.redo.clear();
+                self.palette_lock = true;
+            }
+            ColorMode::Rgba | ColorMode::Auto => {
+                self.sprite.color_mode = mode;
+                self.palette_lock = false;
+            }
+            ColorMode::Indexed => {
+                self.sprite.color_mode = mode;
+                self.palette_lock = true;
+            }
+        }
+        self.dirty = true;
+        self.msg = format!("mode: {}", mode.name());
+    }
+
+    pub fn set_pixel_aspect(&mut self, x: u16, y: u16) {
+        self.sprite.pixel_aspect = (x.max(1), y.max(1));
+        self.dirty = true;
+        self.msg = format!(
+            "pixel aspect: {}:{}",
+            self.sprite.pixel_aspect.0, self.sprite.pixel_aspect.1
+        );
+    }
+
+    /// The sprite's own grid bounds, which also drive the design grid.
+    pub fn set_sprite_grid(&mut self, w: u32, h: u32) {
+        self.sprite.grid = (w, h);
+        if w > 0 {
+            self.grid = w;
+        }
+        self.dirty = true;
+        self.msg = format!("sprite grid: {}x{}", w, h);
+    }
+
     // ---- free transform ----
 
     /// Rotate, scale and skew the selection (or the whole cel) about its own
@@ -2443,6 +2495,36 @@ mod tests {
         assert_eq!(e.sprite.get(l, f, 11, 5), Rgba::rgb(0, 0, 200));
         // Outside the selection nothing is touched.
         assert_eq!(e.sprite.get(l, f, 0, 0), Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn sprite_properties_convert_and_persist() {
+        use crate::sprite::ColorMode;
+        let mut e = Editor::new(4, 4);
+        let (l, f) = (e.active_layer, e.active_frame);
+        e.paint_pixel(1, 1, Rgba::rgb(200, 60, 40));
+
+        e.set_color_mode(ColorMode::Grayscale);
+        let p = e.sprite.get(l, f, 1, 1);
+        assert!(p.0 == p.1 && p.1 == p.2, "grayscale conversion: {p:?}");
+        assert_eq!(p.3, 255);
+        assert!(e.palette_lock, "indexed painting is palette-locked");
+        e.undo();
+        assert_eq!(e.sprite.get(l, f, 1, 1), Rgba::rgb(200, 60, 40), "one undo");
+
+        e.set_pixel_aspect(2, 1);
+        e.set_sprite_grid(8, 8);
+        assert_eq!(e.sprite.pixel_aspect, (2, 1));
+        assert_eq!(e.sprite.grid, (8, 8));
+        assert_eq!(e.grid, 8, "the design grid follows the sprite grid");
+
+        // The three properties survive a .vpx round trip.
+        let path = std::env::temp_dir().join(format!("vixel-props-{}.vpx", std::process::id()));
+        crate::io::save_project(&e.sprite, &path).expect("save");
+        let back = crate::io::load_project(&path).expect("load");
+        assert_eq!(back.pixel_aspect, (2, 1));
+        assert_eq!(back.grid, (8, 8));
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

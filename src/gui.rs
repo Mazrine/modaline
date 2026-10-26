@@ -503,6 +503,43 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     }
     ui.separator();
     ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Sprite").strong());
+        let mut mode = editor.sprite.color_mode;
+        egui::ComboBox::from_id_salt("colormode")
+            .selected_text(mode.name())
+            .show_ui(ui, |ui| {
+                for m in [
+                    crate::sprite::ColorMode::Auto,
+                    crate::sprite::ColorMode::Rgba,
+                    crate::sprite::ColorMode::Grayscale,
+                    crate::sprite::ColorMode::Indexed,
+                ] {
+                    ui.selectable_value(&mut mode, m, m.name());
+                }
+            });
+        if mode != editor.sprite.color_mode {
+            editor.set_color_mode(mode);
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("px ratio");
+        let (mut ax, mut ay) = editor.sprite.pixel_aspect;
+        let cx = ui.add(egui::DragValue::new(&mut ax).range(1..=255));
+        let cy = ui.add(egui::DragValue::new(&mut ay).range(1..=255));
+        if (cx.changed() || cy.changed()) && (ax, ay) != editor.sprite.pixel_aspect {
+            editor.set_pixel_aspect(ax, ay);
+        }
+        ui.label("grid");
+        let (mut gx, mut gy) = editor.sprite.grid;
+        let g1 = ui.add(egui::DragValue::new(&mut gx).range(0..=1024));
+        let g2 = ui.add(egui::DragValue::new(&mut gy).range(0..=1024));
+        if (g1.changed() || g2.changed()) && (gx, gy) != editor.sprite.grid {
+            editor.set_sprite_grid(gx, gy);
+        }
+    });
+
+    ui.separator();
+    ui.horizontal(|ui| {
         ui.label(egui::RichText::new("Transform").strong());
     });
     ui.horizontal(|ui| {
@@ -1366,6 +1403,7 @@ const HELP: &[&str] = &[
     "  :sel expand|contract|border|feather <n>   :sel invert|none|all",
     "  :filter invert|brightness|contrast|hue|saturation|outline|blur|sharpen [amount]",
     "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   (free transform)",
+    "  :mode auto|rgba|grayscale|indexed   :aspect <x> <y>   :sgrid <w> <h>",
     "  :grad linear|radial   :contour",
     "  :export out.png|.ase|stem   :import in.png   :open proj.vpx|.ase|.png",
 ];

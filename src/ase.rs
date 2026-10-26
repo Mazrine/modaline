@@ -39,6 +39,30 @@ enum OutDepth {
 /// when it can (r == g == b), then indexed when the sprite uses <= 255 distinct
 /// colors, else full RGBA.
 fn out_depth(sprite: &Sprite) -> OutDepth {
+    // A declared mode wins when it can be honoured; `Rgba` means "pick the
+    // smallest lossless depth", which is the historical behaviour.
+    match sprite.color_mode {
+        crate::sprite::ColorMode::Auto => {}
+        crate::sprite::ColorMode::Rgba => return OutDepth::Rgba,
+        crate::sprite::ColorMode::Grayscale => return OutDepth::Gray,
+        crate::sprite::ColorMode::Indexed => {
+            let mut colors: Vec<Rgba> = vec![Rgba::TRANSPARENT];
+            for p in sprite.cels.iter().flatten().flat_map(|c| &c.pixels) {
+                if p.3 == 0 || colors.contains(p) {
+                    continue;
+                }
+                if colors.len() == 256 {
+                    return auto_depth(sprite);
+                }
+                colors.push(*p);
+            }
+            return OutDepth::Indexed(colors);
+        }
+    }
+    auto_depth(sprite)
+}
+
+fn auto_depth(sprite: &Sprite) -> OutDepth {
     let mut all_gray = true;
     let mut colors: Vec<Rgba> = vec![Rgba::TRANSPARENT];
     for p in sprite.cels.iter().flatten().flat_map(|c| &c.pixels) {
@@ -98,8 +122,8 @@ fn write_header(out: &mut Vec<u8>, s: &Sprite, depth: &OutDepth) {
         h[28] = 0; // transparent color index
         h[32..34].copy_from_slice(&(pal.len() as u16).to_le_bytes());
     }
-    h[34] = 1; // pixel width
-    h[35] = 1; // pixel height
+    h[34] = s.pixel_aspect.0.clamp(1, 255) as u8; // pixel width
+    h[35] = s.pixel_aspect.1.clamp(1, 255) as u8; // pixel height
     out.extend_from_slice(&h);
 }
 
@@ -451,6 +475,11 @@ pub fn load(path: &Path) -> Result<Sprite> {
     if depth != 8 && depth != 16 && depth != 32 {
         bail!("unsupported color depth {depth}");
     }
+    // Pixel ratio: two bytes, 0 meaning "not set".
+    let pixel_aspect = match (data[34], data[35]) {
+        (0, _) | (_, 0) => None,
+        (x, y) => Some((x as u16, y as u16)),
+    };
 
     let mut im = Import {
         depth,
@@ -551,6 +580,13 @@ pub fn load(path: &Path) -> Result<Sprite> {
         frames,
         cels,
         tags: im.tags,
+        color_mode: match depth {
+            32 => crate::sprite::ColorMode::Rgba,
+            8 => crate::sprite::ColorMode::Indexed,
+            _ => crate::sprite::ColorMode::Grayscale,
+        },
+        pixel_aspect: pixel_aspect.unwrap_or((1, 1)),
+        grid: (0, 0),
     };
     sprite.normalize_levels();
     sprite.clamp_tags();
@@ -772,6 +808,35 @@ fn u32_at(d: &[u8], i: usize) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn color_mode_and_pixel_ratio_round_trip_through_ase() {
+        use crate::sprite::ColorMode;
+        let dir = std::env::temp_dir().join(format!("vixel-ase-mode-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        for mode in [ColorMode::Rgba, ColorMode::Grayscale, ColorMode::Indexed] {
+            let mut s = Sprite::new(4, 4);
+            for y in 0..4 {
+                for x in 0..4 {
+                    s.set(0, 0, x, y, Rgba::rgb(10 * x as u8, 20, 200));
+                }
+            }
+            s.color_mode = mode;
+            s.pixel_aspect = (2, 1);
+            let path = dir.join(format!("{}.ase", mode.name()));
+            save(&s, &path).expect("save");
+            let back = self::super::load(&path).expect("load");
+            assert_eq!(back.pixel_aspect, (2, 1), "{}", mode.name());
+            assert_eq!(
+                back.color_mode,
+                mode,
+                "{} came back as {}",
+                mode.name(),
+                back.color_mode.name()
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn round_trips_rgba_sprite() {

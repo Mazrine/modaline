@@ -133,6 +133,59 @@ pub struct Sprite {
     pub cels: Vec<Vec<Cel>>,
     #[serde(default)]
     pub tags: Vec<Tag>,
+    /// Declared colour mode. `Rgba` keeps colour; `Grayscale` is applied to the
+    /// pixels when chosen, and `Indexed` asks the exporter for an indexed file.
+    #[serde(default)]
+    pub color_mode: ColorMode,
+    /// Pixel aspect ratio (width:height). Aseprite calls it the pixel ratio;
+    /// it is metadata, the pixels are not resampled.
+    #[serde(default = "unit_pixel_ratio")]
+    pub pixel_aspect: (u16, u16),
+    /// Sprite grid bounds (0,0 = none), the same thing Aseprite's sprite
+    /// properties dialog shows.
+    #[serde(default)]
+    pub grid: (u32, u32),
+}
+
+/// What an indexed/gray file means for this sprite.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ColorMode {
+    /// Smallest lossless depth for what the sprite actually contains. This is
+    /// what an export has always done, and the default.
+    #[default]
+    Auto,
+    /// Force 32-bit RGBA.
+    Rgba,
+    /// Force 16-bit grayscale (and convert the pixels when the mode is chosen).
+    Grayscale,
+    /// Force an 8-bit indexed file.
+    Indexed,
+}
+
+impl ColorMode {
+    pub fn name(self) -> &'static str {
+        match self {
+            ColorMode::Auto => "auto",
+            ColorMode::Rgba => "rgba",
+            ColorMode::Grayscale => "grayscale",
+            ColorMode::Indexed => "indexed",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<ColorMode> {
+        Some(match s.to_lowercase().as_str() {
+            "auto" | "default" => ColorMode::Auto,
+            "rgba" | "rgb" | "color" | "colour" | "32" => ColorMode::Rgba,
+            "gray" | "grey" | "grayscale" | "greyscale" | "16" => ColorMode::Grayscale,
+            "indexed" | "index" | "8" => ColorMode::Indexed,
+            _ => return None,
+        })
+    }
+}
+
+fn unit_pixel_ratio() -> (u16, u16) {
+    (1, 1)
 }
 
 impl Sprite {
@@ -151,7 +204,25 @@ impl Sprite {
             frames,
             cels,
             tags: Vec::new(),
+            color_mode: ColorMode::Auto,
+            pixel_aspect: (1, 1),
+            grid: (0, 0),
         }
+    }
+
+    /// Convert every pixel to its luminance, keeping alpha. Colour mode
+    /// `Grayscale` is a real edit, not just a label.
+    pub fn to_grayscale(&mut self) {
+        for cel in self.cels.iter_mut().flatten() {
+            for p in cel.pixels.iter_mut() {
+                if p.3 == 0 {
+                    continue;
+                }
+                let l = ((p.0 as u32 * 299 + p.1 as u32 * 587 + p.2 as u32 * 114) / 1000) as u8;
+                *p = Rgba(l, l, l, p.3);
+            }
+        }
+        self.color_mode = ColorMode::Grayscale;
     }
 
     pub fn area(&self) -> usize {

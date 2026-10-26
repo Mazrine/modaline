@@ -598,6 +598,28 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "usage: :wandall on|off".into();
             }
         }
+        "mode" | "colormode" => match arg.and_then(crate::sprite::ColorMode::parse) {
+            Some(m) => editor.set_color_mode(m),
+            None => editor.msg = "usage: :mode auto|rgba|grayscale|indexed".into(),
+        },
+        "aspect" | "ratio" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            let x = it.next().and_then(|v| v.parse::<u16>().ok());
+            let y = it.next().and_then(|v| v.parse::<u16>().ok());
+            match (x, y) {
+                (Some(x), Some(y)) => editor.set_pixel_aspect(x, y),
+                _ => editor.msg = "usage: :aspect <x> <y>".into(),
+            }
+        }
+        "sgrid" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            let w = it.next().and_then(|v| v.parse::<u32>().ok());
+            let h = it.next().and_then(|v| v.parse::<u32>().ok());
+            match (w, h) {
+                (Some(w), Some(h)) => editor.set_sprite_grid(w, h),
+                _ => editor.msg = "usage: :sgrid <w> <h>".into(),
+            }
+        }
         "rotate" => match arg.and_then(|v| v.parse::<f32>().ok()) {
             Some(deg) => editor.free_transform(deg, 1.0, 1.0, 0.0),
             None => editor.msg = "usage: :rotate <degrees>".into(),
