@@ -190,7 +190,7 @@ defaults. Keymap customization is not implemented (see ROADMAP).
 
 ## Test status
 
-`cargo test` → **71 tests green** (68 lib + 3 bin); `cargo clippy --all-targets`
+`cargo test` → **72 tests green** (68 lib + 4 bin); `cargo clippy --all-targets`
 → clean; `cargo build --features wgpu` → clean. Launches headlessly under Xvfb
 with both renderers (1280x800, software EGL for wgpu); on NixOS the plain
 loader needs the wayland/xkbcommon libs, so `steam-run` or the LD_LIBRARY_PATH

@@ -5,7 +5,7 @@
 
 ## Status snapshot
 
-- `cargo test` → **71 tests green** (68 lib + 3 bin)
+- `cargo test` → **72 tests green** (68 lib + 4 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
@@ -138,4 +138,4 @@ cover: draw/erase, `v` marquee → `m` move, `w` wand, `L` lasso drag, `P` polyg
     mode, pixel ratio, grid) with .ase round trips for the depth and the ratio;
     slice export; sRGB/linear profile conversion; config persistence; wgpu
     behind a feature flag. Deferred with reasons in `docs/ROADMAP.md`: ICC
-    embedding, custom shaders, keymap customization. **+33 tests.**
+    embedding, custom shaders, keymap customization. **+34 tests.**
