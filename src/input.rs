@@ -631,17 +631,33 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "export" => {
             if let Some(p) = arg {
                 let path = PathBuf::from(p);
+                // `.png` = this frame, `.ase` = the whole sprite, a bare stem =
+                // the animation bundle (sheet + gif + json), which is what a
+                // paperdoll pipeline actually needs.
                 let res = if io::is_ase(&path) {
-                    ase::save(&editor.sprite, &path)
-                } else {
+                    ase::save(&editor.sprite, &path).map(|_| "exported".to_string())
+                } else if io::is_png(&path) {
                     io::export_png(&editor.sprite, editor.active_frame, &path)
+                        .map(|_| "exported".to_string())
+                } else {
+                    io::export_animation(&editor.sprite, &path, None).map(|paths| {
+                        format!(
+                            "exported {}",
+                            paths
+                                .iter()
+                                .filter_map(|p| p.file_name())
+                                .map(|n| n.to_string_lossy().into_owned())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    })
                 };
                 match res {
-                    Ok(()) => editor.msg = "exported".into(),
+                    Ok(what) => editor.msg = what,
                     Err(err) => editor.msg = format!("export failed: {err}"),
                 }
             } else {
-                editor.msg = "usage: :export <file.png|file.ase>".into();
+                editor.msg = "usage: :export <stem | file.png | file.ase>".into();
             }
         }
         "import" => {

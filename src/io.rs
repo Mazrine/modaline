@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
@@ -45,8 +45,8 @@ pub fn load_any(path: &Path) -> Result<Sprite> {
     }
 }
 
-/// Export the composite of one frame as a PNG.
-pub fn export_png(sprite: &Sprite, frame: usize, path: &Path) -> Result<()> {
+/// The composite of one frame as an image, the unit every export shares.
+fn frame_image(sprite: &Sprite, frame: usize) -> image::RgbaImage {
     let (w, h) = (sprite.width, sprite.height);
     let comp = sprite.composite(frame);
     let mut img = image::RgbaImage::new(w, h);
@@ -56,9 +56,131 @@ pub fn export_png(sprite: &Sprite, frame: usize, path: &Path) -> Result<()> {
             img.put_pixel(x, y, image::Rgba([c.0, c.1, c.2, c.3]));
         }
     }
-    img.save(path)
+    img
+}
+
+/// Export the composite of one frame as a PNG.
+pub fn export_png(sprite: &Sprite, frame: usize, path: &Path) -> Result<()> {
+    frame_image(sprite, frame)
+        .save(path)
         .with_context(|| format!("save {}", path.display()))?;
     Ok(())
+}
+
+/// One frame's cell in the sheet, as written to `meta.json`.
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+pub struct Sheet {
+    pub frame_w: u32,
+    pub frame_h: u32,
+    pub columns: u32,
+    pub rows: u32,
+}
+
+/// Sheet columns for `frames` cells: roughly a 3:2 grid, so 24 frames pack 6x4
+/// rather than 5x5 — a phone-shaped sheet reads better on screen and in a
+/// sprite strip.
+pub fn columns_for(frames: usize) -> u32 {
+    if frames <= 1 {
+        return 1;
+    }
+    ((frames as f32 * 1.5).sqrt().round() as u32).clamp(1, frames as u32)
+}
+
+/// Write every frame into one grid PNG. `columns` defaults to `columns_for`.
+pub fn export_sheet(sprite: &Sprite, path: &Path, columns: Option<u32>) -> Result<Sheet> {
+    let n = sprite.frames.len().max(1);
+    let columns = columns.unwrap_or_else(|| columns_for(n)).clamp(1, n as u32);
+    let rows = (n as u32).div_ceil(columns);
+    let (fw, fh) = (sprite.width, sprite.height);
+    let mut sheet = image::RgbaImage::new(fw * columns, fh * rows);
+    for frame in 0..n {
+        let cell = frame_image(sprite, frame);
+        let (ox, oy) = (frame as u32 % columns * fw, frame as u32 / columns * fh);
+        image::imageops::overlay(&mut sheet, &cell, ox as i64, oy as i64);
+    }
+    sheet
+        .save(path)
+        .with_context(|| format!("save {}", path.display()))?;
+    Ok(Sheet {
+        frame_w: fw,
+        frame_h: fh,
+        columns,
+        rows,
+    })
+}
+
+/// Write the frames as a looping GIF, honouring each frame's duration.
+pub fn export_gif(sprite: &Sprite, path: &Path) -> Result<()> {
+    use image::codecs::gif::{GifEncoder, Repeat};
+    let file = std::fs::File::create(path).with_context(|| format!("create {}", path.display()))?;
+    let mut encoder = GifEncoder::new_with_speed(std::io::BufWriter::new(file), 10);
+    encoder.set_repeat(Repeat::Infinite).context("gif repeat")?;
+    for frame in 0..sprite.frames.len().max(1) {
+        let delay = sprite
+            .frames
+            .get(frame)
+            .map_or(100, |f| f.duration_ms)
+            .max(10) as u32;
+        encoder
+            .encode_frame(image::Frame::from_parts(
+                frame_image(sprite, frame),
+                0,
+                0,
+                image::Delay::from_numer_denom_ms(delay, 1),
+            ))
+            .with_context(|| format!("gif frame {frame}"))?;
+    }
+    Ok(())
+}
+
+/// Write `meta.json`: enough for another tool (or anything else) to slice the sheet
+/// and replay the timing without guessing.
+pub fn export_meta(sprite: &Sprite, sheet: Sheet, image: &str, path: &Path) -> Result<()> {
+    let total: u32 = sprite
+        .frames
+        .iter()
+        .map(|f| f.duration_ms.max(10) as u32)
+        .sum::<u32>()
+        .max(1);
+    let fps = sprite.frames.len() as f32 * 1000.0 / total as f32;
+    let meta = serde_json::json!({
+        "image": image,
+        "frame_w": sheet.frame_w,
+        "frame_h": sheet.frame_h,
+        "columns": sheet.columns,
+        "rows": sheet.rows,
+        "fps": (fps * 100.0).round() / 100.0,
+        "frames": sprite.frames,
+    });
+    let text = serde_json::to_string_pretty(&meta).context("serialize meta")?;
+    std::fs::write(path, text).with_context(|| format!("write {}", path.display()))?;
+    Ok(())
+}
+
+/// Export an animation: `<stem>.sheet.png`, `<stem>.gif`, `<stem>.json`.
+pub fn export_animation(
+    sprite: &Sprite,
+    stem: &Path,
+    columns: Option<u32>,
+) -> Result<Vec<PathBuf>> {
+    let sheet_path = with_suffix(stem, ".sheet.png");
+    let gif_path = with_suffix(stem, ".gif");
+    let meta_path = with_suffix(stem, ".json");
+    if let Some(dir) = stem.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
+    }
+    let sheet = export_sheet(sprite, &sheet_path, columns)?;
+    export_gif(sprite, &gif_path)?;
+    let image_name = sheet_path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    export_meta(sprite, sheet, &image_name, &meta_path)?;
+    Ok(vec![sheet_path, gif_path, meta_path])
+}
+
+fn with_suffix(stem: &Path, suffix: &str) -> PathBuf {
+    PathBuf::from(format!("{}{suffix}", stem.display()))
 }
 
 /// Import a PNG as a fresh single-layer, single-frame sprite.
@@ -93,6 +215,98 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         assert_eq!((loaded.width, loaded.height), (2, 2));
         assert_eq!(loaded.get(0, 0, 1, 1), Rgba(12, 34, 56, 255));
+    }
+
+    /// A sprite with `n` frames, each filled with its own flat colour, so a
+    /// sliced sheet cell can be told from its neighbours by colour alone.
+    fn animation(n: usize) -> Sprite {
+        let mut s = Sprite::new(3, 2);
+        for frame in 1..n {
+            s.add_frame_after(s.frames.len() - 1);
+            s.frames[frame].duration_ms = 40 + frame as u16;
+        }
+        for frame in 0..n {
+            let c = Rgba(frame as u8 * 9 + 5, 40, 200, 255);
+            for y in 0..2 {
+                for x in 0..3 {
+                    s.set(0, frame, x, y, c);
+                }
+            }
+        }
+        s
+    }
+
+    #[test]
+    fn a_twenty_four_frame_sheet_is_a_six_by_four_grid() {
+        let s = animation(24);
+        let path = std::env::temp_dir().join("vixel_sheet_test.sheet.png");
+        let sheet = export_sheet(&s, &path, None).unwrap();
+        assert_eq!((sheet.columns, sheet.rows), (6, 4));
+        assert_eq!((sheet.frame_w, sheet.frame_h), (3, 2));
+
+        // Every cell is the frame it claims to be: slicing the sheet must give
+        // back the composites pixel for pixel, which is the G6 gate.
+        let img = image::open(&path).unwrap().to_rgba8();
+        assert_eq!(img.dimensions(), (18, 8));
+        for frame in 0..24u32 {
+            let (ox, oy) = (frame % 6 * 3, frame / 6 * 2);
+            let comp = s.composite(frame as usize);
+            for y in 0..2 {
+                for x in 0..3 {
+                    let want = comp[(y * 3 + x) as usize];
+                    let got = img.get_pixel(ox + x, oy + y);
+                    assert_eq!(
+                        (got[0], got[1], got[2], got[3]),
+                        (want.0, want.1, want.2, want.3)
+                    );
+                }
+            }
+        }
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn the_meta_describes_the_sheet_well_enough_to_slice_it() {
+        let s = animation(7);
+        let dir = std::env::temp_dir().join("vixel_meta_test");
+        let stem = dir.join("idle");
+        let paths = export_animation(&s, &stem, None).unwrap();
+        assert_eq!(paths.len(), 3);
+        let meta: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&paths[2]).unwrap()).unwrap();
+
+        assert_eq!(meta["image"], "idle.sheet.png");
+        assert_eq!(meta["frame_w"], 3);
+        assert_eq!(meta["frame_h"], 2);
+        assert_eq!(meta["columns"], 3); // 7 frames -> 3x3, not 1x7
+        assert_eq!(meta["rows"], 3);
+        assert_eq!(meta["frames"].as_array().unwrap().len(), 7);
+        assert_eq!(meta["frames"][3]["duration_ms"], 43);
+        assert!(meta["fps"].as_f64().unwrap() > 0.0);
+        for p in &paths {
+            let _ = std::fs::remove_file(p);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_gif_holds_every_frame_and_loops() {
+        use image::AnimationDecoder;
+        let s = animation(5);
+        let path = std::env::temp_dir().join("vixel_gif_test.gif");
+        export_gif(&s, &path).unwrap();
+        let decoder = image::codecs::gif::GifDecoder::new(std::io::BufReader::new(
+            std::fs::File::open(&path).unwrap(),
+        ))
+        .unwrap();
+        let frames = decoder.into_frames().collect_frames().unwrap();
+        assert_eq!(frames.len(), 5);
+        // 40 + frame ms, in hundredths of a second.
+        // GIF timing is in centiseconds, so 42 ms lands within one tick of 40.
+        let (n, d) = frames[2].delay().numer_denom_ms();
+        let ms = n as f64 / d.max(1) as f64;
+        assert!((30.0..=50.0).contains(&ms), "{ms} ms");
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

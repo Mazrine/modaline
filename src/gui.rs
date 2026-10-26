@@ -1064,5 +1064,5 @@ const HELP: &[&str] = &[
     "  :fliph   :flipv   :rot90   :sym none|horizontal|vertical|both",
     "  :wand <0-255>   :wandall on|off   :selop replace|add|subtract|intersect",
     "  :grad linear|radial   :contour",
-    "  :export out.png|.ase   :import in.png   :open proj.vpx|.ase|.png",
+    "  :export out.png|.ase|stem   :import in.png   :open proj.vpx|.ase|.png",
 ];
