@@ -5,11 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **38 tests green**
+- `cargo test` → **71 tests green** (68 lib + 3 bin)
 - `cargo clippy --all-targets` → **clean**
+- `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **frame tags & reorder**.
+- Last completed batch: **P1-P3** (see batch 16).
 
 ## How to resume
 
@@ -129,3 +130,12 @@ cover: draw/erase, `v` marquee → `m` move, `w` wand, `L` lasso drag, `P` polyg
 + `Enter`, `s` symmetry painting, `z` gradient, `a` spray, `q` shade, `n` blur,
 `C` contour, `:fliph` with a selection, `Ctrl-c` in another app → `Ctrl-v` here,
 `:w x.ase` then reopen.
+16. **P1-P3 batch** — onion-skin settings (count/opacity/tints) and loop +
+    ping-pong playback; layer drag-to-reorder; bitmap-font text tool; palette
+    hex/HSV entry and swatch reordering; radial symmetry with a movable centre;
+    design grid + snap; selection shape ops (expand/contract/border/feather/
+    invert); eight filters; free rotate/scale/skew; sprite properties (colour
+    mode, pixel ratio, grid) with .ase round trips for the depth and the ratio;
+    slice export; sRGB/linear profile conversion; config persistence; wgpu
+    behind a feature flag. Deferred with reasons in `docs/ROADMAP.md`: ICC
+    embedding, custom shaders, keymap customization. **+33 tests.**
