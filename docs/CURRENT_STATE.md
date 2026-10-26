@@ -190,8 +190,13 @@ defaults. Keymap customization is not implemented (see ROADMAP).
 
 ## Test status
 
-`cargo test` → **72 tests green** (68 lib + 4 bin); `cargo clippy --all-targets`
-→ clean; `cargo build --features wgpu` → clean. Launches headlessly under Xvfb
-with both renderers (1280x800, software EGL for wgpu); on NixOS the plain
-loader needs the wayland/xkbcommon libs, so `steam-run` or the LD_LIBRARY_PATH
-recipe is still the way in.
+`cargo test` → **73 tests green** (68 lib + 5 bin); `cargo clippy --all-targets`
+→ clean; `cargo build --features wgpu` → clean. On NixOS the plain loader needs
+the wayland/xkbcommon libs, so `steam-run` or the LD_LIBRARY_PATH recipe is
+still the way in.
+
+The GUI itself is now functionally tested headlessly — `docs/TESTING.md` has the
+rig (Xvfb + twm, because without a window manager nothing gets keyboard focus)
+and the ten checks of the 2026-10-26 pass: text stamp, radial symmetry, rotate,
+outline, selection contract, slice export, layer drag, onion ghosts, playback,
+and the renderer config round trip with both builds.
