@@ -297,17 +297,17 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
 
 fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &mut View) {
     ui.horizontal(|ui| {
-        let play_label = if *playing { "⏸" } else { "⏵" };
+        let play_label = if *playing { "pause" } else { "play" };
         if ui.button(play_label).clicked() {
             *playing = !*playing;
         }
-        if ui.button("＋frame").clicked() {
+        if ui.button("+frame").clicked() {
             editor.add_frame();
         }
-        if ui.button("⧉frame").clicked() {
+        if ui.button("dup").clicked() {
             editor.duplicate_frame();
         }
-        if ui.button("－frame").clicked() {
+        if ui.button("-frame").clicked() {
             editor.del_frame();
         }
         ui.separator();
@@ -628,10 +628,10 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
 
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new("Palette").strong());
-        if ui.button("＋fg").clicked() {
+        if ui.button("+fg").clicked() {
             editor.add_palette_color();
         }
-        if ui.button("－").clicked() {
+        if ui.button("-").clicked() {
             editor.remove_palette_color();
         }
     });
@@ -693,29 +693,29 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
 
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new("Layers").strong());
-        if ui.button("↑").clicked() {
+        if ui.button("^").clicked() {
             editor.move_layer_active(-1);
         }
-        if ui.button("↓").clicked() {
+        if ui.button("v").clicked() {
             editor.move_layer_active(1);
         }
-        if ui.button("＋").clicked() {
+        if ui.button("+").clicked() {
             editor.add_layer();
         }
-        if ui.button("－").clicked() {
+        if ui.button("-").clicked() {
             editor.del_layer();
         }
         if ui.button("grp").on_hover_text("new group").clicked() {
             editor.add_group();
         }
         if ui
-            .button("→")
+            .button(">")
             .on_hover_text("indent into group above")
             .clicked()
         {
             editor.indent_layer(1);
         }
-        if ui.button("←").on_hover_text("outdent").clicked() {
+        if ui.button("<").on_hover_text("outdent").clicked() {
             editor.indent_layer(-1);
         }
     });
@@ -1443,6 +1443,7 @@ const HELP: &[&str] = &[
     "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   (free transform)",
     "  :mode auto|rgba|grayscale|indexed   :aspect <x> <y>   :sgrid <w> <h>",
     "  :profile srgb|linear   (converts the pixels; the palette follows)",
+    "  :renderer glow|wgpu    (wgpu also needs a build with --features wgpu)",
     "  :slices <dir> [cols rows]   (one png per grid cell + a slices.json)",
     "  :grad linear|radial   :contour",
     "  :export out.png|.ase|stem   :import in.png   :open proj.vpx|.ase|.png",

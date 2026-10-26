@@ -598,6 +598,22 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "usage: :wandall on|off".into();
             }
         }
+        "renderer" => {
+            let name = arg.unwrap_or("").to_lowercase();
+            match name.as_str() {
+                "glow" | "opengl" | "gl" => {
+                    editor.msg = "renderer: glow".into();
+                }
+                "wgpu" => {
+                    editor.msg = "renderer: wgpu (needs a build with --features wgpu; restart vixel with --wgpu)".into();
+                }
+                _ => {
+                    editor.msg =
+                        "usage: :renderer glow|wgpu   (wgpu also needs --features wgpu at build time)"
+                            .into()
+                }
+            }
+        }
         "profile" | "colorspace" => match arg.and_then(crate::sprite::ColorProfile::parse) {
             Some(p) => editor.set_color_profile(p),
             None => editor.msg = "usage: :profile srgb|linear".into(),

@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2024"
 description = "A keyboard-first, vim-style pixel art editor with Aseprite-grade rendering"
 
+[features]
+default = []
+# Software fallbacks keep the default build small; `wgpu` swaps the renderer
+# behind the same TextureHandle-only drawing (see the `renderer:` key).
+wgpu = ["eframe/wgpu"]
+
 [dependencies]
 # GUI (OpenGL/glow now; swap to wgpu later by enabling the `wgpu` feature and
 # setting `NativeOptions::renderer = Renderer::Wgpu` — no render-code changes,
