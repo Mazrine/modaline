@@ -199,6 +199,11 @@ pub struct Editor {
     pub wand_all_layers: bool,
     /// Show the sprite tiled 3x3 and wrap the cursor across its edges.
     pub tile_mode: bool,
+    /// Playback: wrap at the end of the range, bounce instead of wrapping, and
+    /// the current direction for the bounce.
+    pub play_loop: bool,
+    pub play_pingpong: bool,
+    pub play_dir: i32,
     pub undo: Vec<UndoStep>,
     pub redo: Vec<UndoStep>,
     pub stroke: Option<UndoStep>,
@@ -250,6 +255,9 @@ impl Editor {
             wand_tolerance: 0,
             wand_all_layers: false,
             tile_mode: false,
+            play_loop: true,
+            play_pingpong: false,
+            play_dir: 1,
             undo: Vec::new(),
             redo: Vec::new(),
             stroke: None,
@@ -924,14 +932,37 @@ impl Editor {
         }
     }
 
-    /// Step to the next playback frame, wrapping inside the active tag.
-    pub fn advance_frame(&mut self) {
+    /// Step to the next playback frame inside the active tag. Returns whether
+    /// playback should continue: a loop-less clip stops at its last frame, and
+    /// a ping-pong clip reverses at both ends.
+    pub fn advance_frame(&mut self) -> bool {
         let (a, b) = self.play_range();
-        self.active_frame = if self.active_frame < a || self.active_frame >= b {
-            a
+        if b <= a {
+            return self.play_loop;
+        }
+        if self.play_pingpong {
+            // `b` is the last frame, so the turn happens when the step would
+            // leave the range, and the endpoint is shown once per pass.
+            let mut f = self.active_frame as i32 + self.play_dir;
+            if f > b as i32 {
+                self.play_dir = -1;
+                f = b as i32 - 1;
+            } else if f < a as i32 {
+                self.play_dir = 1;
+                f = a as i32 + 1;
+            }
+            self.active_frame = f.clamp(a as i32, b as i32) as usize;
+            return true;
+        }
+        if self.active_frame >= b || self.active_frame < a {
+            if self.play_loop {
+                self.active_frame = a;
+            }
+            self.play_loop
         } else {
-            self.active_frame + 1
-        };
+            self.active_frame += 1;
+            true
+        }
     }
 
     pub fn resize(&mut self, w: u32, h: u32) {
@@ -1285,6 +1316,19 @@ impl Editor {
         if let Some(at) = self.sprite.move_layer(from, to) {
             self.active_layer = at;
             self.dirty = true;
+        }
+    }
+
+    /// Move a layer (with its subtree) so it lands at `to`. Drag and drop from
+    /// the layer panel; `move_layer_active` is the keyboard path of the same.
+    pub fn move_layer_to(&mut self, from: usize, to: usize) {
+        if from == to {
+            return;
+        }
+        if let Some(at) = self.sprite.move_layer(from, to) {
+            self.active_layer = at;
+            self.dirty = true;
+            self.msg = format!("layer {from} -> {at}");
         }
     }
 
@@ -1888,6 +1932,58 @@ mod tests {
         e.del_tag(Some("walk"));
         assert_eq!(e.play_range(), (0, 2));
         assert!(e.active_tag.is_none());
+    }
+
+    #[test]
+    fn layers_move_by_drag() {
+        let mut e = Editor::new(1, 1);
+        e.add_layer();
+        e.add_layer();
+        for (i, name) in ["a", "b", "c"].iter().enumerate() {
+            e.sprite.layers[i].name = name.to_string();
+        }
+        // Dropping a row onto a later row lands it after that row.
+        e.move_layer_to(0, 2);
+        assert_eq!(names(&e), ["b", "c", "a"]);
+        assert_eq!(e.active_layer, 2);
+        // Dropping onto an earlier row lands it at that row.
+        e.move_layer_to(2, 0);
+        assert_eq!(names(&e), ["a", "b", "c"]);
+        assert_eq!(e.active_layer, 0);
+    }
+
+    fn names(e: &Editor) -> Vec<&str> {
+        e.sprite.layers.iter().map(|l| l.name.as_str()).collect()
+    }
+
+    #[test]
+    fn playback_can_stop_or_bounce() {
+        let mut e = Editor::new(1, 1);
+        e.add_frame();
+        e.add_frame(); // 3 frames: 0,1,2
+        assert_eq!(e.play_range(), (0, 2));
+
+        // Loop (the default) wraps; no-loop stops on the last frame.
+        e.play_loop = false;
+        e.active_frame = 1;
+        assert!(e.advance_frame());
+        assert_eq!(e.active_frame, 2);
+        assert!(!e.advance_frame(), "a loop-less clip ends");
+        assert_eq!(e.active_frame, 2);
+
+        // Ping-pong: 2 is the last frame, so the next step goes back to 1.
+        e.play_pingpong = true;
+        e.play_dir = 1;
+        e.active_frame = 1;
+        assert!(e.advance_frame());
+        assert_eq!(e.active_frame, 2);
+        assert!(e.advance_frame());
+        assert_eq!(e.active_frame, 1, "bounces off the end");
+        assert_eq!(e.play_dir, -1);
+        e.active_frame = 0;
+        assert!(e.advance_frame());
+        assert_eq!(e.active_frame, 1, "bounces off the start");
+        assert_eq!(e.play_dir, 1);
     }
 
     #[test]

@@ -4,6 +4,29 @@ use crate::color::Rgba;
 use crate::editor::{Editor, Mode, SelectionOp, Shape, Symmetry, Tool};
 use crate::sprite::{BlendMode, ellipse_points, line_points, rect_points};
 
+/// Onion-skin settings: how many frames each side, how strong, and the two
+/// tints. Aseprite's default is one red behind and one green ahead.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Onion {
+    pub enabled: bool,
+    pub count: u8,
+    pub opacity: u8,
+    pub prev: [u8; 3],
+    pub next: [u8; 3],
+}
+
+impl Default for Onion {
+    fn default() -> Self {
+        Onion {
+            enabled: true,
+            count: 1,
+            opacity: 110,
+            prev: [255, 90, 90],
+            next: [90, 210, 90],
+        }
+    }
+}
+
 /// The canvas view: zoom (screen px per sprite px) and pan (screen pos of the
 /// sprite's top-left pixel).
 pub struct View {
@@ -11,7 +34,7 @@ pub struct View {
     pub pan: Pos2,
     pub initialized: bool,
     pub show_grid: bool,
-    pub onion: bool,
+    pub onion: Onion,
     /// Frame index being dragged in the timeline.
     drag_frame: Option<usize>,
     /// Cached per-frame timeline thumbnails (rebuilt each UI pass).
@@ -25,7 +48,7 @@ impl View {
             pan: Pos2::ZERO,
             initialized: false,
             show_grid: true,
-            onion: true,
+            onion: Onion::default(),
             drag_frame: None,
             thumbs: Vec::new(),
         }
@@ -337,7 +360,25 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
 
 fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.checkbox(&mut view.show_grid, "pixel grid");
-    ui.checkbox(&mut view.onion, "onion skin");
+    ui.checkbox(&mut view.onion.enabled, "onion skin");
+    if view.onion.enabled {
+        ui.horizontal(|ui| {
+            ui.label("count");
+            ui.add(egui::Slider::new(&mut view.onion.count, 1..=3));
+            ui.label("opacity");
+            ui.add(egui::Slider::new(&mut view.onion.opacity, 0..=255));
+        });
+        ui.horizontal(|ui| {
+            ui.label("before");
+            let _ = ui.color_edit_button_srgb(&mut view.onion.prev);
+            ui.label("after");
+            let _ = ui.color_edit_button_srgb(&mut view.onion.next);
+        });
+    }
+    ui.horizontal(|ui| {
+        ui.checkbox(&mut editor.play_loop, "loop playback");
+        ui.checkbox(&mut editor.play_pingpong, "ping-pong");
+    });
     ui.checkbox(&mut editor.tile_mode, "tile mode (3x3, wraps)");
     ui.horizontal(|ui| {
         ui.label("wand tol");
@@ -445,43 +486,64 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     let count = editor.sprite.layers.len();
     let mut selected = editor.active_layer;
     let mut toggle_mask = None;
+    let mut drop_to: Option<(usize, usize)> = None;
     egui::ScrollArea::vertical()
         .id_salt("layers")
         .show(ui, |ui| {
             for i in 0..count {
-                let layer = &mut editor.sprite.layers[i];
-                let indent = layer.child_level as f32 * 14.0;
-                ui.horizontal(|ui| {
-                    ui.add_space(indent);
-                    let label = if layer.group {
-                        format!("▾ {}", layer.name)
-                    } else {
-                        layer.name.clone()
-                    };
-                    if ui.selectable_label(i == selected, label).clicked() {
-                        selected = i;
-                    }
-                    ui.checkbox(&mut layer.visible, "").on_hover_text("visible");
-                    ui.checkbox(&mut layer.editable, "edit")
-                        .on_hover_text("editable (lock)");
-                    if !layer.group
-                        && ui
-                            .selectable_label(layer.mask.is_some(), "M")
-                            .on_hover_text(
-                                "alpha mask: from selection, or full; click to add/remove",
-                            )
-                            .clicked()
-                    {
-                        toggle_mask = Some(i);
-                    }
+                // Each row is a drag source carrying its own index, and every
+                // row is a drop target: drag a layer onto another to move it
+                // (with its children) in front of that one.
+                let source = ui.dnd_drag_source(egui::Id::unique(("layer", i)), i, |ui| {
+                    let layer = &mut editor.sprite.layers[i];
+                    let indent = layer.child_level as f32 * 14.0;
+                    ui.horizontal(|ui| {
+                        ui.add_space(indent);
+                        let label = if layer.group {
+                            format!("▾ {}", layer.name)
+                        } else {
+                            layer.name.clone()
+                        };
+                        if ui.selectable_label(i == selected, label).clicked() {
+                            selected = i;
+                        }
+                        ui.checkbox(&mut layer.visible, "").on_hover_text("visible");
+                        ui.checkbox(&mut layer.editable, "edit")
+                            .on_hover_text("editable (lock)");
+                        if !layer.group
+                            && ui
+                                .selectable_label(layer.mask.is_some(), "M")
+                                .on_hover_text(
+                                    "alpha mask: from selection, or full; click to add/remove",
+                                )
+                                .clicked()
+                        {
+                            toggle_mask = Some(i);
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.add_space(indent);
+                        blend_combo(ui, i, &mut layer.blend);
+                        ui.add(egui::Slider::new(&mut layer.opacity, 0..=255).text("op"));
+                    });
                 });
-                ui.horizontal(|ui| {
-                    ui.add_space(indent);
-                    blend_combo(ui, i, &mut layer.blend);
-                    ui.add(egui::Slider::new(&mut layer.opacity, 0..=255).text("op"));
-                });
+                let resp = source.response;
+                if let Some(payload) = resp.dnd_hover_payload::<usize>() {
+                    ui.painter().rect_stroke(
+                        resp.rect,
+                        2.0,
+                        Stroke::new(1.0, Color32::from_rgb(120, 190, 255)),
+                        StrokeKind::Inside,
+                    );
+                    if resp.dnd_release_payload::<usize>().is_some() {
+                        drop_to = Some((*payload, i));
+                    }
+                }
             }
         });
+    if let Some((from, to)) = drop_to {
+        editor.move_layer_to(from, to);
+    }
     if let Some(i) = toggle_mask {
         editor.active_layer = i;
         if editor.sprite.layers[i].mask.is_some() {
@@ -576,24 +638,32 @@ fn canvas(
         }
     }
 
-    if view.onion && editor.sprite.frames.len() > 1 {
-        let n = editor.sprite.frames.len();
-        let prev = (editor.active_frame + n - 1) % n;
-        let next = (editor.active_frame + 1) % n;
-        upload(ui, onion_prev, "onion_prev", frame_composite(editor, prev));
-        upload(ui, onion_next, "onion_next", frame_composite(editor, next));
-        ui.painter().image(
-            onion_prev.as_ref().unwrap().id(),
-            rect,
-            uv,
-            Color32::from_rgba_unmultiplied(255, 90, 90, 110),
-        );
-        ui.painter().image(
-            onion_next.as_ref().unwrap().id(),
-            rect,
-            uv,
-            Color32::from_rgba_unmultiplied(90, 210, 90, 110),
-        );
+    let n = editor.sprite.frames.len();
+    let onion = view.onion;
+    if onion.enabled && n > 1 {
+        // Each step back/forward is dimmer than the one before it, so three
+        // frames of history read as history and not as a crowd.
+        for k in 1..=(onion.count as usize).min(n - 1) {
+            let alpha = (onion.opacity as u32 / k as u32) as u8;
+            let [r, g, b] = onion.prev;
+            let frame = (editor.active_frame + n - k) % n;
+            upload(ui, onion_prev, "onion_prev", frame_composite(editor, frame));
+            ui.painter().image(
+                onion_prev.as_ref().unwrap().id(),
+                rect,
+                uv,
+                Color32::from_rgba_unmultiplied(r, g, b, alpha),
+            );
+            let [r, g, b] = onion.next;
+            let frame = (editor.active_frame + k) % n;
+            upload(ui, onion_next, "onion_next", frame_composite(editor, frame));
+            ui.painter().image(
+                onion_next.as_ref().unwrap().id(),
+                rect,
+                uv,
+                Color32::from_rgba_unmultiplied(r, g, b, alpha),
+            );
+        }
     }
 
     ui.painter().image(tex.id(), rect, uv, Color32::WHITE);
