@@ -210,6 +210,27 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             editor.cycle_selection_op();
         }
 
+        ui.horizontal(|ui| {
+            if ui.small_button("sel+").clicked() {
+                editor.selection_expand(1);
+            }
+            if ui.small_button("sel-").clicked() {
+                editor.selection_contract(1);
+            }
+            if ui.small_button("ring").clicked() {
+                editor.selection_border(1);
+            }
+            if ui.small_button("soft").clicked() {
+                editor.selection_feather(2);
+            }
+            if ui.small_button("inv").clicked() {
+                editor.selection_invert();
+            }
+            if ui.small_button("none").clicked() {
+                editor.selection_none();
+            }
+        });
+
         ui.separator();
         swatch(ui, editor.fg, true);
         swatch(ui, editor.bg, false);
@@ -1282,6 +1303,7 @@ const HELP: &[&str] = &[
     "  :mask add|apply|del   (alpha mask: selection if any, else full)",
     "  :fliph   :flipv   :rot90   :sym none|horizontal|vertical|both",
     "  :wand <0-255>   :wandall on|off   :selop replace|add|subtract|intersect",
+    "  :sel expand|contract|border|feather <n>   :sel invert|none|all",
     "  :grad linear|radial   :contour",
     "  :export out.png|.ase|stem   :import in.png   :open proj.vpx|.ase|.png",
 ];

@@ -1154,6 +1154,156 @@ impl Editor {
         self.select_anchor.is_some() || self.selection.is_some()
     }
 
+    // ---- selection shape ----
+
+    /// The selection as a sprite-sized grid. Shape operations work here rather
+    /// than inside the bbox, because every one of them can grow past it.
+    fn selection_grid(&self) -> Vec<bool> {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let mut g = vec![false; (w * h) as usize];
+        if let Some(sel) = self.current_selection() {
+            for y in 0..sel.h {
+                for x in 0..sel.w {
+                    let (sx, sy) = (sel.x + x, sel.y + y);
+                    if sel.selected(x, y) && sx < w && sy < h {
+                        g[(sy * w + sx) as usize] = true;
+                    }
+                }
+            }
+        }
+        g
+    }
+
+    /// Store a sprite-sized grid back as the tightest bbox selection.
+    fn grid_to_selection(&mut self, g: &[bool]) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0, 0);
+        for y in 0..h {
+            for x in 0..w {
+                if g[(y * w + x) as usize] {
+                    x0 = x0.min(x);
+                    y0 = y0.min(y);
+                    x1 = x1.max(x);
+                    y1 = y1.max(y);
+                }
+            }
+        }
+        if x0 == u32::MAX {
+            self.selection = None;
+            self.select_anchor = None;
+            return;
+        }
+        let (sw, sh) = (x1 - x0 + 1, y1 - y0 + 1);
+        let mut mask = vec![false; (sw * sh) as usize];
+        for y in 0..sh {
+            for x in 0..sw {
+                mask[(y * sw + x) as usize] = g[((y0 + y) * w + x0 + x) as usize];
+            }
+        }
+        self.selection = Some(Selection {
+            x: x0,
+            y: y0,
+            w: sw,
+            h: sh,
+            mask,
+        });
+        self.select_anchor = None;
+    }
+
+    /// Grow the selection by `n` pixels on every side (4-neighbour).
+    pub fn selection_expand(&mut self, n: u32) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let mut g = self.selection_grid();
+        for _ in 0..n.min(64) {
+            g = dilate(&g, w, h);
+        }
+        self.grid_to_selection(&g);
+        self.msg = format!("selection: expand {n}");
+    }
+
+    /// Shrink the selection by `n` pixels. A selection thinner than `2n` goes.
+    pub fn selection_contract(&mut self, n: u32) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let mut g = self.selection_grid();
+        for _ in 0..n.min(64) {
+            g = erode(&g, w, h);
+        }
+        self.grid_to_selection(&g);
+        self.msg = format!("selection: contract {n}");
+    }
+
+    /// Keep only the `n`-pixel ring along the selection's edge.
+    pub fn selection_border(&mut self, n: u32) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let n = n.clamp(1, 64);
+        let mut outer = self.selection_grid();
+        let mut inner = outer.clone();
+        for _ in 0..n {
+            outer = dilate(&outer, w, h);
+            inner = erode(&inner, w, h);
+        }
+        let ring: Vec<bool> = outer
+            .iter()
+            .zip(inner.iter())
+            .map(|(o, i)| *o && !i)
+            .collect();
+        self.grid_to_selection(&ring);
+        self.msg = format!("selection: border {n}");
+    }
+
+    /// Soften the edge. A selection mask is one bit per pixel, so the ramp is a
+    /// dither: a pixel `d` steps inside the edge survives with probability
+    /// `d / n`. Deterministic, so undoing and redoing lands on the same pixels.
+    pub fn selection_feather(&mut self, n: u32) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let n = n.clamp(1, 32);
+        // depth[i] is how many erosions the pixel survives, capped at n.
+        let mut depth = vec![0u32; (w * h) as usize];
+        let mut alive = self.selection_grid();
+        for step in 1..=n {
+            let next = erode(&alive, w, h);
+            for i in 0..depth.len() {
+                if alive[i] && !next[i] {
+                    depth[i] = step;
+                }
+            }
+            alive = next;
+        }
+        let src = self.selection_grid();
+        let mut out = src.clone();
+        for y in 0..h {
+            for x in 0..w {
+                let i = (y * w + x) as usize;
+                if !src[i] {
+                    continue;
+                }
+                let d = depth[i];
+                if d > 0 && d < n {
+                    let hsh = (x.wrapping_mul(374_761_393) ^ y.wrapping_mul(668_265_263)) % n;
+                    if hsh >= d {
+                        out[i] = false;
+                    }
+                }
+            }
+        }
+        self.grid_to_selection(&out);
+        self.msg = format!("selection: feather {n}");
+    }
+
+    /// Everything the selection is not, inside the sprite.
+    pub fn selection_invert(&mut self) {
+        let g = self.selection_grid();
+        let inverted: Vec<bool> = g.iter().map(|v| !v).collect();
+        self.grid_to_selection(&inverted);
+        self.msg = "selection: invert".into();
+    }
+
+    pub fn selection_none(&mut self) {
+        self.selection = None;
+        self.select_anchor = None;
+        self.msg = "selection: none".into();
+    }
+
     /// The selection to operate on: the live marquee while in visual mode, else
     /// the persistent selection (magic wand, etc.).
     pub fn current_selection(&self) -> Option<Selection> {
@@ -1893,8 +2043,102 @@ fn lerp_rgba(a: Rgba, b: Rgba, t: f32) -> Rgba {
     Rgba(l(a.0, b.0), l(a.1, b.1), l(a.2, b.2), l(a.3, b.3))
 }
 
+/// One 4-neighbour dilation step on a sprite-sized grid.
+fn dilate(g: &[bool], w: u32, h: u32) -> Vec<bool> {
+    let mut out = g.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            if !g[(y * w + x) as usize] {
+                continue;
+            }
+            for (dx, dy) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+                let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                if nx >= 0 && ny >= 0 && (nx as u32) < w && (ny as u32) < h {
+                    out[(ny as u32 * w + nx as u32) as usize] = true;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// One 4-neighbour erosion step. The border erodes away.
+fn erode(g: &[bool], w: u32, h: u32) -> Vec<bool> {
+    let mut out = g.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            if !g[(y * w + x) as usize] {
+                continue;
+            }
+            let keep = [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)]
+                .iter()
+                .all(|(dx, dy)| {
+                    let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                    nx >= 0
+                        && ny >= 0
+                        && (nx as u32) < w
+                        && (ny as u32) < h
+                        && g[(ny as u32 * w + nx as u32) as usize]
+                });
+            if !keep {
+                out[(y * w + x) as usize] = false;
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn selection_shape_ops_grow_shrink_ring_and_flip() {
+        let mut e = Editor::new(16, 16);
+        e.selection = Some(Selection::rect(4, 4, 7, 7));
+        e.selection_expand(2);
+        let s = e.selection.clone().expect("expanded");
+        assert_eq!((s.x, s.y, s.w, s.h), (2, 2, 8, 8));
+        // 4-neighbour dilation chamfers the corners; the diamond-ish ring is
+        // 52 px against the 64 of a square.
+        assert_eq!(s.mask.iter().filter(|v| **v).count(), 52);
+
+        e.selection = Some(Selection::rect(4, 4, 7, 7));
+        e.selection_contract(1);
+        let s = e.selection.clone().expect("contracted");
+        assert_eq!((s.x, s.y, s.w, s.h), (5, 5, 2, 2));
+
+        e.selection = Some(Selection::rect(4, 4, 7, 7));
+        e.selection_border(1);
+        let s = e.selection.clone().expect("ring");
+        let n = s.mask.iter().filter(|v| **v).count();
+        // One pixel outside the edge plus the edge itself: 32 (the chamfered
+        // dilated square) minus the 4-pixel interior.
+        assert_eq!(n, 28, "ring width 1: {n}");
+        assert!(!s.contains(5, 5), "the middle is not part of a ring");
+
+        e.selection = Some(Selection::rect(4, 4, 7, 7));
+        e.selection_invert();
+        let s = e.selection.clone().expect("inverted");
+        assert_eq!((s.x, s.y, s.w, s.h), (0, 0, 16, 16));
+        assert_eq!(s.mask.iter().filter(|v| **v).count(), 256 - 16);
+
+        // Feather is a dither ramp: the edge thins out but the core stays.
+        e.selection = Some(Selection::rect(2, 2, 13, 13));
+        e.selection_feather(3);
+        let s = e.selection.clone().expect("feathered");
+        let n = s.mask.iter().filter(|v| **v).count();
+        assert!(n < 144 && n > 60, "feather keeps {n} of 144");
+        assert!(
+            s.contains(8, 8),
+            "the middle of a feathered selection must survive"
+        );
+
+        // Expand past the sprite edge clips instead of panicking.
+        e.selection = Some(Selection::rect(0, 0, 2, 2));
+        e.selection_expand(64);
+        let s = e.selection.clone().expect("expanded to the edge");
+        assert_eq!((s.x, s.y, s.w, s.h), (0, 0, 16, 16));
+    }
+
     use super::*;
 
     fn bundle_dir(tag: &str) -> std::path::PathBuf {

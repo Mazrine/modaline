@@ -598,6 +598,25 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "usage: :wandall on|off".into();
             }
         }
+        "sel" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            let op = it.next().unwrap_or("");
+            let n: u32 = it.next().and_then(|v| v.parse().ok()).unwrap_or(1);
+            match op {
+                "expand" | "grow" => editor.selection_expand(n),
+                "contract" | "shrink" => editor.selection_contract(n),
+                "border" | "ring" => editor.selection_border(n),
+                "feather" | "soft" => editor.selection_feather(n),
+                "invert" | "inv" => editor.selection_invert(),
+                "none" | "off" => editor.selection_none(),
+                "all" => editor.select_all(),
+                _ => {
+                    editor.msg =
+                        "usage: :sel expand|contract|border|feather <n> | invert | none | all"
+                            .into()
+                }
+            }
+        }
         "selop" | "selection" => {
             if let Some(name) = arg
                 && editor.set_selection_op(name)
