@@ -34,6 +34,8 @@ pub struct View {
     pub pan: Pos2,
     pub initialized: bool,
     pub show_grid: bool,
+    /// Mirrored from the editor each frame: 0 = no snapping.
+    pub snap_grid: u32,
     pub onion: Onion,
     /// Frame index being dragged in the timeline.
     drag_frame: Option<usize>,
@@ -52,6 +54,7 @@ impl View {
             pan: Pos2::ZERO,
             initialized: false,
             show_grid: true,
+            snap_grid: 0,
             onion: Onion::default(),
             drag_frame: None,
             thumbs: Vec::new(),
@@ -103,7 +106,12 @@ impl View {
         if x < 0.0 || y < 0.0 || x >= w as f32 || y >= h as f32 {
             None
         } else {
-            Some((x as u32, y as u32))
+            let (mut x, mut y) = (x as u32, y as u32);
+            if self.snap_grid > 1 {
+                x -= x % self.snap_grid;
+                y -= y % self.snap_grid;
+            }
+            Some((x, y))
         }
     }
 
@@ -386,6 +394,11 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         ui.checkbox(&mut editor.play_pingpong, "ping-pong");
     });
     ui.checkbox(&mut editor.tile_mode, "tile mode (3x3, wraps)");
+    ui.horizontal(|ui| {
+        ui.label("grid");
+        ui.add(egui::Slider::new(&mut editor.grid, 1..=64));
+        ui.checkbox(&mut editor.snap, "snap");
+    });
     ui.horizontal(|ui| {
         ui.label("symmetry");
         for (label, mode) in [
@@ -761,8 +774,12 @@ fn canvas(
         );
     }
 
+    view.snap_grid = if editor.snap { editor.grid } else { 0 };
     if view.show_grid && view.zoom >= 6 {
         draw_grid(ui.painter(), rect, view.zoom as f32, w, h);
+    }
+    if editor.grid > 1 && view.zoom * editor.grid >= 4 {
+        draw_design_grid(ui.painter(), rect, view.zoom as f32, w, h, editor.grid);
     }
     draw_pending(ui.painter(), editor, view);
     draw_selection(ui.painter(), editor, view);
@@ -848,6 +865,29 @@ fn draw_grid(painter: &egui::Painter, rect: Rect, zoom: f32, w: u32, h: u32) {
             [Pos2::new(rect.min.x, sy), Pos2::new(rect.max.x, sy)],
             stroke,
         );
+    }
+}
+
+/// The design grid: every `step` sprite pixels, brighter than the pixel grid.
+fn draw_design_grid(painter: &egui::Painter, rect: Rect, zoom: f32, w: u32, h: u32, step: u32) {
+    let stroke = Stroke::new(1.0, Color32::from_rgba_unmultiplied(120, 190, 255, 70));
+    let mut x = 0;
+    while x <= w {
+        let sx = rect.min.x + x as f32 * zoom;
+        painter.line_segment(
+            [Pos2::new(sx, rect.min.y), Pos2::new(sx, rect.max.y)],
+            stroke,
+        );
+        x += step;
+    }
+    let mut y = 0;
+    while y <= h {
+        let sy = rect.min.y + y as f32 * zoom;
+        painter.line_segment(
+            [Pos2::new(rect.min.x, sy), Pos2::new(rect.max.x, sy)],
+            stroke,
+        );
+        y += step;
     }
 }
 

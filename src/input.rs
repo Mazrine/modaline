@@ -550,6 +550,28 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 _ => editor.msg = "usage: :symcenter cursor|reset|<x> <y>".into(),
             }
         }
+        "grid" => match arg.and_then(|v| v.parse::<u32>().ok()) {
+            Some(n) => {
+                editor.grid = n.max(1);
+                editor.msg = format!("grid: {} px", editor.grid);
+            }
+            None => editor.msg = "usage: :grid <px>".into(),
+        },
+        "snap" => match arg {
+            Some("on" | "true" | "1") => {
+                editor.snap = true;
+                editor.msg = "snap: on".into();
+            }
+            Some("off" | "false" | "0") => {
+                editor.snap = false;
+                editor.msg = "snap: off".into();
+            }
+            None => {
+                editor.snap = !editor.snap;
+                editor.msg = format!("snap: {}", if editor.snap { "on" } else { "off" });
+            }
+            _ => editor.msg = "usage: :snap on|off".into(),
+        },
         "wand" | "tolerance" => {
             if let Some(n) = arg.and_then(|s| s.parse::<u8>().ok()) {
                 editor.wand_tolerance = n;

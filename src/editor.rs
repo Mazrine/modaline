@@ -207,6 +207,10 @@ pub struct Editor {
     pub wand_all_layers: bool,
     /// Show the sprite tiled 3x3 and wrap the cursor across its edges.
     pub tile_mode: bool,
+    /// Design grid in sprite pixels (1 = off) and whether the cursor snaps to
+    /// it. The pixel grid is a separate view flag.
+    pub grid: u32,
+    pub snap: bool,
     /// Playback: wrap at the end of the range, bounce instead of wrapping, and
     /// the current direction for the bounce.
     pub play_loop: bool,
@@ -265,6 +269,8 @@ impl Editor {
             wand_tolerance: 0,
             wand_all_layers: false,
             tile_mode: false,
+            grid: 8,
+            snap: false,
             play_loop: true,
             play_pingpong: false,
             play_dir: 1,
@@ -290,6 +296,12 @@ impl Editor {
     pub fn move_cursor(&mut self, dx: i32, dy: i32) {
         let w = (self.sprite.width as i32).max(1);
         let h = (self.sprite.height as i32).max(1);
+        let step = if self.snap && self.grid > 1 {
+            self.grid as i32
+        } else {
+            1
+        };
+        let (dx, dy) = (dx * step, dy * step);
         let nx = self.cursor.0 as i32 + dx;
         let ny = self.cursor.1 as i32 + dy;
         let (nx, ny) = if self.tile_mode {
@@ -573,6 +585,14 @@ impl Editor {
         for (px, py) in self.symmetry_points(x, y) {
             self.paint_pixel(px, py, color);
         }
+    }
+
+    /// Round a sprite pixel down to the design grid, when snapping is on.
+    pub fn snap_to_grid(&self, x: u32, y: u32) -> (u32, u32) {
+        if !self.snap || self.grid < 2 {
+            return (x, y);
+        }
+        (x - x % self.grid, y - y % self.grid)
     }
 
     /// The mirror/rotation origin. `None` is the sprite centre, so the plain
@@ -2015,6 +2035,23 @@ mod tests {
         e.del_tag(Some("walk"));
         assert_eq!(e.play_range(), (0, 2));
         assert!(e.active_tag.is_none());
+    }
+
+    #[test]
+    fn the_grid_snaps_the_cursor_and_the_pick() {
+        let mut e = Editor::new(32, 32);
+        e.grid = 8;
+        assert_eq!(e.snap_to_grid(13, 21), (13, 21), "snapping is off");
+        e.snap = true;
+        assert_eq!(e.snap_to_grid(13, 21), (8, 16));
+        e.cursor = (8, 16);
+        e.move_cursor(1, 0);
+        assert_eq!(e.cursor, (16, 16), "a step is one grid cell");
+        e.move_cursor(-1, -1);
+        assert_eq!(e.cursor, (8, 8));
+        e.snap = false;
+        e.move_cursor(1, 0);
+        assert_eq!(e.cursor, (9, 8), "one pixel when snapping is off");
     }
 
     #[test]
