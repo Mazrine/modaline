@@ -2,7 +2,7 @@
 //! state machine.
 //!
 //! It has no GUI dependency on purpose, so another tool can read, composite or
-//! write a `.vpx` without launching the editor (see `docs/ROADMAP.md`, VI-2).
+//! write a `.vpx` without launching the editor.
 //! The shell — `app`, `gui`, `input` — stays in the binary.
 
 pub mod ase;

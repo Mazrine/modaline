@@ -44,8 +44,8 @@ Modal, like vim. Start in **normal** mode.
 | `v` | **visual select** (marquee) — `V` selects the whole canvas |
 | `w` | **magic wand** — select the same-color region under the cursor |
 | `L` / `P` | **lasso** (freehand) / **polygon** (click vertices) selection |
-| `y` / `x` / `m` / `p` | copy / cut / move the selection · `p` pastes the clipboard |
-| `s` | cycle symmetry (none / horizontal / vertical / both) |
+| `y` / `Y` / `x` / `m` / `p` | copy (layer) / copy merged / cut / move · `p` pastes the clipboard |
+| `s` | cycle symmetry (none / horizontal / vertical / both / radial) |
 | `t` | toggle filled shapes (rect / ellipse) |
 | `,` / `.` | previous / next color |
 | `<` / `>` | previous / next layer |
@@ -67,15 +67,18 @@ transparent). `Esc` or `q` returns to normal. A whole drag is one undo step.
 ### Visual mode (`v`), magic wand (`w`) & paste
 
 `v` starts a marquee selection; `hjkl` extends it. `w` selects the contiguous
-same-color region around the cursor (active layer). Then `y` copies, `x` cuts,
+same-color region around the cursor (active layer). Then `y` copies the active
+layer, `Y` copies the flattened selection (all visible layers), `x` cuts and
 `m` cuts-and-floats (move). `p` floats the clipboard for pasting — `hjkl`
-repositions it, `Enter` commits, `Esc` cancels. Copy/cut/move operate on the
-active layer's cel. `Esc` in normal mode clears the selection.
+repositions it, `Enter` commits, `Esc` cancels. Cut and move act on the active
+layer's cel; `:copy merged` is the same as `Y`. `Esc` in normal mode clears the
+selection.
 
 ### Mouse
 
 Left-drag paint fg · right-drag paint bg · middle-click pick · scroll zoom ·
-middle-drag pan. (The editor is keyboard-first, but the mouse is fully wired.)
+middle-drag pan · drop a file on the window to open it. (The editor is
+keyboard-first, but the mouse is fully wired.)
 
 ## Commands (`:`)
 
@@ -83,30 +86,56 @@ middle-drag pan. (The editor is keyboard-first, but the mouse is fully wired.)
 |---------|--------|
 | `:w [file]` / `:save` | save project (JSON `.vpx`) |
 | `:q` / `:q!` / `:wq` | quit / force quit / save + quit |
-| `:new [w h]` | new sprite (default 32×32) |
+| `:new[!] [w h]` | new sprite (default 32×32); `!` drops unsaved work |
 | `:resize w h` | resize canvas (keeps overlap) |
+| `:crop [x y w h]` | crop to a rectangle (no args: the selection) |
+| `:trim` | crop to the non-transparent content |
 | `:newframe` / `:delframe` | add / remove animation frame |
 | `:dupframe` | duplicate the current frame (cels + duration) |
 | `:framemove <from> <to>` | move a frame (or drag a timeline thumbnail) |
 | `:tag <name> [from to]` | create/update a named frame tag |
 | `:tagdel [name]` | delete a frame tag (default: the active one) |
+| `:tagdir forward\|reverse\|pingpong` | play direction of the active tag |
+| `:tagrepeat <n>` | repeat count of the active tag (0 = forever) |
 | `:newlayer` / `:dellayer` | add / remove layer |
+| `:duplayer` | duplicate the active layer (with its cels) |
+| `:merge` | merge the active layer into the one below |
+| `:flatten` | flatten every visible layer into one |
 | `:layerup` / `:layerdown` | move the active layer up / down |
 | `:layername <name>` | rename the active layer |
 | `:newgroup` | add a layer group |
 | `:indent` / `:outdent` | nest the active layer into the group above / un-nest |
 | `:lock` / `:unlock` | lock / unlock the active layer (blocks painting) |
+| `:reference on\|off` | tracing layer: drawn, never painted or exported |
+| `:background on\|off` | the opaque bottom layer |
 | `:mask add\|apply\|del` | alpha mask from the selection (or full) / bake / remove |
-| `:tile [on\|off]` | seamless 3x3 preview; cursor wraps at the edges |
+| `:tile [on\|off]` | seamless 3x3 preview; cursor and shapes wrap across the seam |
 | `:fliph` / `:flipv` / `:rot90` | mirror H / V / rotate 90° (selection if any, else whole sprite) |
-| `:sym none\|h\|v\|both` | set symmetry (mirror painting) |
-| `:wand <0-255>` / `:wandall on\|off` | magic-wand tolerance / match all layers |
+| `:sym none\|h\|v\|both\|radial [axes]` | set symmetry (mirror painting) |
+| `:symcenter cursor\|reset\|<x> <y>` | radial symmetry centre |
+| `:wand <0-255>` / `:wandall on\|off` | wand + bucket tolerance / match all layers |
+| `:contig on\|off` | wand and bucket: contiguous region or every matching pixel |
 | `:selop replace\|add\|subtract\|intersect` | how new selections combine |
+| `:sel expand\|contract\|border\|feather <n>` / `:sel invert\|none\|all` | selection shape ops |
 | `:grad linear\|radial` | gradient mode |
-| `:pal load\|save <file>` | load/save palette (`.gpl`, `.hex`, `.pal`) |
-| `:export out.png\|out.ase` | export current frame as PNG, or the sprite as `.ase` |
-| `:import in.png` | import a PNG as a new sprite |
-| `:open proj.vpx\|proj.ase\|in.png` | load a project / `.ase` / PNG (by extension) |
+| `:filter <name> [amount]` | invert, brightness, contrast, hue, saturation, outline, blur, sharpen |
+| `:rotate <deg>` / `:scale <sx> [sy]` / `:skew <deg>` | free-transform the selection (or the cel) |
+| `:text <string>` | stamp 8x8 bitmap text at the cursor |
+| `:grid <px>` / `:snap [on\|off]` | design grid and snapping |
+| `:brush <1-64>` | pencil/eraser brush width (also a panel slider) |
+| `:perfect on\|off` | pixel-perfect freehand: drop L-shaped corner pixels |
+| `:mode auto\|rgba\|grayscale\|indexed` / `:aspect <x> <y>` / `:sgrid <w> <h>` | sprite colour mode, pixel ratio, grid |
+| `:profile srgb\|linear` / `:renderer glow\|wgpu` | colour profile / renderer (applied on next launch) |
+| `:fg #rrggbb` / `:bg #rrggbb` | set fg / bg exactly |
+| `:pal load\|save <file>` / `:pal move <from> <to>` / `:pal from-sprite` / `:pal lock on\|off` | palette I/O, reorder, derive from the frame, lock |
+| `:slices <dir> [cols rows]` | one PNG per grid cell plus a `.slices.json` sidecar |
+| `:ops <file.json>` | replay a JSON op list as one undo step |
+| `:export out.png\|out.ase\|<stem> [scale]` | PNG frame · `.ase` sprite · bare stem = sheet + GIF + meta JSON; `[scale 1-16]` upscales rasters |
+| `:import[!] in.png` | import a PNG as a new sprite; `!` drops unsaved work |
+| `:importsheet[!] sheet.png [cols rows]` | rebuild frames from a sheet + its `.json` sidecar |
+| `:open[!] proj.vpx\|proj.ase\|in.png` | load a project / `.ase` / PNG (by extension); `!` drops unsaved work |
+| `:recover [file]` | load the autosave snapshot (`recovery.vpx`) as unsaved work |
+| `:recent [n]` | list the last 10 opened/saved files, or open the nth |
 
 ## UI
 
@@ -164,28 +193,46 @@ src/
   input.rs    vim keymap + command line (egui events)
   gui.rs      View (zoom/pan), canvas, panels, help overlay
   app.rs      eframe App: event loop, playback, texture management
-  io.rs       PNG + JSON (.vpx) save/load
+  io.rs       PNG + `.vpx` + sheet/GIF/meta save/load
+  ase.rs      `.ase` / `.aseprite` import + export
+  palette.rs  `.gpl` / `.hex` / `.pal` palette I/O
+  ops.rs      an `Op` list replayed through `Editor::apply`
+  config.rs   `$XDG_CONFIG_HOME/vixel/config.json`
+  lib.rs      the model half as a library (no GUI dependency)
   main.rs     window + run_native
 ```
 
-The model (`sprite.rs`, `editor.rs`, `io.rs`, `color.rs`) is independent of any
-GUI library — the view and input layers are thin shells over it.
+The model (`sprite.rs`, `editor.rs`, `io.rs`, `ase.rs`, `color.rs`,
+`palette.rs`, `ops.rs`) is independent of any GUI library — the view and input
+layers are thin shells over it.
 
 ## Implemented vs. full Aseprite
 
 Implemented: truecolor canvas with real alpha + checkerboard, zoom + pixel grid,
 onion skinning, animation playback with timeline thumbnails, layers
 (visibility/opacity/**blend modes**/reorder/rename/add/remove, **nested
-groups**, **lock flag**, **alpha masks**), palette + RGB
+groups**, **lock flag**, **alpha masks**, **reference/background layers**),
+palette + RGB
 picker, pencil/eraser/bucket/picker/line/rect/ellipse with **filled shapes**,
 **gradient (linear/radial), spray, shade, blur, contour**,
-**marquee + magic-wand (tolerance, all-layers) + lasso + polygon selection**
-with **add/subtract/intersect** and copy/cut/paste/move, **symmetry painting**,
-flip H/V + rotate 90° (**selection-aware**), stroke-grouped undo/redo,
-**`.ase`/`.aseprite` + PNG + `.vpx` import/export**, **custom palettes**
-(`.gpl`/`.hex`/`.pal`), **OS clipboard**, **tile mode** (3x3 seamless preview +
-wrapping cursor), **frame tags + drag reorder**, full vim keymap
-(normal/draw/visual/paste/command modes).
+**marquee + magic-wand (tolerance, contiguous/global, all-layers) + lasso +
+polygon selection**
+with **add/subtract/intersect**, **expand/contract/border/feather/invert** and
+copy/cut/paste/move, **eight filters**, **free rotate/scale/skew**, **8x8 bitmap
+text**, **brush size 1-64**, **pixel-perfect freehand**, **crop/trim**,
+**design grid + snap**,
+**symmetry painting**
+(mirror or radial,
+including bucket fill and paste), flip H/V + rotate 90° (**selection-aware**),
+stroke-grouped undo/redo (**structural layer/frame/tag edits and panel
+properties undo too**),
+**`.ase`/`.aseprite` + PNG + `.vpx` import/export**, **sheet + GIF + meta JSON
+export**, **sprite properties** (colour mode, pixel ratio, grid) and
+**sRGB/linear colour profiles**, **custom palettes** (`.gpl`/`.hex`/`.pal`),
+**OS clipboard**, **tile mode** (3x3 seamless preview + wrapping cursor),
+**frame tags + drag reorder**, full vim keymap (normal/draw/visual/paste/command
+modes).
 
-Not yet (Aseprite parity gaps): external tileset files, color profiles,
-shaders.
+Not yet (out of scope for now): tileset/tilemap editing, ICC embedding, custom
+shaders. The backlog is closed and `docs/ROADMAP.md` records those deferrals
+with re-open conditions.

@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **73 tests green** (68 lib + 5 bin)
+- `cargo test` → **97 tests green** (89 lib + 8 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P1-P3** (see batch 16).
+- Last completed batch: **backlog close-out** (see batch 36).
 
 ## How to resume
 
@@ -80,58 +80,6 @@ Read, in order:
     and `.ase` (Tags chunk: name/range/color) and shift with frame
     insert/remove. Frames reorder by dragging a thumbnail or `:framemove`.
     4 new tests.
-
-## Next step (exact)
-
-The immediate order is below. **The full backlog lives in `docs/ROADMAP.md`** —
-every remaining item is recorded there, so nothing depends on chat history.
-
-### Next (P1)
-
-- **Onion-skin settings** (tint color, count, opacity) and loop/playback options.
-- Then layer drag-reorder, text tool, palette reorder /
-  HSV-hex picker / color modes, symmetry settings, grid & snap, export options
-  (sprite sheet/GIF/JSON/slices), filters, selection expand/border/feather, free
-  transform, color profiles, shaders/wgpu, persistence — all detailed in
-  `docs/ROADMAP.md`.
-
-## Known limitations (do not forget)
-
-- Symmetry does **not** apply to bucket fill or paste.
-- Mask pixels cannot be painted directly: masks are created from the selection
-  (or fully opaque), baked, or removed.
-- New layers are added as siblings; nesting is an explicit `:indent`.
-- New groups start empty and do not adopt the active layer.
-- `.ase` carries groups/flags but not masks (masks are `.vpx`-only).
-- Tilemap layers are rasterized on `.ase` import; tilesets are not kept (no
-  tile editing yet).
-- `.ase` import ignores external tileset files (flag 1) and cel z-index.
-- `.ase` files exported by vixel before this batch have non-conformant chunk
-  sizes and may not load; re-export them with the current build.
-- Lasso/polygon are mouse-driven; keyboard selection is marquee (`v`) + magic
-  wand (`w`).
-- Tile mode wraps the cursor (and the preview), not multi-pixel geometry:
-  line/rect/gradient spanning the seam do not duplicate onto the other edge.
-- Tag loop direction / repeat count are not modelled (playback is always
-  forward, looping); they are written as forward/0 to `.ase`.
-- Structural edits (layers, frames, tags, masks) are not in the undo stack:
-  only pixel strokes and whole-sprite transforms are undoable.
-- Selection is single-layer for copy/cut/move (not merged across layers).
-- Timeline thumbnails rebuild every UI pass (fine for small sprites; cache by
-  revision if it ever matters).
-- OS paste prefers clipboard *text* when present (egui behavior); image paste is
-  used when the clipboard has no usable text.
-- Rendering is CPU-composited; no custom shaders (kept backend-agnostic on
-  purpose for the future glow→wgpu switch).
-
-## Not verified
-
-Interaction paths are compiled + unit-tested and the app launches, but **not
-hand-tested on a live display** in this environment. First manual pass should
-cover: draw/erase, `v` marquee → `m` move, `w` wand, `L` lasso drag, `P` polygon
-+ `Enter`, `s` symmetry painting, `z` gradient, `a` spray, `q` shade, `n` blur,
-`C` contour, `:fliph` with a selection, `Ctrl-c` in another app → `Ctrl-v` here,
-`:w x.ase` then reopen.
 16. **P1-P3 batch** — onion-skin settings (count/opacity/tints) and loop +
     ping-pong playback; layer drag-to-reorder; bitmap-font text tool; palette
     hex/HSV entry and swatch reordering; radial symmetry with a movable centre;
@@ -141,3 +89,157 @@ cover: draw/erase, `v` marquee → `m` move, `w` wand, `L` lasso drag, `P` polyg
     slice export; sRGB/linear profile conversion; config persistence; wgpu
     behind a feature flag. Deferred with reasons in `docs/ROADMAP.md`: ICC
     embedding, custom shaders, keymap customization. **+35 tests.**
+17. **Backlog reconciliation** — audited the code against the docs and filed the
+    open set as `docs/ROADMAP.md` P4: close-without-save and the missing dirty
+    guards (`:open` / `:new` / `:import`), `:wq *.ase` writing JSON, no autosave,
+    structural undo, every "known limitation", and the untracked Aseprite parity
+    gaps (brush size, layer merge/flatten, crop, contiguous toggle, sheet import,
+    export scale, file dialog). Fixed doc drift: README's "colour profiles not
+    implemented", its command/tool tables, AGENTS' module map, the dead `VI-2`
+    reference, and this file's stale P1 next step. Source comments only; no
+    behaviour change, 73 tests unchanged.
+18. **Data-loss guards** — closing the window no longer discards a dirty sprite:
+    `app.rs` cancels the close (`CancelClose`) and says so; `:open` / `:new` /
+    `:import` refuse unsaved work unless forced with `!` (`:open!` etc.); `:wq`
+    picks the format by extension through the shared `save_to` (a `.ase` name
+    used to receive the `.vpx` JSON) and only quits after a successful save,
+    reporting a failed one instead of exiting. 2 new tests (75 total).
+19. **Autosave / crash recovery** — a dirty sprite is written to
+    `$XDG_CONFIG_HOME/vixel/recovery.vpx` every 30 s; a successful save or a
+    forced quit removes it, so a clean session never resurrects a stale
+    snapshot. `:recover [file]` loads it (dirty, with no project path) so `:w`
+    names the destination, and startup offers it in the status line instead of
+    loading silently. 1 new test (76 total).
+20. **Structural undo** — layer add/delete/move/indent/rename/lock, frame
+    add/delete/duplicate/move and tag create/delete are one `Structure` undo
+    step each; the snapshot carries the active layer/frame/tag on both sides,
+    so undo/redo never leaves an index past the end of a shorter list. Refused
+    edits (last layer/frame, same name, no-op move) record nothing. `:lock` now
+    goes through `set_layer_editable`, so locking is undoable too. 2 new tests
+    (78 total).
+21. **Panel property undo** — layer visibility, lock, opacity and blend mode
+    record a small `LayerProps` step (before/after values, no sprite clone), so
+    toggling from the panel is undoable; an opacity drag is one step from
+    drag-start to release. `:lock` now uses the same step instead of a full
+    sprite snapshot. 1 new test (79 total).
+22. **Symmetry reaches fill and paste** — a bucket fill now floods the seed and
+    every mirrored/radial seed as one undo stroke, and a committed paste writes
+    each pixel at its symmetry points, so the pasted block is mirrored too.
+    2 new tests (81 total).
+23. **Tag direction and repeat** — each tag has a `PlayDirection`
+    (forward/reverse/ping-pong) and a repeat count (0 = forever), set with
+    `:tagdir` / `:tagrepeat`; playback honours them inside the tag while the
+    global loop/ping-pong flags still drive untagged playback. Both fields
+    round-trip in `.vpx` and in the `.ase` Tags chunk (direction byte, repeat
+    u16). Playing restarts the pass counter. 1 new test (82 total).
+24. **Timeline thumbnail caching** — `Editor::revision` bumps on every edit
+    (`record`, undo/redo, structural and property steps, snapshots, resize,
+    sprite replacement); the timeline compares it and rebuilds only stale
+    thumbnails instead of every frame. The cel-opacity slider bumps it too.
+    1 new test (83 total).
+25. **Tile-mode seams** — in tile mode, line/rect/ellipse and gradient take the
+    shorter way round the canvas: the shape is generated past the seam and each
+    pixel is wrapped, so a line from the right edge continues on the left
+    instead of crossing the whole sprite. 2 new tests (85 total).
+26. **Merged copy** — `Y` (normal or visual mode) and `:copy merged` flatten the
+    visible layers of the active frame inside the selection into the clipboard;
+    `y` / `:copy layer` keep the active-layer behaviour. Cut and move stay on
+    the active layer, matching Aseprite. 1 new test (86 total).
+27. **.ase mask check + brush size** — checked the official `.ase` spec: there
+    is no per-layer alpha mask (0x2016 is a deprecated, sprite-level 1-bit
+    mask), so masks stay `.vpx`-only by format. That item is closed rather than
+    deferred. Added a square brush for pencil/eraser (1-64 px, `:brush` and a
+    side-panel slider), clipped at the canvas edges and mirrored by symmetry;
+    shapes, paste and text keep their own sizing. 1 new test (87 total).
+28. **Crop / trim** — `:crop [x y w h]` (no args = the selection's bbox) and
+    `:trim` (the non-transparent bbox across every visible frame) crop every
+    cel and layer mask, clamp the cursor, clear the selection, and undo as one
+    snapshot. 1 new test (88 total).
+29. **Layer duplicate / merge / flatten** — `:duplayer` clones a normal layer
+    (with its cels) above itself; `:merge` composites it into the layer below
+    through the same `composite_range` the canvas uses, bakes opacity/blend/mask
+    and removes it; `:flatten` replaces the visible layers with one per-frame
+    composite. All undoable as one structure step, with panel buttons. Groups
+    are refused for duplicate/merge (flatten includes them). 1 new test
+    (89 total).
+30. **Contiguous toggle + fill tolerance** — `:contig on|off` (panel checkbox)
+    switches the wand and bucket between the seed's contiguous region and every
+    matching pixel; the shared `:wand <0-255>` tolerance now drives the bucket
+    too (`flood_fill_tol` with a `FillOptions`). 2 new tests (91 total).
+31. **Export scale** — `:export <target> [scale 1-16]` upscales PNG, the sheet
+    and the GIF with nearest-neighbour; the sheet meta reports the scaled frame
+    size so it stays sliceable. `.ase` export refuses a scale. 1 new test
+    (92 total).
+32. **Sheet import** — `:importsheet <sheet.png> [cols rows]` reads the sidecar
+    `:export` writes (`<stem>.json`) or an explicit grid, validates the image
+    against the meta, and rebuilds the frames with their durations; a dirty
+    sprite is protected like `:import`. Closes the G6 round trip. 1 new test
+    (93 total).
+33. **Reference / background layer kinds** — `Layer` gains Aseprite's
+    `reference` and `background` flags. Reference layers draw on canvas but are
+    refused by every paint path and skipped by `export_composite`, so PNG/sheet/
+    GIF/flatten leave them out; background layers are forced opaque. Both flags
+    round-trip in `.vpx` and `.ase` (bits 64 and 8), are undoable `LayerProps`,
+    and have `ref` / `bg` chips in the panel. 2 new tests (95 total).
+34. **Pixel-perfect freehand** — `:perfect on|off` (panel checkbox) routes the
+    1 px pencil/eraser through `paint_freehand`: it joins pointer steps with a
+    line and drops the middle pixel of an L-shaped corner, restoring that
+    pixel's `before` and removing its stroke record. Brushes and symmetry fall
+    back to a plain stamp. 1 new test (96 total).
+35. **Drag-and-drop + recent files** — dropping a file on the window opens it
+    through `open_path`, with the dirty guard (a drop never discards a stroke).
+    `Editor::recent` keeps the last 10 opened/saved files, deduped and newest
+    first; it persists in `config.json` and drives `:recent` /
+    `:recent <n>`. A native file dialog was deliberately not added. 1 new test
+    (97 total).
+36. **Backlog close-out** — tileset/tilemap editing was the last P4 item. A
+    faithful editor needs a tileset/tile model, a tile picker, tile-aware
+    paint/undo and tileset chunk writing; the reader already parses tilemaps
+    and embedded tilesets but there is no fixture or consumer for editing. It
+    moved to `docs/ROADMAP.md` → "Explicitly out of scope" with that plan and
+    the re-open condition. P4 is otherwise empty. No code changed; 97 tests.
+
+## Next step (exact)
+
+**The backlog is closed.** The full record lives in `docs/ROADMAP.md`; every
+remaining item there is explicitly deferred with a re-open condition.
+
+### Next
+
+Nothing is open: P0-P4 are closed. The only remaining items are the explicitly
+deferred ones with stated re-open conditions (ICC embedding, custom shaders,
+keymap customization, tilesets/tilemap editing). The next step is a new feature
+request, not backlog work.
+
+## Known limitations (do not forget)
+
+These are design limits or deliberate deferrals; nothing here is unplanned P4
+work.
+
+- Mask pixels cannot be painted directly: masks are created from the selection
+  (or fully opaque), baked, or removed.
+- New layers are added as siblings; nesting is an explicit `:indent`.
+- New groups start empty and do not adopt the active layer.
+- Groups cannot be duplicated or merged down (flatten includes them).
+- `.ase` has no per-layer alpha mask (0x2016 is deprecated and sprite-level);
+  masks stay `.vpx`-only by format.
+- Tilemap layers are rasterized on `.ase` import; tilesets are not kept (tile
+  editing is out of scope, see ROADMAP).
+- `.ase` import ignores external tileset files (flag 1) and cel z-index.
+- `.ase` files exported by vixel before this batch have non-conformant chunk
+  sizes and may not load; re-export them with the current build.
+- Lasso/polygon are mouse-driven; keyboard selection is marquee (`v`) + magic
+  wand (`w`).
+- Cut and move act on the active layer; `Y` copies the flattened selection.
+- OS paste prefers clipboard *text* when present (egui behavior); image paste is
+  used when the clipboard has no usable text.
+- Rendering is CPU-composited; no custom shaders (kept backend-agnostic on
+  purpose for the future glow→wgpu switch).
+
+## Not yet exercised by the headless pass
+
+The 2026-10-26 pass (`docs/TESTING.md`) covers ten paths; these are still
+unexercised: draw/erase, `v` marquee → `m` move, `w` wand, `L` lasso drag,
+`P` polygon + `Enter`, `s` symmetry painting, `z` gradient, `a` spray,
+`q` shade, `n` blur, `C` contour, `:fliph` with a selection, `Ctrl-c` in another
+app → `Ctrl-v` here, `:w x.ase` then reopen.

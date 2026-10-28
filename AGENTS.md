@@ -34,12 +34,15 @@ thin shells:
 | `color.rs` | `Rgba` (tuple struct, serde as `[r,g,b,a]`) + default palette |
 | `sprite.rs` | Model: `Sprite`/`Layer`/`Frame`/`Cel`, compositing + blend modes, tool geometry (fill/line/rect/ellipse), transforms, tests |
 | `editor.rs` | `Editor` state: modes, tools, undo, selection/clipboard. No view state here. |
-| `io.rs` | PNG + `.vpx` (JSON) save/load |
+| `io.rs` | PNG + sheet/GIF/meta + `.vpx` (JSON) save/load |
 | `ase.rs` | `.ase`/`.aseprite` import/export |
+| `palette.rs` | `.gpl` / `.hex` / `.pal` palette import/export |
+| `ops.rs` | an `Op` list replayed through `Editor::apply` (one undo step) |
+| `config.rs` | `config.json` load/save + the autosave `recovery.vpx` path |
 | `input.rs` | vim keymap + `:` command line (reads `egui::Event`) |
 | `gui.rs` | `View` (zoom/pan), canvas drawing, panels, help overlay |
 | `app.rs` | `eframe::App`: event loop, playback timer, texture upload |
-| `lib.rs` | The **model** half as a library (`ase`, `color`, `editor`, `io`, `palette`, `sprite`) with no GUI dependency, so another tool can read/composite/write a `.vpx` without launching the editor |
+| `lib.rs` | The **model** half as a library (`ase`, `color`, `editor`, `io`, `ops`, `palette`, `sprite`) with no GUI dependency, so another tool can read/composite/write a `.vpx` without launching the editor |
 | `main.rs` | `run_native` + shell module wiring; takes an optional file path argument |
 
 **Core invariants (do not break):**
@@ -53,7 +56,9 @@ thin shells:
 3. **Undo** works by recording `(x, y, before, after)` into a *stroke*
    (`begin_stroke` / `paint_pixel` / `end_stroke`); a whole drag is one undo
    step. Every mutation of cel pixels must go through `paint_pixel` (or a
-   sibling that records), never `sprite.set` directly.
+   sibling that records), never `sprite.set` directly. Structural edits
+   (layers, frames, tags) use `UndoStep::Structure` snapshots that carry the
+   active indices; panel property edits use a cheap `LayerProps` step.
 4. **Rendering is backend-agnostic**: everything goes through
    `egui::TextureHandle` (composite → `ColorImage::from_rgba_unmultiplied` →
    `load_texture`/`set`, nearest-neighbor). No raw GL calls. Custom shaders are
@@ -73,6 +78,8 @@ thin shells:
 - `:` commands live in `input.rs::exec_command`. Opening a file dispatches on
   the extension in **one** place, `io::load_any` (`.ase`, `.png`, else `.vpx`),
   shared by `:open` and the command-line argument.
+- Bump `Editor::revision` (via `touch`) on every sprite mutation; the timeline
+  caches thumbnails by it, so a missed bump shows a stale frame.
 
 ## egui 0.37 gotchas (this version changed things)
 
