@@ -48,7 +48,7 @@ pub fn load_any(path: &Path) -> Result<Sprite> {
 /// The composite of one frame as an image, the unit every export shares.
 fn frame_image(sprite: &Sprite, frame: usize) -> image::RgbaImage {
     let (w, h) = (sprite.width, sprite.height);
-    let comp = sprite.composite(frame);
+    let comp = sprite.export_composite(frame);
     let mut img = image::RgbaImage::new(w, h);
     for y in 0..h {
         for x in 0..w {

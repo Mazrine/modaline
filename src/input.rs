@@ -196,7 +196,7 @@ fn handle_key(editor: &mut Editor, view: &mut View, key: Key, mods: Modifiers) {
                 } else {
                     editor.begin_stroke();
                     let (x, y) = editor.cursor;
-                    editor.paint_symmetric(x, y, editor.fg);
+                    editor.paint_brush_symmetric(x, y, editor.fg);
                     editor.end_stroke();
                 }
             }
@@ -238,6 +238,7 @@ fn handle_text(editor: &mut Editor, text: &str) {
 fn handle_visual_char(editor: &mut Editor, ch: char) {
     match ch {
         'y' => editor.yank(),
+        'Y' => editor.yank_merged(),
         'x' | 'd' => editor.cut(),
         'm' => editor.start_move(),
         _ => {}
@@ -265,14 +266,14 @@ fn handle_char(editor: &mut Editor, ch: char) {
             } else {
                 editor.begin_stroke();
                 let (x, y) = editor.cursor;
-                editor.paint_symmetric(x, y, Rgba::TRANSPARENT);
+                editor.paint_brush_symmetric(x, y, Rgba::TRANSPARENT);
                 editor.end_stroke();
             }
         }
         'r' => {
             editor.begin_stroke();
             let (x, y) = editor.cursor;
-            editor.paint_symmetric(x, y, editor.fg);
+            editor.paint_brush_symmetric(x, y, editor.fg);
             editor.end_stroke();
         }
         's' => editor.cycle_symmetry(),
@@ -282,6 +283,7 @@ fn handle_char(editor: &mut Editor, ch: char) {
             editor.magic_wand(x, y);
         }
         'y' => editor.yank(),
+        'Y' => editor.yank_merged(),
         'm' => editor.start_move(),
         'v' => editor.start_select(),
         'V' => {
@@ -433,10 +435,27 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = format!("resized to {w}x{h}");
             }
         }
+        "crop" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            match (
+                it.next().and_then(|s| s.parse::<u32>().ok()),
+                it.next().and_then(|s| s.parse::<u32>().ok()),
+                it.next().and_then(|s| s.parse::<u32>().ok()),
+                it.next().and_then(|s| s.parse::<u32>().ok()),
+            ) {
+                (Some(x), Some(y), Some(w), Some(h)) => editor.crop_to(x, y, w, h),
+                _ if arg.is_none() => editor.crop_to_selection(),
+                _ => editor.msg = "usage: :crop [x y w h] (no args = selection)".into(),
+            }
+        }
+        "trim" => editor.trim(),
         "newframe" | "nf" => editor.add_frame(),
         "delframe" | "df" => editor.del_frame(),
         "dupframe" | "dupf" => editor.duplicate_frame(),
         "newlayer" | "nl" => editor.add_layer(),
+        "duplayer" | "dupl" => editor.duplicate_layer(),
+        "merge" | "mergedown" => editor.merge_down(),
+        "flatten" | "flat" => editor.flatten(),
         "dellayer" | "dl" => editor.del_layer(),
         "layerup" | "lup" => editor.move_layer_active(-1),
         "layerdown" | "ldown" => editor.move_layer_active(1),
@@ -450,11 +469,19 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "newgroup" | "ng" => editor.add_group(),
         "indent" => editor.indent_layer(1),
         "outdent" => editor.indent_layer(-1),
+        "background" | "bgnd" => match arg {
+            Some("on" | "true" | "1") => editor.set_layer_background(true),
+            Some("off" | "false" | "0") => editor.set_layer_background(false),
+            _ => editor.msg = "usage: :background on|off".into(),
+        },
+        "reference" | "ref" => match arg {
+            Some("on" | "true" | "1") => editor.set_layer_reference(true),
+            Some("off" | "false" | "0") => editor.set_layer_reference(false),
+            _ => editor.msg = "usage: :reference on|off".into(),
+        },
         "lock" | "unlock" => {
             let on = name == "lock";
-            let l = editor.active_layer;
-            editor.sprite.layers[l].editable = !on;
-            editor.dirty = true;
+            editor.set_layer_editable(!on);
             editor.msg = if on { "layer locked" } else { "layer unlocked" }.into();
         }
         "mask" => match arg {
@@ -495,6 +522,18 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             }
         },
         "tagdel" | "untag" => editor.del_tag(arg),
+        "copy" | "yank" => match arg {
+            Some("merged" | "all") => editor.yank_merged(),
+            _ => editor.yank(),
+        },
+        "tagdir" => match arg.and_then(crate::sprite::PlayDirection::parse) {
+            Some(dir) => editor.set_tag_direction(dir),
+            None => editor.msg = "usage: :tagdir forward|reverse|pingpong".into(),
+        },
+        "tagrepeat" => match arg.and_then(|s| s.parse::<u16>().ok()) {
+            Some(n) => editor.set_tag_repeat(n),
+            None => editor.msg = "usage: :tagrepeat <n> (0 = forever)".into(),
+        },
         "framemove" => {
             let mut it = arg.unwrap_or("").split_whitespace();
             match (
@@ -552,6 +591,24 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             editor.text = text.to_string();
             editor.stamp_text(text, x, y);
         }
+        "perfect" | "pixelperfect" => match arg {
+            Some("on" | "true" | "1") => {
+                editor.pixel_perfect = true;
+                editor.msg = "pixel-perfect: on".into();
+            }
+            Some("off" | "false" | "0") => {
+                editor.pixel_perfect = false;
+                editor.msg = "pixel-perfect: off".into();
+            }
+            _ => editor.msg = "usage: :perfect on|off".into(),
+        },
+        "brush" => match arg.and_then(|v| v.parse::<u32>().ok()) {
+            Some(n) => {
+                editor.brush_size = n.clamp(1, 64);
+                editor.msg = format!("brush: {} px", editor.brush_size);
+            }
+            None => editor.msg = "usage: :brush <1-64>".into(),
+        },
         "grid" => match arg.and_then(|v| v.parse::<u32>().ok()) {
             Some(n) => {
                 editor.grid = n.max(1);
@@ -582,6 +639,17 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "usage: :wand <0-255>".into();
             }
         }
+        "contig" | "contiguous" => match arg {
+            Some("on" | "true" | "1") => {
+                editor.contiguous = true;
+                editor.msg = "contiguous: on".into();
+            }
+            Some("off" | "false" | "0") => {
+                editor.contiguous = false;
+                editor.msg = "contiguous: off".into();
+            }
+            _ => editor.msg = "usage: :contig on|off".into(),
+        },
         "wandall" | "wandlayers" => {
             let on = matches!(arg, Some("on" | "true" | "1" | "all"));
             if arg.is_some() {
@@ -1066,5 +1134,86 @@ mod tests {
                 e.msg
             );
         }
+    }
+
+    #[test]
+    fn wq_dispatches_by_extension_and_only_quits_on_success() {
+        let dir = std::env::temp_dir().join(format!("vixel-wq-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let ase_path = dir.join("x.ase");
+        let mut e = Editor::new(4, 4);
+        exec_command(&mut e, &format!("wq {}", ase_path.display()));
+        assert!(e.should_quit, "wq quits after a successful save");
+        assert!(!e.dirty);
+        assert!(ase::load(&ase_path).is_ok(), "`.ase` must not hold JSON");
+
+        let missing = dir.join("missing").join("x.ase");
+        let mut e = Editor::new(4, 4);
+        exec_command(&mut e, &format!("wq {}", missing.display()));
+        assert!(!e.should_quit, "a failed save keeps the editor open");
+        assert!(e.msg.contains("save failed"), "{}", e.msg);
+
+        exec_command(&mut e, "wq");
+        assert!(!e.should_quit, "wq without a filename does not quit");
+        assert!(e.msg.contains("no filename"), "{}", e.msg);
+    }
+
+    #[test]
+    fn destructive_commands_refuse_unsaved_work_unless_forced() {
+        let missing = std::env::temp_dir()
+            .join(format!("vixel-missing-{}", std::process::id()))
+            .join("x");
+
+        let mut e = Editor::new(8, 8);
+        e.dirty = true;
+        exec_command(&mut e, "new 4 4");
+        assert_eq!((e.sprite.width, e.sprite.height), (8, 8), "refused");
+        assert!(e.msg.contains("unsaved changes"), "{}", e.msg);
+        exec_command(&mut e, "new! 4 4");
+        assert_eq!((e.sprite.width, e.sprite.height), (4, 4), "forced");
+
+        e.dirty = true;
+        exec_command(&mut e, &format!("open {}.vpx", missing.display()));
+        assert!(e.msg.contains("unsaved changes"), "{}", e.msg);
+        exec_command(&mut e, &format!("open! {}.vpx", missing.display()));
+        assert!(e.msg.contains("load failed"), "{}", e.msg);
+
+        e.dirty = true;
+        exec_command(&mut e, &format!("import {}.png", missing.display()));
+        assert!(e.msg.contains("unsaved changes"), "{}", e.msg);
+        exec_command(&mut e, &format!("import! {}.png", missing.display()));
+        assert!(e.msg.contains("import failed"), "{}", e.msg);
+
+        e.dirty = true;
+        exec_command(&mut e, &format!("importsheet {}.png", missing.display()));
+        assert!(e.msg.contains("unsaved changes"), "{}", e.msg);
+        exec_command(&mut e, &format!("importsheet! {}.png", missing.display()));
+        assert!(e.msg.contains("import sheet failed"), "{}", e.msg);
+
+        e.dirty = true;
+        exec_command(&mut e, &format!("recover {}.vpx", missing.display()));
+        assert!(e.msg.contains("unsaved changes"), "{}", e.msg);
+        exec_command(&mut e, &format!("recover! {}.vpx", missing.display()));
+        assert!(e.msg.contains("recover failed"), "{}", e.msg);
+    }
+
+    #[test]
+    fn recover_loads_a_snapshot_and_leaves_it_dirty() {
+        let dir = std::env::temp_dir().join(format!("vixel-recover-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("recovery.vpx");
+
+        let mut saved = crate::sprite::Sprite::new(4, 4);
+        saved.set(0, 0, 1, 1, Rgba::rgb(7, 8, 9));
+        io::save_project(&saved, &path).unwrap();
+
+        let mut e = Editor::new(8, 8);
+        exec_command(&mut e, &format!("recover {}", path.display()));
+        assert_eq!((e.sprite.width, e.sprite.height), (4, 4));
+        assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::rgb(7, 8, 9));
+        assert!(e.dirty, "recovered work is unsaved");
+        assert!(e.path.is_none(), "a snapshot has no project path");
+        assert!(e.msg.contains("recovered"), "{}", e.msg);
     }
 }

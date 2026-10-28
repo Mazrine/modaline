@@ -59,6 +59,13 @@ pub struct Layer {
     /// Per-pixel alpha multiplier applied when compositing.
     #[serde(default)]
     pub mask: Option<Mask>,
+    /// Aseprite's background flag (the opaque bottom layer).
+    #[serde(default)]
+    pub background: bool,
+    /// Aseprite's reference-layer flag: drawn while tracing, never painted or
+    /// exported.
+    #[serde(default)]
+    pub reference: bool,
 }
 
 fn yes() -> bool {
@@ -76,6 +83,8 @@ impl Default for Layer {
             group: false,
             editable: true,
             mask: None,
+            background: false,
+            reference: false,
         }
     }
 }
@@ -107,6 +116,52 @@ pub struct Frame {
     pub duration_ms: u16,
 }
 
+/// How a tagged range plays back.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayDirection {
+    #[default]
+    Forward,
+    Reverse,
+    PingPong,
+}
+
+impl PlayDirection {
+    pub fn name(self) -> &'static str {
+        match self {
+            PlayDirection::Forward => "forward",
+            PlayDirection::Reverse => "reverse",
+            PlayDirection::PingPong => "pingpong",
+        }
+    }
+
+    /// Aseprite's tag direction byte: 0 forward, 1 reverse, 2 ping-pong.
+    pub fn from_ase(byte: u8) -> Self {
+        match byte {
+            1 => PlayDirection::Reverse,
+            2 => PlayDirection::PingPong,
+            _ => PlayDirection::Forward,
+        }
+    }
+
+    pub fn to_ase(self) -> u8 {
+        match self {
+            PlayDirection::Forward => 0,
+            PlayDirection::Reverse => 1,
+            PlayDirection::PingPong => 2,
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "forward" | "fwd" | "f" => Some(PlayDirection::Forward),
+            "reverse" | "rev" | "back" | "r" => Some(PlayDirection::Reverse),
+            "pingpong" | "ping-pong" | "pp" | "bounce" | "b" => Some(PlayDirection::PingPong),
+            _ => None,
+        }
+    }
+}
+
 /// A named, inclusive frame range ("walk", "idle", ...).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Tag {
@@ -115,6 +170,11 @@ pub struct Tag {
     pub to: usize,
     #[serde(default = "tag_color")]
     pub color: Rgba,
+    /// Direction the tag plays in; `0` repeats forever in `.ase`.
+    #[serde(default)]
+    pub direction: PlayDirection,
+    #[serde(default)]
+    pub repeat: u16,
 }
 
 fn tag_color() -> Rgba {
@@ -295,13 +355,30 @@ impl Sprite {
     /// Groups composite their children first, then apply their own
     /// visibility/opacity/blend/mask to the result.
     pub fn composite(&self, frame: usize) -> Vec<Rgba> {
+        self.composite_inner(frame, true)
+    }
+
+    /// Composite for export/flatten: reference layers are tracing aids and are
+    /// not part of the artwork.
+    pub fn export_composite(&self, frame: usize) -> Vec<Rgba> {
+        self.composite_inner(frame, false)
+    }
+
+    fn composite_inner(&self, frame: usize, include_reference: bool) -> Vec<Rgba> {
         let mut out = vec![Rgba::TRANSPARENT; self.area()];
-        self.composite_range(frame, 0, self.layers.len(), &mut out);
+        self.composite_range(frame, 0, self.layers.len(), &mut out, include_reference);
         out
     }
 
     /// Composite the sibling run `[start, end)` over `dst`, bottom-most first.
-    fn composite_range(&self, frame: usize, start: usize, end: usize, dst: &mut [Rgba]) {
+    fn composite_range(
+        &self,
+        frame: usize,
+        start: usize,
+        end: usize,
+        dst: &mut [Rgba],
+        include_reference: bool,
+    ) {
         let mut siblings = Vec::new();
         let mut k = start;
         while k < end {
@@ -311,7 +388,7 @@ impl Sprite {
         for &i in siblings.iter().rev() {
             let layer = &self.layers[i];
             let stop = self.subtree_end(i).min(end);
-            if !layer.visible || layer.opacity == 0 {
+            if !layer.visible || layer.opacity == 0 || (!include_reference && layer.reference) {
                 continue;
             }
             let op = layer.opacity as u32;
@@ -323,7 +400,7 @@ impl Sprite {
             let grouped;
             let src: &[Rgba] = if layer.group {
                 let mut buf = vec![Rgba::TRANSPARENT; self.area()];
-                self.composite_range(frame, i + 1, stop, &mut buf);
+                self.composite_range(frame, i + 1, stop, &mut buf, include_reference);
                 grouped = buf;
                 &grouped
             } else {
@@ -353,7 +430,10 @@ impl Sprite {
 
     /// Can `i` (and all its ancestor groups) be painted on right now?
     pub fn layer_editable(&self, i: usize) -> bool {
-        let mut ok = self.layers[i].editable && self.layers[i].visible && !self.layers[i].group;
+        let mut ok = self.layers[i].editable
+            && self.layers[i].visible
+            && !self.layers[i].group
+            && !self.layers[i].reference;
         let mut level = self.layers[i].child_level;
         for k in (0..i).rev() {
             if level == 0 {
@@ -389,6 +469,49 @@ impl Sprite {
         }
         self.width = width;
         self.height = height;
+    }
+
+    /// Crop every cel and layer mask to the rect `(cx, cy, w, h)`, clamped to
+    /// the current canvas.
+    pub fn crop(&mut self, cx: u32, cy: u32, w: u32, h: u32) {
+        let (ow, oh) = (self.width, self.height);
+        let cx = cx.min(ow.saturating_sub(1));
+        let cy = cy.min(oh.saturating_sub(1));
+        let w = w.clamp(1, ow - cx);
+        let h = h.clamp(1, oh - cy);
+        if (cx, cy, w, h) == (0, 0, ow, oh) {
+            return;
+        }
+        for layer in 0..self.layers.len() {
+            for frame in 0..self.frames.len() {
+                let mut np = vec![Rgba::TRANSPARENT; (w * h) as usize];
+                for y in 0..h {
+                    for x in 0..w {
+                        let (sx, sy) = (x + cx, y + cy);
+                        if sx < ow && sy < oh {
+                            np[(y * w + x) as usize] =
+                                self.cels[layer][frame].pixels[(sy * ow + sx) as usize];
+                        }
+                    }
+                }
+                self.cels[layer][frame].pixels = np;
+            }
+        }
+        for layer in &mut self.layers {
+            let Some(m) = &layer.mask else { continue };
+            let mut pixels = vec![255u8; (w * h) as usize];
+            for y in 0..h {
+                for x in 0..w {
+                    let (sx, sy) = (x + cx, y + cy);
+                    if sx < ow && sy < oh {
+                        pixels[(y * w + x) as usize] = m.pixels[(sy * ow + sx) as usize];
+                    }
+                }
+            }
+            layer.mask = Some(Mask { pixels });
+        }
+        self.width = w;
+        self.height = h;
     }
 
     /// Mirror every cel horizontally.
@@ -579,6 +702,66 @@ impl Sprite {
         self.cels.insert(idx + 1, vec![cel; self.frames.len()]);
     }
 
+    /// Duplicate a normal layer (with its cels) directly above itself. Groups
+    /// are not duplicated yet.
+    pub fn duplicate_layer(&mut self, idx: usize) -> bool {
+        if idx >= self.layers.len() || self.layers[idx].group {
+            return false;
+        }
+        let mut layer = self.layers[idx].clone();
+        layer.name = format!("{} copy", layer.name);
+        let cels = self.cels[idx].clone();
+        self.layers.insert(idx, layer);
+        self.cels.insert(idx, cels);
+        true
+    }
+
+    /// Merge layer `up` into the layer directly below it, baking opacity,
+    /// blend mode and mask into the pixels. The editor checks that both are
+    /// visible, non-group siblings before calling.
+    pub fn merge_down(&mut self, up: usize) {
+        let down = up + 1;
+        for frame in 0..self.frames.len() {
+            let mut buf = vec![Rgba::TRANSPARENT; self.area()];
+            self.composite_range(frame, up, down + 1, &mut buf, true);
+            self.cels[down][frame].pixels = buf;
+            self.cels[down][frame].opacity = 255;
+        }
+        self.layers[down].opacity = 255;
+        self.layers[down].blend = BlendMode::Normal;
+        self.layers[down].mask = None;
+        self.remove_layer(up);
+    }
+
+    /// Collapse every visible layer into one flattened layer per frame.
+    /// Hidden layers and masks are discarded, as in Aseprite's Flatten.
+    pub fn flatten(&mut self) -> bool {
+        let flat = self.layers.len() == 1
+            && !self.layers[0].group
+            && self.layers[0].mask.is_none()
+            && self.layers[0].opacity == 255
+            && self.layers[0].blend == BlendMode::Normal
+            && self.layers[0].child_level == 0
+            && self.layers[0].visible
+            && !self.layers[0].reference;
+        if flat {
+            return false;
+        }
+        let mut cels = Vec::with_capacity(self.frames.len());
+        for frame in 0..self.frames.len() {
+            cels.push(Cel {
+                pixels: self.export_composite(frame),
+                opacity: 255,
+            });
+        }
+        self.layers = vec![Layer {
+            name: "Flattened".into(),
+            ..Layer::default()
+        }];
+        self.cels = vec![cels];
+        true
+    }
+
     /// Remove layer `idx`; a group takes its whole subtree with it.
     pub fn remove_layer(&mut self, idx: usize) -> bool {
         if idx >= self.layers.len() {
@@ -700,7 +883,38 @@ fn set_px(
     }
 }
 
-/// 4-connected flood fill starting at `(x, y)`. Returns changed cells `(x, y, before, after)`.
+/// Whether two colours are within `tol` on every channel (transparent equals
+/// transparent).
+pub fn color_close(a: Rgba, b: Rgba, tol: u8) -> bool {
+    if a.3 == 0 && b.3 == 0 {
+        return true;
+    }
+    let t = tol as i16;
+    (a.0 as i16 - b.0 as i16).abs() <= t
+        && (a.1 as i16 - b.1 as i16).abs() <= t
+        && (a.2 as i16 - b.2 as i16).abs() <= t
+        && (a.3 as i16 - b.3 as i16).abs() <= t
+}
+
+/// Match and reach for the bucket fill: a per-channel tolerance and whether
+/// the fill stays inside the seed's contiguous region.
+#[derive(Clone, Copy, Debug)]
+pub struct FillOptions {
+    pub tol: u8,
+    pub contiguous: bool,
+}
+
+impl Default for FillOptions {
+    fn default() -> Self {
+        Self {
+            tol: 0,
+            contiguous: true,
+        }
+    }
+}
+
+/// 4-connected flood fill starting at `(x, y)`. Returns changed cells
+/// `(x, y, before, after)`.
 pub fn flood_fill(
     s: &mut Sprite,
     layer: usize,
@@ -709,30 +923,57 @@ pub fn flood_fill(
     y: u32,
     color: Rgba,
 ) -> Vec<(u32, u32, Rgba, Rgba)> {
+    flood_fill_tol(s, layer, frame, x, y, color, FillOptions::default())
+}
+
+/// Fill the seed's colour: the contiguous region around it, or every matching
+/// pixel in the cel when `opts.contiguous` is false. `opts.tol` is a
+/// per-channel match window.
+pub fn flood_fill_tol(
+    s: &mut Sprite,
+    layer: usize,
+    frame: usize,
+    x: u32,
+    y: u32,
+    color: Rgba,
+    opts: FillOptions,
+) -> Vec<(u32, u32, Rgba, Rgba)> {
     let w = s.width;
     let h = s.height;
+    if x >= w || y >= h {
+        return Vec::new();
+    }
     let target = s.get(layer, frame, x, y);
     if target == color {
         return Vec::new();
     }
-    let mut seen = vec![false; (w * h) as usize];
-    seen[(y * w + x) as usize] = true;
-    let mut stack = vec![(x, y)];
     let mut changes = Vec::new();
-
-    while let Some((cx, cy)) = stack.pop() {
-        set_px(s, layer, frame, cx, cy, color, &mut changes);
-        for (nx, ny) in [
-            (cx.wrapping_sub(1), cy),
-            (cx + 1, cy),
-            (cx, cy.wrapping_sub(1)),
-            (cx, cy + 1),
-        ] {
-            if nx < w && ny < h {
-                let i = (ny * w + nx) as usize;
-                if !seen[i] && s.get(layer, frame, nx, ny) == target {
-                    seen[i] = true;
-                    stack.push((nx, ny));
+    if opts.contiguous {
+        let mut seen = vec![false; (w * h) as usize];
+        seen[(y * w + x) as usize] = true;
+        let mut stack = vec![(x, y)];
+        while let Some((cx, cy)) = stack.pop() {
+            set_px(s, layer, frame, cx, cy, color, &mut changes);
+            for (nx, ny) in [
+                (cx.wrapping_sub(1), cy),
+                (cx + 1, cy),
+                (cx, cy.wrapping_sub(1)),
+                (cx, cy + 1),
+            ] {
+                if nx < w && ny < h {
+                    let i = (ny * w + nx) as usize;
+                    if !seen[i] && color_close(s.get(layer, frame, nx, ny), target, opts.tol) {
+                        seen[i] = true;
+                        stack.push((nx, ny));
+                    }
+                }
+            }
+        }
+    } else {
+        for yy in 0..h {
+            for xx in 0..w {
+                if color_close(s.get(layer, frame, xx, yy), target, opts.tol) {
+                    set_px(s, layer, frame, xx, yy, color, &mut changes);
                 }
             }
         }
@@ -1032,6 +1273,8 @@ mod tests {
             from: 1,
             to: 2,
             color: Rgba(1, 2, 3, 255),
+            direction: PlayDirection::Reverse,
+            repeat: 2,
         });
         s.add_frame_after(0); // insert before the tag -> shifts to 2..3
         assert_eq!((s.tags[0].from, s.tags[0].to), (2, 3));

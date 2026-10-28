@@ -13,7 +13,7 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 
 use crate::color::Rgba;
-use crate::sprite::{BlendMode, Cel, Frame, Layer, Sprite, Tag};
+use crate::sprite::{BlendMode, Cel, Frame, Layer, PlayDirection, Sprite, Tag};
 
 const MAGIC: u16 = 0xA5E0;
 const FRAME_MAGIC: u16 = 0xF1FA;
@@ -180,6 +180,12 @@ fn write_layer_chunk(out: &mut Vec<u8>, layer: &Layer) {
     if layer.editable {
         flags |= 2; // editable
     }
+    if layer.background {
+        flags |= 8; // background
+    }
+    if layer.reference {
+        flags |= 64; // reference layer
+    }
     b.extend_from_slice(&flags.to_le_bytes());
     b.extend_from_slice(&(layer.group as u16).to_le_bytes()); // 0 image, 1 group
     b.extend_from_slice(&layer.child_level.to_le_bytes());
@@ -200,8 +206,8 @@ fn write_tags_chunk(out: &mut Vec<u8>, tags: &[Tag]) {
     for t in tags {
         b.extend_from_slice(&(t.from as u16).to_le_bytes());
         b.extend_from_slice(&(t.to as u16).to_le_bytes());
-        b.push(0); // loop direction: forward
-        b.extend_from_slice(&0u16.to_le_bytes()); // repeat
+        b.push(t.direction.to_ase());
+        b.extend_from_slice(&t.repeat.to_le_bytes());
         b.extend_from_slice(&[0u8; 6]); // reserved
         b.extend_from_slice(&[t.color.0, t.color.1, t.color.2]);
         b.push(0); // extra byte
@@ -608,6 +614,8 @@ fn parse_tags(body: &[u8]) -> Vec<Tag> {
         let to = u16_at(body, p + 2) as usize;
         // p+4 direction, p+5..7 repeat, p+7..13 reserved, p+13..16 RGB,
         // p+16 extra byte, then a STRING name.
+        let direction = PlayDirection::from_ase(body[p + 4]);
+        let repeat = u16_at(body, p + 5);
         let color = Rgba(body[p + 13], body[p + 14], body[p + 15], 255);
         let name_len = u16_at(body, p + 17) as usize;
         let name = body
@@ -620,6 +628,8 @@ fn parse_tags(body: &[u8]) -> Vec<Tag> {
             from,
             to,
             color,
+            direction,
+            repeat,
         });
     }
     tags
@@ -682,6 +692,8 @@ fn parse_layer(body: &[u8], has_uuid: bool) -> Result<(Layer, u32)> {
             group,
             editable: flags & 2 != 0,
             mask: None,
+            background: flags & 8 != 0,
+            reference: flags & 64 != 0,
         },
         tileset,
     ))
@@ -881,6 +893,8 @@ mod tests {
         s.cels.insert(0, vec![s.cels[0][0].clone()]);
         s.layers[1].child_level = 1;
         s.layers[1].editable = false;
+        s.layers[1].background = true;
+        s.layers[1].reference = true;
 
         let path = std::env::temp_dir().join("vixel_ase_groups.ase");
         save(&s, &path).unwrap();
@@ -891,6 +905,8 @@ mod tests {
         assert!(loaded.layers[0].group);
         assert_eq!(loaded.layers[1].child_level, 1);
         assert!(!loaded.layers[1].editable);
+        assert!(loaded.layers[1].background);
+        assert!(loaded.layers[1].reference);
         assert_eq!(loaded.get(1, 0, 1, 0), Rgba(10, 20, 30, 255));
     }
 
@@ -1125,12 +1141,16 @@ mod tests {
             from: 0,
             to: 1,
             color: Rgba(200, 100, 50, 255),
+            direction: PlayDirection::PingPong,
+            repeat: 3,
         });
         s.tags.push(Tag {
             name: "idle".into(),
             from: 2,
             to: 2,
             color: Rgba(10, 20, 30, 255),
+            direction: PlayDirection::Forward,
+            repeat: 0,
         });
         let path = tmp("vixel_ase_tags.ase");
         save(&s, &path).unwrap();
@@ -1141,6 +1161,8 @@ mod tests {
         assert_eq!(loaded.tags[0].name, "walk");
         assert_eq!((loaded.tags[0].from, loaded.tags[0].to), (0, 1));
         assert_eq!(loaded.tags[0].color, Rgba(200, 100, 50, 255));
+        assert_eq!(loaded.tags[0].direction, PlayDirection::PingPong);
+        assert_eq!(loaded.tags[0].repeat, 3);
         assert_eq!(loaded.tags[1].name, "idle");
         assert_eq!((loaded.tags[1].from, loaded.tags[1].to), (2, 2));
     }

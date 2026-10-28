@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use crate::color::Rgba;
 use crate::sprite::{
-    Sprite, ellipse_points, flood_fill, line_points, rect_filled_points, rect_points,
+    FillOptions, Sprite, color_close, ellipse_points, flood_fill_tol, line_points,
+    rect_filled_points, rect_points,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -166,6 +167,25 @@ pub struct Pending {
     pub start: (u32, u32),
 }
 
+/// Active indices at one side of a structural edit.
+#[derive(Clone, Copy, Debug)]
+pub struct EditPoint {
+    layer: usize,
+    frame: usize,
+    tag: Option<usize>,
+}
+
+/// One layer's display properties, as recorded by the layer panel.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LayerProps {
+    pub visible: bool,
+    pub editable: bool,
+    pub opacity: u8,
+    pub blend: crate::sprite::BlendMode,
+    pub background: bool,
+    pub reference: bool,
+}
+
 /// One undoable change.
 pub enum UndoStep {
     /// Per-pixel writes, each `(layer, frame, x, y, before, after)`.
@@ -179,6 +199,22 @@ pub enum UndoStep {
         before: Box<Sprite>,
         after: Box<Sprite>,
     },
+    /// Whole-sprite snapshot for edits that change the layer/frame tree (add,
+    /// delete, move, rename, lock, tags). The active indices travel with each
+    /// side so undo/redo never leave them past the end of a shorter list.
+    Structure {
+        before: Box<Sprite>,
+        after: Box<Sprite>,
+        before_at: EditPoint,
+        after_at: EditPoint,
+    },
+    /// One layer's visibility/opacity/blend/lock. Cheap enough to record on
+    /// every panel click; the layer index does not move.
+    LayerProps {
+        layer: usize,
+        before: LayerProps,
+        after: LayerProps,
+    },
 }
 
 /// The sprite model plus the interaction state (modes, tools, undo, colors).
@@ -188,6 +224,12 @@ pub struct Editor {
     pub cursor: (u32, u32),
     pub mode: Mode,
     pub tool: Tool,
+    /// Pencil/eraser brush width in pixels (a square, clipped at the edges).
+    pub brush_size: u32,
+    /// Drop L-shaped corner pixels while freehand drawing.
+    pub pixel_perfect: bool,
+    /// Last points of the current freehand stroke, for the corner filter.
+    pp: Vec<(u32, u32)>,
     pub fg: Rgba,
     pub bg: Rgba,
     pub palette: Vec<Rgba>,
@@ -210,6 +252,8 @@ pub struct Editor {
     pub spray_seed: u64,
     pub wand_tolerance: u8,
     pub wand_all_layers: bool,
+    /// Wand and bucket restrict themselves to the seed's contiguous region.
+    pub contiguous: bool,
     /// Show the sprite tiled 3x3 and wrap the cursor across its edges.
     pub tile_mode: bool,
     /// Design grid in sprite pixels (1 = off) and whether the cursor snaps to
@@ -225,6 +269,8 @@ pub struct Editor {
     pub play_loop: bool,
     pub play_pingpong: bool,
     pub play_dir: i32,
+    /// Completed passes in the current playback session, for a tag's repeat.
+    pub play_passes: u32,
     pub undo: Vec<UndoStep>,
     pub redo: Vec<UndoStep>,
     pub stroke: Option<UndoStep>,
@@ -267,6 +313,9 @@ impl Editor {
             cursor: (0, 0),
             mode: Mode::Normal,
             tool: Tool::Pencil,
+            brush_size: 1,
+            pixel_perfect: false,
+            pp: Vec::new(),
             fg,
             bg,
             palette,
@@ -285,6 +334,7 @@ impl Editor {
             spray_seed: 0x9E37_79B9_7F4A_7C15,
             wand_tolerance: 0,
             wand_all_layers: false,
+            contiguous: true,
             tile_mode: false,
             grid: 8,
             snap: false,
@@ -293,6 +343,7 @@ impl Editor {
             play_loop: true,
             play_pingpong: false,
             play_dir: 1,
+            play_passes: 0,
             undo: Vec::new(),
             redo: Vec::new(),
             stroke: None,
@@ -346,6 +397,12 @@ impl Editor {
 
     // ---- drawing ----
 
+    /// Bump the cache revision. Every edit calls this; the view compares it so
+    /// timeline thumbnails are only rebuilt when the sprite changed.
+    pub fn touch(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
+    }
+
     pub(crate) fn record(
         &mut self,
         layer: usize,
@@ -363,17 +420,22 @@ impl Editor {
             });
             self.redo.clear();
         }
+        self.touch();
     }
 
     pub fn begin_stroke(&mut self) {
         self.stroke = Some(UndoStep::Cells { cells: Vec::new() });
+        self.pp.clear();
     }
 
     pub fn end_stroke(&mut self) {
+        self.pp.clear();
         if let Some(s) = self.stroke.take() {
             let empty = match &s {
                 UndoStep::Cells { cells } => cells.is_empty(),
-                UndoStep::Snapshot { .. } => false,
+                UndoStep::Snapshot { .. }
+                | UndoStep::Structure { .. }
+                | UndoStep::LayerProps { .. } => false,
             };
             if !empty {
                 self.undo.push(s);
@@ -404,7 +466,8 @@ impl Editor {
     /// What the active tool does to a pixel when dragged/clicked (primary).
     pub fn paint_with_tool(&mut self, x: u32, y: u32) {
         match self.tool {
-            Tool::Eraser => self.paint_symmetric(x, y, Rgba::TRANSPARENT),
+            Tool::Eraser => self.paint_freehand(x, y, Rgba::TRANSPARENT),
+            Tool::Pencil => self.paint_freehand(x, y, self.fg),
             Tool::Shade => self.shade_at(x, y, true),
             Tool::Spray => self.spray_at(x, y),
             Tool::Blur => self.blur_at(x, y),
@@ -416,6 +479,7 @@ impl Editor {
     pub fn paint_secondary(&mut self, x: u32, y: u32) {
         match self.tool {
             Tool::Shade => self.shade_at(x, y, false),
+            Tool::Pencil => self.paint_freehand(x, y, self.bg),
             _ => self.paint_symmetric(x, y, self.bg),
         }
     }
@@ -568,7 +632,14 @@ impl Editor {
         let (w, h) = (self.sprite.width, self.sprite.height);
         let sel = self.current_selection();
         let (ax, ay) = (start.0 as f32 + 0.5, start.1 as f32 + 0.5);
-        let (bx, by) = (self.cursor.0 as f32 + 0.5, self.cursor.1 as f32 + 0.5);
+        let (bx, by) = if self.tile_mode {
+            (
+                ax + Self::wrap_delta(start.0, self.cursor.0, w) as f32,
+                ay + Self::wrap_delta(start.1, self.cursor.1, h) as f32,
+            )
+        } else {
+            (self.cursor.0 as f32 + 0.5, self.cursor.1 as f32 + 0.5)
+        };
         let dx = bx - ax;
         let dy = by - ay;
         let len2 = dx * dx + dy * dy;
@@ -583,8 +654,18 @@ impl Editor {
                 {
                     continue;
                 }
-                let px = x as f32 + 0.5;
-                let py = y as f32 + 0.5;
+                // In tile mode each pixel is measured from the start along the
+                // shorter way round, so a gradient drawn across the seam wraps.
+                let px = if self.tile_mode {
+                    ax + Self::wrap_delta(start.0, x, w) as f32
+                } else {
+                    x as f32 + 0.5
+                };
+                let py = if self.tile_mode {
+                    ay + Self::wrap_delta(start.1, y, h) as f32
+                } else {
+                    y as f32 + 0.5
+                };
                 let t = if radial {
                     if len < 0.001 {
                         0.0
@@ -602,10 +683,100 @@ impl Editor {
         self.end_stroke();
     }
 
+    /// Shortest signed delta from `from` to `to` on an axis of `size` pixels:
+    /// tile-mode geometry takes the seam rather than crossing the canvas.
+    fn wrap_delta(from: u32, to: u32, size: u32) -> i32 {
+        let d = to as i32 - from as i32;
+        let s = size as i32;
+        if d > s / 2 {
+            d - s
+        } else if d < -(s / 2) {
+            d + s
+        } else {
+            d
+        }
+    }
+
+    /// Wrap a (possibly out-of-range) coordinate into the sprite.
+    fn wrap_point(&self, x: i32, y: i32) -> (u32, u32) {
+        (
+            x.rem_euclid(self.sprite.width as i32) as u32,
+            y.rem_euclid(self.sprite.height as i32) as u32,
+        )
+    }
+
     /// Paint `color` at `(x, y)` and at every mirrored symmetry point.
     pub fn paint_symmetric(&mut self, x: u32, y: u32, color: Rgba) {
         for (px, py) in self.symmetry_points(x, y) {
             self.paint_pixel(px, py, color);
+        }
+    }
+
+    /// Freehand paint: joins the last point to `(x, y)` with a line, and in
+    /// pixel-perfect mode drops the middle pixel of an L-shaped corner. Only
+    /// the plain 1 px, no-symmetry path gets the filter; brushes and symmetry
+    /// fall back to a single stamp.
+    pub fn paint_freehand(&mut self, x: u32, y: u32, color: Rgba) {
+        let plain = self.brush_size == 1 && self.symmetry == Symmetry::None;
+        if !self.pixel_perfect || !plain {
+            self.pp.clear();
+            self.paint_brush_symmetric(x, y, color);
+            return;
+        }
+        let start = self.pp.last().copied().unwrap_or((x, y));
+        for (px, py) in line_points(start.0 as i32, start.1 as i32, x as i32, y as i32) {
+            if self.pp.last() == Some(&(px, py)) {
+                continue;
+            }
+            self.paint_symmetric(px, py, color);
+            self.pp.push((px, py));
+            let n = self.pp.len();
+            if n >= 3 {
+                let (a, b, c) = (self.pp[n - 3], self.pp[n - 2], self.pp[n - 1]);
+                if is_corner(a, b, c) {
+                    self.unpaint(b);
+                    self.pp.remove(n - 2);
+                }
+            }
+            if self.pp.len() > 4 {
+                self.pp.remove(0);
+            }
+        }
+    }
+
+    /// Undo one pixel of the current stroke (the pixel-perfect corner). Only
+    /// safe when the stroke wrote that pixel once; otherwise it is left alone.
+    fn unpaint(&mut self, (x, y): (u32, u32)) {
+        let (l, f) = (self.active_layer, self.active_frame);
+        let same =
+            |c: &(usize, usize, u32, u32, Rgba, Rgba)| c.0 == l && c.1 == f && c.2 == x && c.3 == y;
+        let Some(UndoStep::Cells { cells }) = &mut self.stroke else {
+            return;
+        };
+        if cells.iter().filter(|c| same(c)).count() != 1 {
+            return;
+        }
+        if let Some(pos) = cells.iter().rposition(same) {
+            let before = cells.remove(pos).4;
+            self.sprite.set(l, f, x, y, before);
+            self.touch();
+        }
+    }
+
+    /// Paint a square brush of `brush_size` pixels centred on the cursor,
+    /// mirrored by the active symmetry and clipped at the canvas edges.
+    pub fn paint_brush_symmetric(&mut self, x: u32, y: u32, color: Rgba) {
+        let n = self.brush_size.max(1) as i32;
+        let lo = -(n / 2);
+        let hi = n - n / 2;
+        let (w, h) = (self.sprite.width as i32, self.sprite.height as i32);
+        for dy in lo..hi {
+            for dx in lo..hi {
+                let (px, py) = (x as i32 + dx, y as i32 + dy);
+                if (0..w).contains(&px) && (0..h).contains(&py) {
+                    self.paint_symmetric(px as u32, py as u32, color);
+                }
+            }
         }
     }
 
@@ -746,15 +917,24 @@ impl Editor {
             return;
         }
         let color = self.fg;
+        let opts = FillOptions {
+            tol: self.wand_tolerance,
+            contiguous: self.contiguous,
+        };
         self.begin_stroke();
-        let changes = flood_fill(&mut self.sprite, l, f, x, y, color);
-        let n = changes.len();
-        if let Some(UndoStep::Cells { cells }) = &mut self.stroke {
-            cells.extend(
-                changes
-                    .into_iter()
-                    .map(|(x, y, old, new)| (l, f, x, y, old, new)),
-            );
+        let mut n = 0;
+        // Fill the seed and every mirrored seed: a region on the other side of
+        // the axis is a different flood, not a mirrored copy of the first.
+        for (sx, sy) in self.symmetry_points(x, y) {
+            let changes = flood_fill_tol(&mut self.sprite, l, f, sx, sy, color, opts);
+            n += changes.len();
+            if let Some(UndoStep::Cells { cells }) = &mut self.stroke {
+                cells.extend(
+                    changes
+                        .into_iter()
+                        .map(|(x, y, old, new)| (l, f, x, y, old, new)),
+                );
+            }
         }
         if n > 0 {
             self.dirty = true;
@@ -771,36 +951,34 @@ impl Editor {
             return;
         }
         let filled = self.filled_shapes;
+        let (w, h) = (self.sprite.width as i32, self.sprite.height as i32);
+        let (sx, sy) = (p.start.0 as i32, p.start.1 as i32);
+        let (mut ex, mut ey) = (self.cursor.0 as i32, self.cursor.1 as i32);
+        if self.tile_mode {
+            ex = sx + Self::wrap_delta(p.start.0, self.cursor.0, w as u32);
+            ey = sy + Self::wrap_delta(p.start.1, self.cursor.1, h as u32);
+        }
+        // The helpers cast to u32, so shift both corners clear of zero when
+        // the seam took the end (or start) negative; the modulo is unchanged.
+        let (sx, sy, ex, ey) = if sx < 0 || sy < 0 || ex < 0 || ey < 0 || ex >= w || ey >= h {
+            (sx + w, sy + h, ex + w, ey + h)
+        } else {
+            (sx, sy, ex, ey)
+        };
         let pts = match p.shape {
-            Shape::Line => line_points(
-                p.start.0 as i32,
-                p.start.1 as i32,
-                self.cursor.0 as i32,
-                self.cursor.1 as i32,
-            ),
-            Shape::Rect if filled => rect_filled_points(
-                p.start.0 as i32,
-                p.start.1 as i32,
-                self.cursor.0 as i32,
-                self.cursor.1 as i32,
-            ),
-            Shape::Rect => rect_points(
-                p.start.0 as i32,
-                p.start.1 as i32,
-                self.cursor.0 as i32,
-                self.cursor.1 as i32,
-            ),
-            Shape::Ellipse => ellipse_points(
-                p.start.0 as i32,
-                p.start.1 as i32,
-                self.cursor.0 as i32,
-                self.cursor.1 as i32,
-                filled,
-            ),
+            Shape::Line => line_points(sx, sy, ex, ey),
+            Shape::Rect if filled => rect_filled_points(sx, sy, ex, ey),
+            Shape::Rect => rect_points(sx, sy, ex, ey),
+            Shape::Ellipse => ellipse_points(sx, sy, ex, ey, filled),
             Shape::Gradient => unreachable!(),
         };
         self.begin_stroke();
         for (x, y) in pts {
+            let (x, y) = if self.tile_mode {
+                self.wrap_point(x as i32, y as i32)
+            } else {
+                (x, y)
+            };
             self.paint_symmetric(x, y, color);
         }
         self.end_stroke();
@@ -833,9 +1011,19 @@ impl Editor {
                     self.sprite = (**before).clone();
                     self.clamp_cursor();
                 }
+                UndoStep::Structure {
+                    before, before_at, ..
+                } => {
+                    self.sprite = (**before).clone();
+                    self.restore_point(*before_at);
+                }
+                UndoStep::LayerProps { layer, before, .. } => {
+                    self.apply_layer_props(*layer, *before);
+                }
             }
             self.redo.push(step);
             self.dirty = true;
+            self.touch();
         }
     }
 
@@ -851,9 +1039,19 @@ impl Editor {
                     self.sprite = (**after).clone();
                     self.clamp_cursor();
                 }
+                UndoStep::Structure {
+                    after, after_at, ..
+                } => {
+                    self.sprite = (**after).clone();
+                    self.restore_point(*after_at);
+                }
+                UndoStep::LayerProps { layer, after, .. } => {
+                    self.apply_layer_props(*layer, *after);
+                }
             }
             self.undo.push(step);
             self.dirty = true;
+            self.touch();
         }
     }
 
@@ -1009,31 +1207,39 @@ impl Editor {
     }
 
     pub fn add_layer(&mut self) {
+        let before = self.sprite.clone();
+        let at = self.edit_point();
         let idx = self.active_layer;
         self.sprite.add_layer_after(idx);
         self.active_layer = idx + 1;
-        self.dirty = true;
+        self.record_structure(before, at);
     }
 
     pub fn del_layer(&mut self) {
+        let before = self.sprite.clone();
+        let at = self.edit_point();
         if self.sprite.remove_layer(self.active_layer) {
             if self.active_layer >= self.sprite.layers.len() {
                 self.active_layer = self.sprite.layers.len() - 1;
             }
-            self.dirty = true;
+            self.record_structure(before, at);
         } else {
             self.msg = "cannot delete last layer".into();
         }
     }
 
     pub fn add_frame(&mut self) {
+        let before = self.sprite.clone();
+        let at = self.edit_point();
         let idx = self.active_frame;
         self.sprite.add_frame_after(idx);
         self.active_frame = idx + 1;
-        self.dirty = true;
+        self.record_structure(before, at);
     }
 
     pub fn del_frame(&mut self) {
+        let before = self.sprite.clone();
+        let at = self.edit_point();
         if self.sprite.remove_frame(self.active_frame) {
             if self.active_frame >= self.sprite.frames.len() {
                 self.active_frame = self.sprite.frames.len() - 1;
@@ -1041,7 +1247,7 @@ impl Editor {
             if self.active_tag.is_some_and(|i| i >= self.sprite.tags.len()) {
                 self.active_tag = None;
             }
-            self.dirty = true;
+            self.record_structure(before, at);
         } else {
             self.msg = "cannot delete last frame".into();
         }
@@ -1049,16 +1255,20 @@ impl Editor {
 
     /// Move a frame (drag-and-drop in the timeline).
     pub fn move_frame(&mut self, from: usize, to: usize) {
+        let before = self.sprite.clone();
+        let at = self.edit_point();
         if self.sprite.move_frame(from, to) {
             if self.active_frame == from {
                 self.active_frame = to;
             }
-            self.dirty = true;
+            self.record_structure(before, at);
         }
     }
 
     /// Create or update a tag over the inclusive frame range.
     pub fn set_tag(&mut self, name: &str, from: Option<usize>, to: Option<usize>) {
+        let before = self.sprite.clone();
+        let at = self.edit_point();
         let last = self.sprite.frames.len().saturating_sub(1);
         let a = from.unwrap_or(self.active_frame).min(last);
         let b = to.unwrap_or(a).min(last);
@@ -1075,17 +1285,21 @@ impl Editor {
                     from: a,
                     to: b,
                     color: Rgba(120, 170, 255, 255),
+                    direction: crate::sprite::PlayDirection::Forward,
+                    repeat: 0,
                 });
                 self.sprite.tags.len() - 1
             }
         };
         self.active_tag = Some(idx);
         self.msg = format!("tag '{name}': frames {a}-{b}");
-        self.dirty = true;
+        self.record_structure(before, at);
     }
 
     /// Delete a tag by name, or the active tag when no name is given.
     pub fn del_tag(&mut self, name: Option<&str>) {
+        let before = self.sprite.clone();
+        let at = self.edit_point();
         let idx = match name {
             Some(n) => self.sprite.tags.iter().position(|t| t.name == n),
             None => self.active_tag,
@@ -1093,7 +1307,7 @@ impl Editor {
         if let Some(i) = idx {
             self.sprite.tags.remove(i);
             self.active_tag = None;
-            self.dirty = true;
+            self.record_structure(before, at);
         } else {
             self.msg = "no such tag".into();
         }
@@ -1108,43 +1322,189 @@ impl Editor {
         }
     }
 
+    /// Reset the pass counter when playback starts (or the tag changes).
+    pub fn start_playback(&mut self) {
+        self.play_passes = 0;
+        self.play_dir = 1;
+    }
+
     /// Step to the next playback frame inside the active tag. Returns whether
-    /// playback should continue: a loop-less clip stops at its last frame, and
-    /// a ping-pong clip reverses at both ends.
+    /// playback should continue. A tag carries its own direction and repeat
+    /// count; without one, the global loop/ping-pong flags apply.
     pub fn advance_frame(&mut self) -> bool {
         let (a, b) = self.play_range();
         if b <= a {
-            return self.play_loop;
+            return false;
         }
-        if self.play_pingpong {
-            // `b` is the last frame, so the turn happens when the step would
-            // leave the range, and the endpoint is shown once per pass.
-            let mut f = self.active_frame as i32 + self.play_dir;
-            if f > b as i32 {
-                self.play_dir = -1;
-                f = b as i32 - 1;
-            } else if f < a as i32 {
-                self.play_dir = 1;
-                f = a as i32 + 1;
+        let tag = self.active_tag.and_then(|i| self.sprite.tags.get(i));
+        let direction = match tag {
+            Some(t) => t.direction,
+            None if self.play_pingpong => crate::sprite::PlayDirection::PingPong,
+            None => crate::sprite::PlayDirection::Forward,
+        };
+        let repeat = tag.map_or(0, |t| t.repeat);
+        use crate::sprite::PlayDirection;
+        match direction {
+            PlayDirection::PingPong => {
+                // `b` is the last frame, so the turn happens when the step
+                // would leave the range, and the endpoint is shown once.
+                let mut f = self.active_frame as i32 + self.play_dir;
+                let mut full_cycle = false;
+                if f > b as i32 {
+                    self.play_dir = -1;
+                    f = b as i32 - 1;
+                } else if f < a as i32 {
+                    self.play_dir = 1;
+                    f = a as i32 + 1;
+                    full_cycle = true;
+                }
+                self.active_frame = f.clamp(a as i32, b as i32) as usize;
+                if full_cycle && !self.pass_complete(repeat) {
+                    self.active_frame = a;
+                    return false;
+                }
+                true
             }
-            self.active_frame = f.clamp(a as i32, b as i32) as usize;
+            PlayDirection::Reverse => {
+                if self.active_frame <= a || self.active_frame > b {
+                    if !self.pass_complete(repeat) {
+                        return false;
+                    }
+                    self.active_frame = b;
+                } else {
+                    self.active_frame -= 1;
+                }
+                true
+            }
+            PlayDirection::Forward => {
+                let looping = tag.is_some() || self.play_loop;
+                if self.active_frame >= b || self.active_frame < a {
+                    if !looping || !self.pass_complete(repeat) {
+                        return false;
+                    }
+                    self.active_frame = a;
+                } else {
+                    self.active_frame += 1;
+                }
+                true
+            }
+        }
+    }
+
+    /// Count a completed pass; returns whether playback may continue. `repeat`
+    /// of 0 means forever.
+    fn pass_complete(&mut self, repeat: u16) -> bool {
+        if repeat == 0 {
             return true;
         }
-        if self.active_frame >= b || self.active_frame < a {
-            if self.play_loop {
-                self.active_frame = a;
-            }
-            self.play_loop
-        } else {
-            self.active_frame += 1;
-            true
+        self.play_passes += 1;
+        self.play_passes < repeat as u32
+    }
+
+    /// Direction of the active tag's playback.
+    pub fn set_tag_direction(&mut self, direction: crate::sprite::PlayDirection) {
+        let Some(i) = self.active_tag else {
+            self.msg = "no active tag (click one or :tag <name>)".into();
+            return;
+        };
+        if self.sprite.tags[i].direction == direction {
+            return;
         }
+        let before = self.sprite.clone();
+        let at = self.edit_point();
+        self.sprite.tags[i].direction = direction;
+        self.msg = format!("tag '{}': {}", self.sprite.tags[i].name, direction.name());
+        self.record_structure(before, at);
+    }
+
+    /// Repeat count of the active tag (0 = forever).
+    pub fn set_tag_repeat(&mut self, repeat: u16) {
+        let Some(i) = self.active_tag else {
+            self.msg = "no active tag (click one or :tag <name>)".into();
+            return;
+        };
+        if self.sprite.tags[i].repeat == repeat {
+            return;
+        }
+        let before = self.sprite.clone();
+        let at = self.edit_point();
+        self.sprite.tags[i].repeat = repeat;
+        self.msg = format!(
+            "tag '{}': {}",
+            self.sprite.tags[i].name,
+            if repeat == 0 {
+                "forever".to_string()
+            } else {
+                format!("{repeat}×")
+            }
+        );
+        self.record_structure(before, at);
+    }
+
+    /// Crop the canvas to a rectangle (clamped), as one undo step.
+    pub fn crop_to(&mut self, x: u32, y: u32, w: u32, h: u32) {
+        let (sw, sh) = (self.sprite.width, self.sprite.height);
+        let x = x.min(sw.saturating_sub(1));
+        let y = y.min(sh.saturating_sub(1));
+        let w = w.clamp(1, sw - x);
+        let h = h.clamp(1, sh - y);
+        if (x, y, w, h) == (0, 0, sw, sh) {
+            self.msg = "crop: no change".into();
+            return;
+        }
+        let before = self.sprite.clone();
+        self.sprite.crop(x, y, w, h);
+        self.cursor = (
+            self.cursor.0.saturating_sub(x).min(w - 1),
+            self.cursor.1.saturating_sub(y).min(h - 1),
+        );
+        self.selection = None;
+        self.select_anchor = None;
+        self.pending = None;
+        self.paste_pos = None;
+        self.snapshot(before);
+        self.msg = format!("cropped to {w}x{h}");
+    }
+
+    /// Crop to the current selection's bounding box.
+    pub fn crop_to_selection(&mut self) {
+        match self.current_selection() {
+            Some(sel) => self.crop_to(sel.x, sel.y, sel.w, sel.h),
+            None => self.msg = "no selection to crop to".into(),
+        }
+    }
+
+    /// Crop to the non-transparent content of every visible frame.
+    pub fn trim(&mut self) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let (mut minx, mut miny, mut maxx, mut maxy) = (w, h, 0, 0);
+        let mut any = false;
+        for f in 0..self.sprite.frames.len() {
+            let comp = self.sprite.composite(f);
+            for y in 0..h {
+                for x in 0..w {
+                    if !comp[(y * w + x) as usize].is_transparent() {
+                        any = true;
+                        minx = minx.min(x);
+                        miny = miny.min(y);
+                        maxx = maxx.max(x);
+                        maxy = maxy.max(y);
+                    }
+                }
+            }
+        }
+        if !any {
+            self.msg = "nothing to trim".into();
+            return;
+        }
+        self.crop_to(minx, miny, maxx - minx + 1, maxy - miny + 1);
     }
 
     pub fn resize(&mut self, w: u32, h: u32) {
         self.sprite.resize(w, h);
         self.cursor = (self.cursor.0.min(w - 1), self.cursor.1.min(h - 1));
         self.dirty = true;
+        self.touch();
     }
 
     // ---- selection / clipboard ----
@@ -1197,6 +1557,7 @@ impl Editor {
         self.fg = Rgba(f(self.fg.0), f(self.fg.1), f(self.fg.2), self.fg.3);
         self.bg = Rgba(f(self.bg.0), f(self.bg.1), f(self.bg.2), self.bg.3);
         self.dirty = true;
+        self.touch();
         self.msg = format!("profile: {}", to.name());
     }
 
@@ -1233,6 +1594,7 @@ impl Editor {
             }
         }
         self.dirty = true;
+        self.touch();
         self.msg = format!("mode: {}", mode.name());
     }
 
@@ -1575,7 +1937,8 @@ impl Editor {
         self.filled_shapes = !self.filled_shapes;
     }
 
-    /// Select the contiguous region around `(x, y)` matching within `wand_tolerance`.
+    /// Select the region around `(x, y)` matching within `wand_tolerance`:
+    /// contiguous, or every matching pixel when `contiguous` is off.
     pub fn magic_wand(&mut self, x: u32, y: u32) {
         let (w, h) = (self.sprite.width, self.sprite.height);
         let source: Vec<Rgba> = if self.wand_all_layers {
@@ -1588,23 +1951,31 @@ impl Editor {
         let target = source[(y * w + x) as usize];
         let tol = self.wand_tolerance;
         let mut mask = vec![false; (w * h) as usize];
-        let mut seen = vec![false; (w * h) as usize];
-        let mut stack = vec![(x, y)];
-        seen[(y * w + x) as usize] = true;
-        while let Some((cx, cy)) = stack.pop() {
-            mask[(cy * w + cx) as usize] = true;
-            for (nx, ny) in [
-                (cx.wrapping_sub(1), cy),
-                (cx + 1, cy),
-                (cx, cy.wrapping_sub(1)),
-                (cx, cy + 1),
-            ] {
-                if nx < w && ny < h {
-                    let i = (ny * w + nx) as usize;
-                    if !seen[i] && color_close(source[i], target, tol) {
-                        seen[i] = true;
-                        stack.push((nx, ny));
+        if self.contiguous {
+            let mut seen = vec![false; (w * h) as usize];
+            let mut stack = vec![(x, y)];
+            seen[(y * w + x) as usize] = true;
+            while let Some((cx, cy)) = stack.pop() {
+                mask[(cy * w + cx) as usize] = true;
+                for (nx, ny) in [
+                    (cx.wrapping_sub(1), cy),
+                    (cx + 1, cy),
+                    (cx, cy.wrapping_sub(1)),
+                    (cx, cy + 1),
+                ] {
+                    if nx < w && ny < h {
+                        let i = (ny * w + nx) as usize;
+                        if !seen[i] && color_close(source[i], target, tol) {
+                            seen[i] = true;
+                            stack.push((nx, ny));
+                        }
                     }
+                }
+            }
+        } else {
+            for (i, &c) in source.iter().enumerate() {
+                if color_close(c, target, tol) {
+                    mask[i] = true;
                 }
             }
         }
@@ -1722,10 +2093,43 @@ impl Editor {
         }
     }
 
+    /// Flattened copy: the composite of every visible layer in the active
+    /// frame, restricted to the selection. Aseprite calls this Copy Merged.
+    fn selection_to_clipboard_merged(&self, sel: &Selection) -> Clipboard {
+        let comp = self.sprite.composite(self.active_frame);
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let mut pixels = Vec::with_capacity((sel.w * sel.h) as usize);
+        for yy in 0..sel.h {
+            for xx in 0..sel.w {
+                let (x, y) = (sel.x + xx, sel.y + yy);
+                if sel.selected(xx, yy) && x < w && y < h {
+                    pixels.push(comp[(y * w + x) as usize]);
+                } else {
+                    pixels.push(Rgba::TRANSPARENT);
+                }
+            }
+        }
+        Clipboard {
+            w: sel.w,
+            h: sel.h,
+            pixels,
+            mask: sel.mask.clone(),
+        }
+    }
+
     /// Copy the selection to the clipboard (active layer).
     pub fn yank(&mut self) {
         if let Some(sel) = self.current_selection() {
             self.clipboard = Some(self.selection_to_clipboard(&sel));
+        }
+        self.clear_selection();
+        self.mode = Mode::Normal;
+    }
+
+    /// Copy the flattened selection (all visible layers) to the clipboard.
+    pub fn yank_merged(&mut self) {
+        if let Some(sel) = self.current_selection() {
+            self.clipboard = Some(self.selection_to_clipboard_merged(&sel));
         }
         self.clear_selection();
         self.mode = Mode::Normal;
@@ -1794,7 +2198,7 @@ impl Editor {
                     if buf.mask[(yy * buf.w + xx) as usize] {
                         let color = buf.pixels[(yy * buf.w + xx) as usize];
                         if !color.is_transparent() {
-                            self.paint_pixel(pos.0 + xx, pos.1 + yy, color);
+                            self.paint_symmetric(pos.0 + xx, pos.1 + yy, color);
                         }
                     }
                 }
@@ -1813,15 +2217,17 @@ impl Editor {
     // ---- layer / frame / transform ----
 
     pub fn move_layer_active(&mut self, dir: i32) {
+        let before = self.sprite.clone();
+        let at = self.edit_point();
         let from = self.active_layer;
         let to = if dir > 0 {
             self.sprite.subtree_end(from)
         } else {
             from.saturating_sub(1)
         };
-        if let Some(at) = self.sprite.move_layer(from, to) {
-            self.active_layer = at;
-            self.dirty = true;
+        if let Some(to) = self.sprite.move_layer(from, to) {
+            self.active_layer = to;
+            self.record_structure(before, at);
         }
     }
 
@@ -1831,18 +2237,84 @@ impl Editor {
         if from == to {
             return;
         }
-        if let Some(at) = self.sprite.move_layer(from, to) {
-            self.active_layer = at;
-            self.dirty = true;
-            self.msg = format!("layer {from} -> {at}");
+        let before = self.sprite.clone();
+        let at = self.edit_point();
+        if let Some(to) = self.sprite.move_layer(from, to) {
+            self.active_layer = to;
+            self.msg = format!("layer {from} -> {to}");
+            self.record_structure(before, at);
         }
     }
 
+    pub fn duplicate_layer(&mut self) {
+        let i = self.active_layer;
+        if self.sprite.layers[i].group {
+            self.msg = "groups cannot be duplicated yet".into();
+            return;
+        }
+        let before = self.sprite.clone();
+        let at = self.edit_point();
+        self.sprite.duplicate_layer(i);
+        self.active_layer = i;
+        self.record_structure(before, at);
+        self.msg = "layer duplicated".into();
+    }
+
+    pub fn merge_down(&mut self) {
+        let up = self.active_layer;
+        let down = up + 1;
+        if down >= self.sprite.layers.len() {
+            self.msg = "no layer below".into();
+            return;
+        }
+        if self.sprite.layers[up].group || self.sprite.layers[down].group {
+            self.msg = "groups cannot be merged".into();
+            return;
+        }
+        if self.sprite.layers[up].reference || self.sprite.layers[down].reference {
+            self.msg = "reference layers cannot be merged".into();
+            return;
+        }
+        if self.sprite.layers[up].child_level != self.sprite.layers[down].child_level {
+            self.msg = "merge needs sibling layers".into();
+            return;
+        }
+        if !self.sprite.layers[up].visible || !self.sprite.layers[down].visible {
+            self.msg = "merge needs both layers visible".into();
+            return;
+        }
+        let before = self.sprite.clone();
+        let at = self.edit_point();
+        self.sprite.merge_down(up);
+        self.active_layer = up.min(self.sprite.layers.len() - 1);
+        self.record_structure(before, at);
+        self.msg = "merged down".into();
+    }
+
+    pub fn flatten(&mut self) {
+        let before = self.sprite.clone();
+        let at = self.edit_point();
+        if !self.sprite.flatten() {
+            self.msg = "already flat".into();
+            return;
+        }
+        self.active_layer = 0;
+        self.active_frame = self.active_frame.min(self.sprite.frames.len() - 1);
+        self.selection = None;
+        self.select_anchor = None;
+        self.pending = None;
+        self.paste_pos = None;
+        self.record_structure(before, at);
+        self.msg = "flattened".into();
+    }
+
     pub fn add_group(&mut self) {
+        let before = self.sprite.clone();
+        let at = self.edit_point();
         let idx = self.active_layer;
         self.sprite.add_group_after(idx);
         self.active_layer = idx + 1;
-        self.dirty = true;
+        self.record_structure(before, at);
     }
 
     /// Indent (`dir > 0`) or outdent the active layer and its children.
@@ -1864,11 +2336,89 @@ impl Editor {
             };
             return;
         }
+        let before = self.sprite.clone();
+        let at = self.edit_point();
         let end = self.sprite.subtree_end(i);
         for layer in &mut self.sprite.layers[i..end] {
             layer.child_level = (layer.child_level as i32 + delta) as u16;
         }
+        self.record_structure(before, at);
+    }
+
+    pub fn layer_props(&self, layer: usize) -> LayerProps {
+        let l = &self.sprite.layers[layer];
+        LayerProps {
+            visible: l.visible,
+            editable: l.editable,
+            opacity: l.opacity,
+            blend: l.blend,
+            background: l.background,
+            reference: l.reference,
+        }
+    }
+
+    fn apply_layer_props(&mut self, layer: usize, p: LayerProps) {
+        if let Some(l) = self.sprite.layers.get_mut(layer) {
+            l.visible = p.visible;
+            l.editable = p.editable;
+            l.opacity = p.opacity;
+            l.blend = p.blend;
+            l.background = p.background;
+            l.reference = p.reference;
+        }
+    }
+
+    /// Record a panel property change as one undo step. The widget has already
+    /// written the new value; `before` is what the row looked like before the
+    /// interaction.
+    pub fn record_layer_props(&mut self, layer: usize, before: LayerProps) {
+        if layer >= self.sprite.layers.len() {
+            return;
+        }
+        let after = self.layer_props(layer);
+        if after == before {
+            return;
+        }
+        self.undo.push(UndoStep::LayerProps {
+            layer,
+            before,
+            after,
+        });
+        self.redo.clear();
         self.dirty = true;
+        self.touch();
+    }
+
+    fn edit_point(&self) -> EditPoint {
+        EditPoint {
+            layer: self.active_layer,
+            frame: self.active_frame,
+            tag: self.active_tag,
+        }
+    }
+
+    /// Restore indices from a snapshot, clamped: a snapshot taken before a
+    /// delete cannot point past the end of the restored (shorter) list.
+    fn restore_point(&mut self, at: EditPoint) {
+        self.active_layer = at.layer.min(self.sprite.layers.len().saturating_sub(1));
+        self.active_frame = at.frame.min(self.sprite.frames.len().saturating_sub(1));
+        self.active_tag = at.tag.filter(|&i| i < self.sprite.tags.len());
+        self.clamp_cursor();
+    }
+
+    /// Record a structural edit (layers, frames, tags) as one undo step.
+    fn record_structure(&mut self, before: Sprite, before_at: EditPoint) {
+        let after = self.sprite.clone();
+        let after_at = self.edit_point();
+        self.undo.push(UndoStep::Structure {
+            before: Box::new(before),
+            after: Box::new(after),
+            before_at,
+            after_at,
+        });
+        self.redo.clear();
+        self.dirty = true;
+        self.touch();
     }
 
     /// Mask ops are whole-sprite snapshots so they undo as one step.
@@ -1879,6 +2429,7 @@ impl Editor {
         });
         self.redo.clear();
         self.dirty = true;
+        self.touch();
     }
 
     /// Add an alpha mask on the active layer: the selection if there is one,
@@ -1938,14 +2489,78 @@ impl Editor {
     }
 
     pub fn rename_layer(&mut self, name: &str) {
+        if self.sprite.layers[self.active_layer].name == name {
+            return;
+        }
+        let before = self.sprite.clone();
+        let at = self.edit_point();
         self.sprite.layers[self.active_layer].name = name.to_string();
-        self.dirty = true;
+        self.record_structure(before, at);
+    }
+
+    /// Mark the active layer as Aseprite's background layer. A background is
+    /// opaque, so the opacity is forced to 255.
+    pub fn set_layer_background(&mut self, on: bool) {
+        let layer = self.active_layer;
+        if self.sprite.layers[layer].group {
+            self.msg = "groups cannot be a background".into();
+            return;
+        }
+        if self.sprite.layers[layer].background == on {
+            return;
+        }
+        let before = self.layer_props(layer);
+        self.sprite.layers[layer].background = on;
+        if on {
+            self.sprite.layers[layer].opacity = 255;
+        }
+        self.record_layer_props(layer, before);
+        self.msg = if on {
+            "background layer".into()
+        } else {
+            "normal layer".into()
+        };
+    }
+
+    /// Mark the active layer as a reference layer: drawn for tracing, never
+    /// painted and excluded from exports.
+    pub fn set_layer_reference(&mut self, on: bool) {
+        let layer = self.active_layer;
+        if self.sprite.layers[layer].group {
+            self.msg = "groups cannot be reference layers".into();
+            return;
+        }
+        if self.sprite.layers[layer].reference == on {
+            return;
+        }
+        let before = self.layer_props(layer);
+        self.sprite.layers[layer].reference = on;
+        self.record_layer_props(layer, before);
+        self.msg = if on {
+            "reference layer (not exported)".into()
+        } else {
+            "normal layer".into()
+        };
+    }
+
+    /// Lock or unlock the active layer. Blocked painting is enforced elsewhere;
+    /// this only flips the flag so the change is undoable.
+    pub fn set_layer_editable(&mut self, editable: bool) {
+        let layer = self.active_layer;
+        if self.sprite.layers[layer].editable == editable {
+            return;
+        }
+        let before = self.layer_props(layer);
+        self.sprite.layers[layer].editable = editable;
+        self.record_layer_props(layer, before);
     }
 
     pub fn duplicate_frame(&mut self) {
+        let before = self.sprite.clone();
+        let at = self.edit_point();
         self.sprite.duplicate_frame(self.active_frame);
         self.active_frame += 1;
-        self.dirty = true;
+        self.record_structure(before, at);
     }
 
     pub fn flip_h(&mut self) {
@@ -1990,6 +2605,7 @@ impl Editor {
         self.selection = None;
         self.select_anchor = None;
         self.dirty = true;
+        self.touch();
     }
 
     /// Transform the selected pixels inside the active cel (one undo step).
@@ -2127,6 +2743,7 @@ impl Editor {
         self.lasso_points.clear();
         self.dirty = false;
         self.bundle_stage = None;
+        self.touch();
     }
 
     /// A fix bundle has a locked `base` and an editable `fix` layer. Land on
@@ -2221,16 +2838,10 @@ fn combine_masks(a: &Selection, b: &Selection, op: SelectionOp) -> Selection {
     }
 }
 
-/// Whether two colors are within `tol` on every channel (transparent == transparent).
-fn color_close(a: Rgba, b: Rgba, tol: u8) -> bool {
-    if a.3 == 0 && b.3 == 0 {
-        return true;
-    }
-    let t = tol as i16;
-    (a.0 as i16 - b.0 as i16).abs() <= t
-        && (a.1 as i16 - b.1 as i16).abs() <= t
-        && (a.2 as i16 - b.2 as i16).abs() <= t
-        && (a.3 as i16 - b.3 as i16).abs() <= t
+/// Is `b` the L-shaped middle between the diagonal neighbours `a` and `c`?
+fn is_corner(a: (u32, u32), b: (u32, u32), c: (u32, u32)) -> bool {
+    let diagonal = (a.0 as i32 - c.0 as i32).abs() == 1 && (a.1 as i32 - c.1 as i32).abs() == 1;
+    diagonal && ((b.0 == a.0 && b.1 == c.1) || (b.0 == c.0 && b.1 == a.1))
 }
 
 /// Darken (`f = 0.8`) or lighten (`f = 1.25`) a color, keeping alpha.
@@ -2803,6 +3414,44 @@ mod tests {
     }
 
     #[test]
+    fn bucket_fill_can_be_global_and_tolerant() {
+        let mut e = Editor::new(4, 1);
+        let ink = Rgba::rgb(10, 10, 10);
+        e.sprite.set(0, 0, 0, 0, ink);
+        e.sprite.set(0, 0, 2, 0, ink);
+        e.sprite.set(0, 0, 3, 0, Rgba::rgb(12, 10, 10));
+        e.fg = Rgba::rgb(255, 0, 0);
+        e.wand_tolerance = 3;
+        e.contiguous = false;
+        e.apply_bucket(0, 0);
+        assert_eq!(e.sprite.get(0, 0, 2, 0), e.fg);
+        assert_eq!(e.sprite.get(0, 0, 3, 0), e.fg, "within tolerance");
+        assert_eq!(e.sprite.get(0, 0, 1, 0), Rgba::TRANSPARENT);
+
+        // Contiguous (the default) stops at the transparent gap.
+        let mut e = Editor::new(4, 1);
+        e.sprite.set(0, 0, 0, 0, ink);
+        e.sprite.set(0, 0, 2, 0, ink);
+        e.fg = Rgba::rgb(255, 0, 0);
+        e.apply_bucket(0, 0);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), e.fg);
+        assert_eq!(e.sprite.get(0, 0, 2, 0), ink, "not reached");
+    }
+
+    #[test]
+    fn wand_can_select_non_contiguous_pixels() {
+        let mut e = Editor::new(4, 1);
+        let ink = Rgba::rgb(10, 10, 10);
+        e.sprite.set(0, 0, 0, 0, ink);
+        e.sprite.set(0, 0, 2, 0, ink);
+        e.contiguous = false;
+        e.magic_wand(0, 0);
+        let sel = e.current_selection().unwrap();
+        assert_eq!((sel.x, sel.w), (0, 3), "bbox spans the gap");
+        assert_eq!(sel.mask.iter().filter(|&&m| m).count(), 2);
+    }
+
+    #[test]
     fn gradient_and_shade_helpers() {
         assert_eq!(
             lerp_rgba(Rgba(0, 0, 0, 255), Rgba(255, 255, 255, 255), 0.0),
@@ -3087,5 +3736,413 @@ mod tests {
         e.set_palette_lock(false);
         e.paint_pixel(1, 2 - 1, stray);
         assert_eq!(e.sprite.get(0, 0, 1, 1), stray);
+    }
+
+    #[test]
+    fn structural_edits_undo_and_redo_the_layer_and_frame_tree() {
+        let mut e = Editor::new(4, 4);
+        let layers = e.sprite.layers.len();
+
+        e.add_layer();
+        assert_eq!(e.sprite.layers.len(), layers + 1);
+        assert_eq!(e.active_layer, 1);
+        e.undo();
+        assert_eq!(e.sprite.layers.len(), layers);
+        assert_eq!(e.active_layer, 0, "the active layer travels with the tree");
+        e.redo();
+        assert_eq!(e.sprite.layers.len(), layers + 1);
+        assert_eq!(e.active_layer, 1);
+
+        // Deleting a frame clamps the active index; undo brings it back.
+        e.add_frame();
+        assert_eq!(e.active_frame, 1);
+        e.del_frame();
+        assert_eq!(e.sprite.frames.len(), 1);
+        e.undo();
+        assert_eq!(e.sprite.frames.len(), 2);
+        assert_eq!(e.active_frame, 1, "the deleted frame's index is restored");
+        e.redo();
+        assert_eq!(e.sprite.frames.len(), 1);
+        assert_eq!(e.active_frame, 0);
+
+        // A refused delete is not an undo step.
+        let steps = e.undo.len();
+        e.del_frame();
+        assert_eq!(e.undo.len(), steps, "deleting the last frame is a no-op");
+    }
+
+    #[test]
+    fn structural_edits_cover_tags_renames_moves_and_locks() {
+        let mut e = Editor::new(4, 4);
+        e.add_frame();
+
+        e.set_tag("walk", Some(0), Some(1));
+        assert_eq!(e.sprite.tags.len(), 1);
+        assert_eq!(e.active_tag, Some(0));
+        e.undo();
+        assert!(e.sprite.tags.is_empty());
+        assert_eq!(e.active_tag, None);
+        e.redo();
+        assert_eq!(e.sprite.tags.len(), 1);
+        assert_eq!(e.active_tag, Some(0));
+
+        e.del_tag(Some("walk"));
+        assert!(e.sprite.tags.is_empty());
+        e.undo();
+        assert_eq!(e.sprite.tags.len(), 1, "the tag comes back");
+        assert_eq!(e.active_tag, Some(0));
+
+        let name = e.sprite.layers[0].name.clone();
+        e.rename_layer("ink");
+        assert_eq!(e.sprite.layers[0].name, "ink");
+        e.undo();
+        assert_eq!(e.sprite.layers[0].name, name);
+
+        e.add_layer();
+        e.active_layer = 0;
+        let first = e.sprite.layers[0].name.clone();
+        e.move_layer_active(1);
+        assert_eq!(e.active_layer, 1);
+        assert_eq!(e.sprite.layers[1].name, first);
+        e.undo();
+        assert_eq!(e.active_layer, 0);
+        assert_eq!(e.sprite.layers[0].name, first);
+
+        e.set_layer_editable(false);
+        assert!(!e.sprite.layers[e.active_layer].editable);
+        e.undo();
+        assert!(e.sprite.layers[e.active_layer].editable);
+    }
+
+    #[test]
+    fn layer_properties_are_one_undo_step_each() {
+        use crate::sprite::BlendMode;
+        let mut e = Editor::new(4, 4);
+        let before = e.layer_props(0);
+        e.sprite.layers[0].visible = false;
+        e.sprite.layers[0].opacity = 90;
+        e.sprite.layers[0].blend = BlendMode::Multiply;
+        e.record_layer_props(0, before);
+        assert_eq!(e.undo.len(), 1);
+
+        e.undo();
+        let p = e.layer_props(0);
+        assert!(p.visible && p.opacity == 255 && p.blend == BlendMode::Normal);
+        e.redo();
+        let p = e.layer_props(0);
+        assert!(!p.visible);
+        assert_eq!(p.opacity, 90);
+        assert_eq!(p.blend, BlendMode::Multiply);
+
+        // Recording the values that are already there is not an undo step.
+        let steps = e.undo.len();
+        let now = e.layer_props(0);
+        e.record_layer_props(0, now);
+        assert_eq!(e.undo.len(), steps);
+    }
+
+    #[test]
+    fn bucket_fill_reaches_the_mirrored_seed() {
+        let mut e = Editor::new(8, 8);
+        // A wall at x=4 splits the canvas into two regions.
+        let wall = Rgba::rgb(0, 0, 0);
+        for y in 0..8 {
+            e.sprite.set(0, 0, 4, y, wall);
+        }
+        e.set_symmetry("h");
+        e.fg = Rgba::rgb(200, 10, 10);
+        e.apply_bucket(0, 0);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), e.fg, "the seed region fills");
+        assert_eq!(
+            e.sprite.get(0, 0, 7, 7),
+            e.fg,
+            "the mirrored region fills too"
+        );
+        assert_eq!(e.sprite.get(0, 0, 4, 0), wall, "the wall stays");
+    }
+
+    #[test]
+    fn tag_direction_and_repeat_drive_playback() {
+        use crate::sprite::PlayDirection;
+        let mut e = Editor::new(1, 1);
+        e.add_frame();
+        e.add_frame();
+        e.set_tag("walk", Some(0), Some(2));
+
+        e.set_tag_direction(PlayDirection::Reverse);
+        e.active_frame = 2;
+        assert!(e.advance_frame());
+        assert_eq!(e.active_frame, 1);
+        assert!(e.advance_frame());
+        assert_eq!(e.active_frame, 0);
+        assert!(e.advance_frame(), "reverse wraps to the far end");
+        assert_eq!(e.active_frame, 2);
+
+        e.set_tag_direction(PlayDirection::Forward);
+        e.set_tag_repeat(1);
+        e.start_playback();
+        e.active_frame = 1;
+        assert!(e.advance_frame());
+        assert_eq!(e.active_frame, 2);
+        assert!(!e.advance_frame(), "repeat 1 stops after one pass");
+
+        e.set_tag_repeat(0);
+        e.set_tag_direction(PlayDirection::PingPong);
+        e.start_playback();
+        e.active_frame = 2;
+        assert!(e.advance_frame());
+        assert_eq!(e.active_frame, 1);
+        assert_eq!(e.play_dir, -1);
+    }
+
+    #[test]
+    fn recent_files_move_to_the_front_and_cap() {
+        let mut e = Editor::new(1, 1);
+        for i in 0..12 {
+            e.note_recent(PathBuf::from(format!("/tmp/f{i}.vpx")));
+        }
+        assert_eq!(e.recent.len(), 10);
+        assert_eq!(e.recent[0], PathBuf::from("/tmp/f11.vpx"));
+        e.note_recent(PathBuf::from("/tmp/f5.vpx"));
+        assert_eq!(e.recent[0], PathBuf::from("/tmp/f5.vpx"));
+        assert_eq!(e.recent.iter().filter(|p| p.ends_with("f5.vpx")).count(), 1);
+    }
+
+    #[test]
+    fn pixel_perfect_drops_the_corner_pixel() {
+        let mut e = Editor::new(4, 4);
+        e.pixel_perfect = true;
+        e.begin_stroke();
+        e.paint_with_tool(0, 0);
+        e.paint_with_tool(1, 0);
+        e.paint_with_tool(1, 1);
+        e.end_stroke();
+        assert_eq!(e.sprite.get(0, 0, 0, 0), e.fg);
+        assert_eq!(e.sprite.get(0, 0, 1, 1), e.fg);
+        assert_eq!(e.sprite.get(0, 0, 1, 0), Rgba::TRANSPARENT, "corner");
+        e.undo();
+        assert!(e.sprite.get(0, 0, 0, 0).is_transparent());
+        assert!(e.sprite.get(0, 0, 1, 1).is_transparent());
+
+        // A true diagonal keeps every pixel.
+        let mut e = Editor::new(4, 4);
+        e.pixel_perfect = true;
+        e.begin_stroke();
+        e.paint_with_tool(0, 0);
+        e.paint_with_tool(1, 1);
+        e.paint_with_tool(2, 2);
+        e.end_stroke();
+        for i in 0..3 {
+            assert_eq!(e.sprite.get(0, 0, i, i), e.fg, "({i},{i})");
+        }
+    }
+
+    #[test]
+    fn reference_layers_are_not_exported_or_painted() {
+        let mut e = Editor::new(1, 1);
+        e.paint_pixel(0, 0, Rgba::rgb(255, 0, 0));
+        e.add_layer();
+        e.active_layer = 1;
+        e.sprite.set(1, 0, 0, 0, Rgba::rgb(0, 0, 255));
+        e.set_layer_reference(true);
+        assert!(e.sprite.layers[1].reference);
+
+        // The canvas shows the reference; an export does not.
+        assert_eq!(e.sprite.composite(0)[0], Rgba::rgb(255, 0, 0));
+        e.sprite.layers[0].visible = false;
+        assert_eq!(e.sprite.composite(0)[0], Rgba::rgb(0, 0, 255));
+        assert_eq!(e.sprite.export_composite(0)[0], Rgba::TRANSPARENT);
+
+        // Reference layers refuse paint.
+        e.paint_pixel(0, 0, Rgba::rgb(9, 9, 9));
+        assert_eq!(e.sprite.get(1, 0, 0, 0), Rgba::rgb(0, 0, 255));
+        assert!(e.msg.contains("locked or hidden"), "{}", e.msg);
+    }
+
+    #[test]
+    fn background_layers_are_opaque_and_undoable() {
+        let mut e = Editor::new(1, 1);
+        e.sprite.layers[0].opacity = 40;
+        e.set_layer_background(true);
+        assert!(e.sprite.layers[0].background);
+        assert_eq!(e.sprite.layers[0].opacity, 255);
+        e.undo();
+        assert!(!e.sprite.layers[0].background);
+        assert_eq!(e.sprite.layers[0].opacity, 40);
+    }
+
+    #[test]
+    fn layer_duplicate_merge_and_flatten() {
+        // Duplicate copies the pixels, and the two cels are independent.
+        let mut e = Editor::new(2, 2);
+        e.paint_pixel(0, 0, Rgba::rgb(10, 20, 30));
+        e.duplicate_layer();
+        assert_eq!(e.sprite.layers.len(), 2);
+        assert_eq!(e.active_layer, 0);
+        assert_eq!(e.sprite.get(1, 0, 0, 0), Rgba::rgb(10, 20, 30));
+        e.paint_pixel(1, 1, Rgba::rgb(9, 9, 9));
+        assert_eq!(e.sprite.get(1, 0, 1, 1), Rgba::TRANSPARENT);
+        e.undo(); // the paint
+        e.undo(); // the duplicate
+        assert_eq!(e.sprite.layers.len(), 1);
+
+        // Merge down bakes the upper layer into the lower one.
+        let mut e = Editor::new(1, 1);
+        e.paint_pixel(0, 0, Rgba::rgb(255, 0, 0));
+        e.add_layer();
+        e.sprite.set(1, 0, 0, 0, Rgba::rgb(0, 0, 255));
+        e.active_layer = 0;
+        e.merge_down();
+        assert_eq!(e.sprite.layers.len(), 1);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+        e.undo();
+        assert_eq!(e.sprite.layers.len(), 2);
+
+        // Flatten collapses the visible layers into one.
+        let mut e = Editor::new(1, 1);
+        e.paint_pixel(0, 0, Rgba::rgb(255, 0, 0));
+        e.add_layer();
+        e.sprite.set(1, 0, 0, 0, Rgba::rgb(0, 0, 255));
+        e.flatten();
+        assert_eq!(e.sprite.layers.len(), 1);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+        e.undo();
+        assert_eq!(e.sprite.layers.len(), 2);
+    }
+
+    #[test]
+    fn crop_and_trim_resize_every_cel() {
+        let mut e = Editor::new(6, 6);
+        e.paint_pixel(2, 3, Rgba::rgb(9, 9, 9));
+        e.paint_pixel(4, 4, Rgba::rgb(8, 8, 8));
+        e.trim();
+        assert_eq!((e.sprite.width, e.sprite.height), (3, 2));
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(9, 9, 9));
+        assert_eq!(e.sprite.get(0, 0, 2, 1), Rgba::rgb(8, 8, 8));
+        e.undo();
+        assert_eq!((e.sprite.width, e.sprite.height), (6, 6));
+        assert_eq!(e.sprite.get(0, 0, 2, 3), Rgba::rgb(9, 9, 9));
+
+        // Selection crop, and the layer mask follows the same offset.
+        e.selection = Some(Selection::rect(0, 0, 2, 2));
+        e.mask_add();
+        e.selection = Some(Selection::rect(1, 2, 3, 4));
+        e.crop_to_selection();
+        assert_eq!((e.sprite.width, e.sprite.height), (3, 3));
+        assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::rgb(9, 9, 9), "2,3 -> 1,1");
+        assert_eq!(e.sprite.layers[0].mask.as_ref().unwrap().pixels.len(), 9);
+    }
+
+    #[test]
+    fn the_brush_paints_a_square_and_clips_at_the_edge() {
+        let mut e = Editor::new(5, 5);
+        e.brush_size = 3;
+        e.tool = Tool::Pencil;
+        e.begin_stroke();
+        e.paint_with_tool(2, 2);
+        e.end_stroke();
+        for y in 1..=3 {
+            for x in 1..=3 {
+                assert_eq!(e.sprite.get(0, 0, x, y), e.fg, "({x},{y})");
+            }
+        }
+        assert!(e.sprite.get(0, 0, 0, 0).is_transparent());
+
+        // At the corner the square is clipped, not wrapped or panicked.
+        e.begin_stroke();
+        e.paint_with_tool(0, 0);
+        e.end_stroke();
+        assert_eq!(e.sprite.get(0, 0, 0, 0), e.fg);
+        assert_eq!(e.sprite.get(0, 0, 1, 1), e.fg);
+    }
+
+    #[test]
+    fn merged_copy_flattens_the_visible_layers() {
+        let mut e = Editor::new(4, 4);
+        e.add_layer(); // inserts below (index 1) and activates it
+        e.paint_pixel(1, 1, Rgba::rgb(200, 10, 10));
+        e.active_layer = 0; // top layer
+        e.paint_pixel(2, 2, Rgba::rgb(10, 200, 10));
+        e.selection = Some(Selection::rect(1, 1, 2, 2));
+
+        e.yank_merged();
+        let cb = e.clipboard.clone().unwrap();
+        assert_eq!((cb.w, cb.h), (2, 2));
+        assert_eq!(
+            cb.pixels[0],
+            Rgba::rgb(200, 10, 10),
+            "the lower layer shows through"
+        );
+        assert_eq!(cb.pixels[3], Rgba::rgb(10, 200, 10), "the top layer wins");
+        assert_eq!(cb.pixels[1], Rgba::TRANSPARENT);
+
+        // A plain copy still takes only the active layer.
+        e.selection = Some(Selection::rect(1, 1, 2, 2));
+        e.yank();
+        let cb = e.clipboard.unwrap();
+        assert_eq!(cb.pixels[0], Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn tile_mode_wraps_a_line_across_the_seam() {
+        let mut e = Editor::new(8, 4);
+        e.set_tile_mode(Some(true));
+        e.pending = Some(Pending {
+            shape: Shape::Line,
+            start: (6, 1),
+        });
+        e.cursor = (1, 1);
+        let ink = Rgba::rgb(9, 9, 9);
+        e.commit_shape(ink);
+        for x in [6, 7, 0, 1] {
+            assert_eq!(e.sprite.get(0, 0, x, 1), ink, "x={x}");
+        }
+        assert!(
+            e.sprite.get(0, 0, 3, 1).is_transparent(),
+            "the seam is the short way, not across the canvas"
+        );
+    }
+
+    #[test]
+    fn tile_mode_gradient_follows_the_short_way() {
+        let mut e = Editor::new(8, 1);
+        e.set_tile_mode(Some(true));
+        e.fg = Rgba::rgb(255, 255, 255);
+        e.bg = Rgba::rgb(0, 0, 0);
+        e.cursor = (1, 0);
+        e.paint_gradient((6, 0));
+        // The ramp runs 6→7→0→1, so x=4 is still at the fg end.
+        assert_eq!(e.sprite.get(0, 0, 4, 0), e.fg);
+        assert_eq!(e.sprite.get(0, 0, 1, 0), e.bg);
+    }
+
+    #[test]
+    fn edits_bump_the_thumbnail_revision() {
+        let mut e = Editor::new(2, 2);
+        let r = e.revision;
+        e.paint_pixel(0, 0, Rgba::rgb(1, 2, 3));
+        assert!(e.revision > r, "painting invalidates the thumbnails");
+        let r = e.revision;
+        e.undo();
+        assert!(e.revision > r, "undo invalidates them too");
+        let r = e.revision;
+        e.add_layer();
+        assert!(e.revision > r);
+    }
+
+    #[test]
+    fn paste_mirrors_each_pixel() {
+        let mut e = Editor::new(8, 8);
+        e.set_symmetry("h");
+        e.clipboard = Some(Clipboard {
+            w: 1,
+            h: 1,
+            pixels: vec![Rgba::rgb(5, 6, 7)],
+            mask: vec![true],
+        });
+        e.paste_pos = Some((0, 0));
+        e.commit_paste();
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(5, 6, 7));
+        assert_eq!(e.sprite.get(0, 0, 7, 0), Rgba::rgb(5, 6, 7));
     }
 }

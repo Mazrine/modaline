@@ -1,7 +1,7 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, Vec2};
 
 use crate::color::Rgba;
-use crate::editor::{Editor, Mode, SelectionOp, Shape, Symmetry, Tool};
+use crate::editor::{Editor, LayerProps, Mode, SelectionOp, Shape, Symmetry, Tool};
 use crate::sprite::{BlendMode, ellipse_points, line_points, rect_points};
 
 /// Onion-skin settings: how many frames each side, how strong, and the two
@@ -43,8 +43,10 @@ pub struct View {
     pub onion: Onion,
     /// Frame index being dragged in the timeline.
     drag_frame: Option<usize>,
-    /// Cached per-frame timeline thumbnails (rebuilt each UI pass).
+    /// Cached per-frame timeline thumbnails, rebuilt only when the sprite's
+    /// revision changes.
     thumbs: Vec<Option<TextureHandle>>,
+    thumbs_revision: u64,
     /// Hex text fields for fg/bg, and the colour they were last filled from,
     /// so typing is not overwritten by the next frame's echo.
     fg_hex: (String, Rgba),
@@ -56,6 +58,9 @@ pub struct View {
     rot: f32,
     scale: f32,
     skew: f32,
+    /// Opacity slider drag in progress: the layer and its properties at drag
+    /// start, so the whole drag is one undo step.
+    layer_prop_drag: Option<(usize, LayerProps)>,
 }
 
 impl View {
@@ -71,6 +76,7 @@ impl View {
             onion: Onion::default(),
             drag_frame: None,
             thumbs: Vec::new(),
+            thumbs_revision: u64::MAX,
             fg_hex: (String::new(), Rgba(0, 0, 0, 0)),
             bg_hex: (String::new(), Rgba(0, 0, 0, 0)),
             filter: 0,
@@ -78,6 +84,7 @@ impl View {
             rot: 0.0,
             scale: 1.0,
             skew: 0.0,
+            layer_prop_drag: None,
         }
     }
 
@@ -300,6 +307,9 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
         let play_label = if *playing { "pause" } else { "play" };
         if ui.button(play_label).clicked() {
             *playing = !*playing;
+            if *playing {
+                editor.start_playback();
+            }
         }
         if ui.button("+frame").clicked() {
             editor.add_frame();
@@ -336,6 +346,7 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
                 editor.active_tag = if active { None } else { Some(i) };
                 if !active {
                     editor.active_frame = from.min(editor.sprite.frames.len() - 1);
+                    editor.start_playback();
                 }
             }
         }
@@ -347,6 +358,10 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
         } else if view.thumbs.len() > count {
             view.thumbs.truncate(count);
         }
+        if view.thumbs_revision != editor.revision {
+            view.thumbs_revision = editor.revision;
+            view.thumbs.iter_mut().for_each(|t| *t = None);
+        }
 
         let mut selected = editor.active_frame;
         let th = 40.0;
@@ -355,8 +370,10 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
         let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
 
         for i in 0..count {
-            let comp = frame_composite(editor, i);
-            upload(ui, &mut view.thumbs[i], &format!("thumb{i}"), comp);
+            if view.thumbs[i].is_none() {
+                let comp = frame_composite(editor, i);
+                upload(ui, &mut view.thumbs[i], &format!("thumb{i}"), comp);
+            }
             let (rect, resp) = ui.allocate_exact_size(Vec2::new(tw, th), Sense::click_and_drag());
             draw_checker(ui.painter(), rect, 4.0);
             if let Some(t) = &view.thumbs[i] {
@@ -408,7 +425,11 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
         ui.separator();
         ui.label("cel op:");
         let cel = &mut editor.sprite.cels[editor.active_layer][editor.active_frame];
-        ui.add(egui::Slider::new(&mut cel.opacity, 0..=255));
+        let mut opacity = cel.opacity;
+        if ui.add(egui::Slider::new(&mut opacity, 0..=255)).changed() {
+            cel.opacity = opacity;
+            editor.touch();
+        }
     });
 }
 
@@ -438,6 +459,12 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                 egui::Visuals::light()
             });
         }
+    });
+    ui.horizontal(|ui| {
+        ui.label("brush");
+        ui.add(egui::Slider::new(&mut editor.brush_size, 1..=16));
+        ui.checkbox(&mut editor.pixel_perfect, "perfect")
+            .on_hover_text("drop L-shaped corner pixels while drawing");
     });
     ui.checkbox(&mut view.show_grid, "pixel grid");
     ui.checkbox(&mut view.onion.enabled, "onion skin");
@@ -532,9 +559,10 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     });
     ui.horizontal(|ui| {
-        ui.label("wand tol");
+        ui.label("tol (wand/fill)");
         ui.add(egui::Slider::new(&mut editor.wand_tolerance, 0..=255));
     });
+    ui.checkbox(&mut editor.contiguous, "contiguous (wand/fill)");
     ui.checkbox(&mut editor.wand_all_layers, "wand: all layers");
     ui.separator();
 
@@ -629,6 +657,27 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         if ui.button("-").clicked() {
             editor.del_layer();
         }
+        if ui
+            .button("dup")
+            .on_hover_text("duplicate the active layer")
+            .clicked()
+        {
+            editor.duplicate_layer();
+        }
+        if ui
+            .button("merge")
+            .on_hover_text("merge into the layer below")
+            .clicked()
+        {
+            editor.merge_down();
+        }
+        if ui
+            .button("flat")
+            .on_hover_text("flatten every visible layer")
+            .clicked()
+        {
+            editor.flatten();
+        }
         if ui.button("grp").on_hover_text("new group").clicked() {
             editor.add_group();
         }
@@ -646,11 +695,16 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     let count = editor.sprite.layers.len();
     let mut selected = editor.active_layer;
     let mut toggle_mask = None;
+    let mut toggle_ref = None;
+    let mut toggle_bg = None;
     let mut drop_to: Option<(usize, usize)> = None;
+    let mut prop_edits: Vec<(usize, LayerProps)> = Vec::new();
+    let mut prop_drag = view.layer_prop_drag;
     egui::ScrollArea::vertical()
         .id_salt("layers")
         .show(ui, |ui| {
             for i in 0..count {
+                let before = editor.layer_props(i);
                 // Each row is a drag source carrying its own index, and every
                 // row is a drop target: drag a layer onto another to move it
                 // (with its children) in front of that one.
@@ -667,9 +721,34 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                         if ui.selectable_label(i == selected, label).clicked() {
                             selected = i;
                         }
-                        ui.checkbox(&mut layer.visible, "").on_hover_text("visible");
-                        ui.checkbox(&mut layer.editable, "edit")
-                            .on_hover_text("editable (lock)");
+                        if ui
+                            .checkbox(&mut layer.visible, "")
+                            .on_hover_text("visible")
+                            .changed()
+                        {
+                            prop_edits.push((i, before));
+                        }
+                        if ui
+                            .checkbox(&mut layer.editable, "edit")
+                            .on_hover_text("editable (lock)")
+                            .changed()
+                        {
+                            prop_edits.push((i, before));
+                        }
+                        if ui
+                            .selectable_label(layer.reference, "ref")
+                            .on_hover_text("reference layer: traced, not painted or exported")
+                            .clicked()
+                        {
+                            toggle_ref = Some(i);
+                        }
+                        if ui
+                            .selectable_label(layer.background, "bg")
+                            .on_hover_text("background layer (opaque)")
+                            .clicked()
+                        {
+                            toggle_bg = Some(i);
+                        }
                         if !layer.group
                             && ui
                                 .selectable_label(layer.mask.is_some(), "M")
@@ -683,8 +762,21 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                     });
                     ui.horizontal(|ui| {
                         ui.add_space(indent);
-                        blend_combo(ui, i, &mut layer.blend);
-                        ui.add(egui::Slider::new(&mut layer.opacity, 0..=255).text("op"));
+                        if blend_combo(ui, i, &mut layer.blend) {
+                            prop_edits.push((i, before));
+                        }
+                        let opacity =
+                            ui.add(egui::Slider::new(&mut layer.opacity, 0..=255).text("op"));
+                        if opacity.drag_started() {
+                            prop_drag = Some((i, before));
+                        }
+                        if opacity.drag_stopped() {
+                            if let Some((l, values)) = prop_drag.take() {
+                                prop_edits.push((l, values));
+                            }
+                        } else if opacity.changed() && !opacity.dragged() {
+                            prop_edits.push((i, before));
+                        }
                     });
                 });
                 let resp = source.response;
@@ -701,8 +793,22 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                 }
             }
         });
+    view.layer_prop_drag = prop_drag;
+    for (layer, before) in prop_edits {
+        editor.record_layer_props(layer, before);
+    }
     if let Some((from, to)) = drop_to {
         editor.move_layer_to(from, to);
+    }
+    if let Some(i) = toggle_ref {
+        editor.active_layer = i;
+        let on = !editor.sprite.layers[i].reference;
+        editor.set_layer_reference(on);
+    }
+    if let Some(i) = toggle_bg {
+        editor.active_layer = i;
+        let on = !editor.sprite.layers[i].background;
+        editor.set_layer_background(on);
     }
     if let Some(i) = toggle_mask {
         editor.active_layer = i;
@@ -836,7 +942,9 @@ fn color_editor(ui: &mut egui::Ui, label: &str, color: &mut Rgba, hex: &mut (Str
     });
 }
 
-fn blend_combo(ui: &mut egui::Ui, i: usize, blend: &mut BlendMode) {
+/// Blend-mode dropdown; returns whether the mode changed.
+fn blend_combo(ui: &mut egui::Ui, i: usize, blend: &mut BlendMode) -> bool {
+    let was = *blend;
     egui::ComboBox::from_id_salt(("blend", i))
         .selected_text(blend_name(*blend))
         .show_ui(ui, |ui| {
@@ -844,6 +952,7 @@ fn blend_combo(ui: &mut egui::Ui, i: usize, blend: &mut BlendMode) {
                 ui.selectable_value(blend, b, blend_name(b));
             }
         });
+    *blend != was
 }
 
 fn blend_name(b: BlendMode) -> &'static str {
@@ -1418,8 +1527,8 @@ const HELP: &[&str] = &[
     "  z / a / q          gradient / spray / shade",
     "  n / C              blur / contour outline",
     "  v                  visual select (V = all)   then:",
-    "    y                yank (copy)      x   cut",
-    "    m                move (cut + float)   p   paste",
+    "    y                yank (copy)      Y   copy merged",
+    "    x                cut              m   move (cut + float)   p   paste",
     "  w                  magic wand (select same-color region)",
     "  L / P              lasso / polygon selection (mouse)",
     "  s                  cycle symmetry (none / H / V / both)",
