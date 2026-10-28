@@ -10,7 +10,7 @@
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **backlog close-out** (see batch 36).
+- Last completed batch: **parity backlog opened** (see batch 37).
 
 ## How to resume
 
@@ -198,23 +198,29 @@ Read, in order:
     and embedded tilesets but there is no fixture or consumer for editing. It
     moved to `docs/ROADMAP.md` → "Explicitly out of scope" with that plan and
     the re-open condition. P4 is otherwise empty. No code changed; 97 tests.
+37. **Parity programme opened** — the capability review found vixel at roughly
+    60% of Aseprite's feature surface (~80–85% of the core hand-drawn loop). P5
+    (full capability parity) is now in `docs/ROADMAP.md`; the living matrix is
+    `docs/ASEPRITE_PARITY.md`; the detailed rationale/architecture is in
+    `docs/ROADMAP.md` P5 and the plan file. No capability changed yet; the loop
+    starts at P5-00 (review + merge P4, create `feat/aseprite-parity`).
 
 ## Next step (exact)
 
-**The backlog is closed.** The full record lives in `docs/ROADMAP.md`; every
-remaining item there is explicitly deferred with a re-open condition.
+**P5 is open.** Read `docs/ASEPRITE_PARITY.md` and `docs/ROADMAP.md` P5; the
+loop picks the first unchecked task whose dependencies are met.
 
-### Next
+### Next (P5)
 
-Nothing is open: P0-P4 are closed. The only remaining items are the explicitly
-deferred ones with stated re-open conditions (ICC embedding, custom shaders,
-keymap customization, tilesets/tilemap editing). The next step is a new feature
-request, not backlog work.
+- **P5-00** — review and merge the P4 branch, then create `feat/aseprite-parity`.
+- Then P5-02 (selection clips paint), P5-07 (`.ase` unknown chunks), P5-05
+  (19 blend modes), P5-03 (real indexed colour), in that order of the roadmap.
 
 ## Known limitations (do not forget)
 
-These are design limits or deliberate deferrals; nothing here is unplanned P4
-work.
+The matrix is the authoritative list; the entries below are the design limits
+that remain after P5. Anything marked Missing/Partial in
+`docs/ASEPRITE_PARITY.md` is planned work, not a permanent limitation.
 
 - Mask pixels cannot be painted directly: masks are created from the selection
   (or fully opaque), baked, or removed.

@@ -233,6 +233,7 @@ export**, **sprite properties** (colour mode, pixel ratio, grid) and
 **frame tags + drag reorder**, full vim keymap (normal/draw/visual/paste/command
 modes).
 
-Not yet (out of scope for now): tileset/tilemap editing, ICC embedding, custom
-shaders. The backlog is closed and `docs/ROADMAP.md` records those deferrals
-with re-open conditions.
+Aseprite-parity programme in progress: `docs/ASEPRITE_PARITY.md` tracks every
+Aseprite capability against the task that closes it, and `docs/ROADMAP.md` P5
+is the ordered backlog. Out-of-scope by product choice: Web/Wasm and custom GPU
+shaders.

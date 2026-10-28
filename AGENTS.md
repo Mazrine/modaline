@@ -80,6 +80,10 @@ thin shells:
   shared by `:open` and the command-line argument.
 - Bump `Editor::revision` (via `touch`) on every sprite mutation; the timeline
   caches thumbnails by it, so a missed bump shows a stale frame.
+- `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
+  capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
+  same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not
+  merge it to `main` or push without explicit approval.
 
 ## egui 0.37 gotchas (this version changed things)
 
