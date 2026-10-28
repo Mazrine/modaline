@@ -392,41 +392,34 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             let path = arg.map(PathBuf::from).or_else(|| editor.path.clone());
             match path {
                 Some(p) => {
-                    let res = if io::is_ase(&p) {
-                        ase::save(&editor.sprite, &p)
-                    } else {
-                        io::save_project(&editor.sprite, &p)
-                    };
-                    match res {
-                        Ok(()) => {
-                            editor.path = Some(p);
-                            editor.dirty = false;
-                            editor.msg = editor.saved_note();
-                        }
-                        Err(err) => editor.msg = format!("save failed: {err}"),
-                    }
+                    save_to(editor, p);
                 }
                 None => editor.msg = "no filename (use :w <file>)".into(),
             }
         }
         "q" | "quit" => {
             if editor.dirty {
-                editor.msg = "unsaved changes (use :q! to force)".into();
+                editor.msg = "unsaved changes (use :q! to force or :w to save)".into();
             } else {
                 editor.should_quit = true;
             }
         }
         "q!" => editor.should_quit = true,
         "wq" => {
-            if let Some(p) = arg.map(PathBuf::from).or_else(|| editor.path.clone())
-                && io::save_project(&editor.sprite, &p).is_ok()
-            {
-                editor.path = Some(p);
-                editor.dirty = false;
+            let path = arg.map(PathBuf::from).or_else(|| editor.path.clone());
+            match path {
+                Some(p) => {
+                    if save_to(editor, p) {
+                        editor.should_quit = true;
+                    }
+                }
+                None => editor.msg = "no filename (use :wq <file>)".into(),
             }
-            editor.should_quit = true;
         }
-        "new" => {
+        "new" | "new!" => {
+            if !replace_ok(editor, name == "new!", "new") {
+                return;
+            }
             let (w, h) = parse_dims(arg, 32, 32);
             editor.new_sprite(w, h);
             editor.msg = format!("new {w}x{h}");
@@ -872,8 +865,54 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "usage: :import <file.png>".into();
             }
         }
-        "open" | "load" => {
+        "recent" | "recent!" => match arg.and_then(|s| s.parse::<usize>().ok()) {
+            Some(n) if (1..=editor.recent.len()).contains(&n) => {
+                if !replace_ok(editor, name.ends_with('!'), "recent") {
+                    return;
+                }
+                let path = editor.recent[n - 1].clone();
+                if let Err(e) = editor.open_path(&path) {
+                    editor.msg = format!("open failed: {e}");
+                }
+            }
+            Some(_) => editor.msg = "no such recent entry".into(),
+            None => {
+                editor.msg = if editor.recent.is_empty() {
+                    "no recent files".into()
+                } else {
+                    editor
+                        .recent
+                        .iter()
+                        .enumerate()
+                        .map(|(i, p)| format!("{}: {}", i + 1, p.display()))
+                        .collect::<Vec<_>>()
+                        .join(" · ")
+                };
+            }
+        },
+        "recover" | "recover!" => {
+            if !replace_ok(editor, name.ends_with('!'), "recover") {
+                return;
+            }
+            let path = arg.map(PathBuf::from).or_else(crate::config::recovery_path);
+            match path {
+                Some(p) => match io::load_project(&p) {
+                    Ok(s) => {
+                        editor.replace_sprite(s);
+                        editor.path = None;
+                        editor.dirty = true;
+                        editor.msg = "recovered (use :w <file>)".into();
+                    }
+                    Err(e) => editor.msg = format!("recover failed: {e}"),
+                },
+                None => editor.msg = "no recovery path".into(),
+            }
+        }
+        "open" | "load" | "open!" | "load!" => {
             if let Some(p) = arg {
+                if !replace_ok(editor, name.ends_with('!'), name.trim_end_matches('!')) {
+                    return;
+                }
                 match editor.open_path(PathBuf::from(p).as_path()) {
                     Ok(()) => {}
                     Err(err) => editor.msg = format!("load failed: {err}"),
@@ -885,6 +924,41 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "help" => editor.mode = Mode::Help,
         "" => {}
         _ => editor.msg = format!("unknown command: {name}"),
+    }
+}
+
+/// Write the sprite to `path`, picking the format by extension (`.ase` →
+/// Aseprite, else the `.vpx` JSON project). Returns whether it was written;
+/// `:wq` only quits on success. Shared so `:w` and `:wq` cannot drift.
+fn save_to(editor: &mut Editor, path: PathBuf) -> bool {
+    let res = if io::is_ase(&path) {
+        ase::save(&editor.sprite, &path)
+    } else {
+        io::save_project(&editor.sprite, &path)
+    };
+    match res {
+        Ok(()) => {
+            editor.note_recent(path.clone());
+            editor.path = Some(path);
+            editor.dirty = false;
+            editor.msg = editor.saved_note();
+            true
+        }
+        Err(err) => {
+            editor.msg = format!("save failed: {err}");
+            false
+        }
+    }
+}
+
+/// Destructive commands (`:new`, `:open`, `:import`) refuse to drop unsaved
+/// edits unless forced with `!`, matching `:q`.
+fn replace_ok(editor: &mut Editor, force: bool, cmd: &str) -> bool {
+    if editor.dirty && !force {
+        editor.msg = format!("unsaved changes (use :{cmd}! to force or :w to save)");
+        false
+    } else {
+        true
     }
 }
 

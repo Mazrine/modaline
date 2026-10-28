@@ -29,6 +29,8 @@ pub struct Config {
     /// request is honoured only by a build with the `wgpu` feature; otherwise
     /// vixel says so and falls back to glow.
     pub renderer: String,
+    /// Recently opened files, newest first (`:recent`).
+    pub recent: Vec<String>,
     /// Free-form entries a future build can read; round-tripped, never guessed.
     pub extra: BTreeMap<String, String>,
 }
@@ -95,17 +97,29 @@ impl Default for Config {
             play_pingpong: false,
             theme: "dark".into(),
             renderer: "glow".into(),
+            recent: Vec::new(),
             extra: BTreeMap::new(),
         }
     }
 }
 
-/// `$XDG_CONFIG_HOME/vixel/config.json`, else `~/.config/vixel/config.json`.
-pub fn path() -> Option<PathBuf> {
+/// `$XDG_CONFIG_HOME/vixel`, else `~/.config/vixel`.
+fn dir() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("vixel").join("config.json"))
+    Some(base.join("vixel"))
+}
+
+/// `$XDG_CONFIG_HOME/vixel/config.json`, else `~/.config/vixel/config.json`.
+pub fn path() -> Option<PathBuf> {
+    dir().map(|d| d.join("config.json"))
+}
+
+/// The autosave snapshot a crashed session leaves behind, beside the config.
+/// `:recover` loads it; a successful save or a forced quit removes it.
+pub fn recovery_path() -> Option<PathBuf> {
+    dir().map(|d| d.join("recovery.vpx"))
 }
 
 impl Config {
@@ -169,6 +183,7 @@ mod tests {
         };
         c.onion.count = 3;
         c.onion.prev = [10, 20, 30];
+        c.recent.push("/tmp/art.vpx".into());
         c.extra.insert("future".into(), "1".into());
         let text = serde_json::to_string_pretty(&c).unwrap();
         std::fs::create_dir_all(&dir).unwrap();

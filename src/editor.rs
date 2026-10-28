@@ -236,15 +236,20 @@ pub struct Editor {
     pub cmdline: String,
     pub msg: String,
     pub dirty: bool,
+    /// Monotonic counter for cache invalidation (timeline thumbnails). Every
+    /// edit bumps it; the view compares it instead of rebuilding each frame.
+    pub revision: u64,
     pub should_quit: bool,
     pub g_prefix: bool,
     pub path: Option<PathBuf>,
+    /// Recently opened or saved files, newest first (max 10).
+    pub recent: Vec<PathBuf>,
     /// Set when the opened file is a another tool fix bundle: the part the strokes
     /// are for, from the sidecar. Also marks the file as one whose `ref` layer
     /// must survive a save.
     pub bundle_stage: Option<String>,
-    /// Refuse to paint a colour that is not in the palette (VI-3). Off by
-    /// default: a plain sprite has no ramp to protect.
+    /// Refuse to paint a colour that is not in the palette. Off by default: a
+    /// plain sprite has no ramp to protect.
     pub palette_lock: bool,
     /// The renderer the user asked for. Applied at startup, so changing it here
     /// only takes effect on the next launch.
@@ -299,9 +304,11 @@ impl Editor {
             cmdline: String::new(),
             msg: "press ? for help".into(),
             dirty: false,
+            revision: 0,
             should_quit: false,
             g_prefix: false,
             path: None,
+            recent: Vec::new(),
             bundle_stage: None,
             palette_lock: false,
             renderer: "glow".into(),
@@ -2090,9 +2097,17 @@ impl Editor {
         self.replace_sprite(sprite);
         self.adopt_bundle(path);
         self.path = Some(path.to_path_buf());
+        self.note_recent(path.to_path_buf());
         self.dirty = false;
         self.msg = "loaded".into();
         Ok(())
+    }
+
+    /// Remember a file as recently opened, newest first and capped at 10.
+    pub fn note_recent(&mut self, path: PathBuf) {
+        self.recent.retain(|p| p != &path);
+        self.recent.insert(0, path);
+        self.recent.truncate(10);
     }
 
     /// Swap in an already-built sprite and reset transient editor state.
