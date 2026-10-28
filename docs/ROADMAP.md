@@ -174,11 +174,16 @@ met; blocked tasks are marked with the reason.
   selection does nothing. 7 new tests (104 total): pencil/line/brush+symmetry,
   bucket, outside seed, empty stroke, text+bounds, paste/contour,
   `Op::Px`/`Op::Fill`.
-- [ ] **P5-07 — `.ase` unknown-chunk pass-through + harness** (M) — deps: none.
-  Chunk walker; retain unknown chunks and re-emit in their original frame; fix
-  the frame chunk-count fields; fixture `open→save→open` round trips.
-  Gate: unknown chunks survive a save; all four real fixtures survive a round
-  trip.
+- [x] **P5-07 — `.ase` unknown-chunk pass-through + harness** (M) — deps: none.
+  Landed 2026-10-28. `Sprite.raw_chunks` keeps every chunk vixel does not parse
+  (slices, user data, ICC, ...) with its frame and a `ChunkAnchor` (frame start,
+  layer/cel/palette/tags/tileset); `save` emits each group after the same
+  object and falls back to the frame end when that object was not written.
+  Frame header old/new chunk counts are now real (they were zero). 3 new tests
+  (107 total): header counts, anchored unknown-chunk order, and open→save→open
+  on all four real fixtures (composites + raw chunk bodies). Group order can
+  shift relative to other groups; frame, kind, body and object attachment
+  survive.
 - [ ] **P5-05 — All 19 blend modes** (M) — deps: none.
   Add the 11 missing modes (dodge/burn, hard/soft light, difference, exclusion,
   divide, hue/sat/color/luminosity); triple-based W3C blend math; `.ase` words

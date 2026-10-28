@@ -13,7 +13,9 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 
 use crate::color::Rgba;
-use crate::sprite::{BlendMode, Cel, Frame, Layer, PlayDirection, Sprite, Tag};
+use crate::sprite::{
+    BlendMode, Cel, ChunkAnchor, Frame, Layer, PlayDirection, RawChunk, Sprite, Tag,
+};
 
 const MAGIC: u16 = 0xA5E0;
 const FRAME_MAGIC: u16 = 0xF1FA;
@@ -129,31 +131,68 @@ fn write_header(out: &mut Vec<u8>, s: &Sprite, depth: &OutDepth) {
 
 fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
     let mut body: Vec<u8> = Vec::new();
+    let mut count: u32 = 0;
+    let mut used = vec![false; s.raw_chunks.len()];
+    let mut emit_raw = |body: &mut Vec<u8>, count: &mut u32, anchor: ChunkAnchor| {
+        for (i, rc) in s.raw_chunks.iter().enumerate() {
+            if !used[i] && rc.frame == frame && rc.after == anchor {
+                write_chunk(body, rc.kind, &rc.body);
+                used[i] = true;
+                *count += 1;
+            }
+        }
+    };
+
+    emit_raw(&mut body, &mut count, ChunkAnchor::FrameStart);
     if frame == 0 {
         if let OutDepth::Indexed(pal) = depth {
             write_palette_chunk(&mut body, pal);
+            count += 1;
+            emit_raw(&mut body, &mut count, ChunkAnchor::Palette);
         }
-        for layer in &s.layers {
+        for (i, layer) in s.layers.iter().enumerate() {
             write_layer_chunk(&mut body, layer);
+            count += 1;
+            emit_raw(&mut body, &mut count, ChunkAnchor::Layer(i as u16));
         }
         if !s.tags.is_empty() {
             write_tags_chunk(&mut body, &s.tags);
+            count += 1;
+            emit_raw(&mut body, &mut count, ChunkAnchor::Tags);
         }
     }
     for li in 0..s.layers.len() {
         if s.layers[li].group {
             continue; // groups have no cels
         }
-        write_cel_chunk(&mut body, s, li, frame, depth);
+        if write_cel_chunk(&mut body, s, li, frame, depth) {
+            count += 1;
+            emit_raw(&mut body, &mut count, ChunkAnchor::Cel(li as u16));
+        }
+    }
+    // Anchors with no matching known chunk (an unwritten tileset, a deleted
+    // layer, or user data on an empty cel) go to the end of the frame instead
+    // of vanishing.
+    for (i, rc) in s.raw_chunks.iter().enumerate() {
+        if !used[i] && rc.frame == frame {
+            write_chunk(&mut body, rc.kind, &rc.body);
+            count += 1;
+            used[i] = true;
+        }
     }
 
     let mut f = Vec::new();
     f.extend_from_slice(&0u32.to_le_bytes()); // size (backfilled)
     f.extend_from_slice(&FRAME_MAGIC.to_le_bytes());
-    f.extend_from_slice(&0u16.to_le_bytes()); // old chunk count (unused)
+    let old_count = if count > u32::from(u16::MAX) {
+        u16::MAX
+    } else {
+        count as u16
+    };
+    f.extend_from_slice(&old_count.to_le_bytes());
     f.extend_from_slice(&(s.frames[frame].duration_ms).to_le_bytes());
     f.extend_from_slice(&[0u8, 0]);
-    f.extend_from_slice(&0u32.to_le_bytes()); // new chunk count (unused)
+    f.extend_from_slice(&count.to_le_bytes());
     f.extend_from_slice(&body);
     let size = f.len() as u32;
     f[0..4].copy_from_slice(&size.to_le_bytes());
@@ -218,10 +257,16 @@ fn write_tags_chunk(out: &mut Vec<u8>, tags: &[Tag]) {
     write_chunk(out, CHUNK_TAGS, &b);
 }
 
-fn write_cel_chunk(out: &mut Vec<u8>, s: &Sprite, li: usize, frame: usize, depth: &OutDepth) {
+fn write_cel_chunk(
+    out: &mut Vec<u8>,
+    s: &Sprite,
+    li: usize,
+    frame: usize,
+    depth: &OutDepth,
+) -> bool {
     let cel = &s.cels[li][frame];
     if cel.pixels.iter().all(|p| p.3 == 0) {
-        return; // empty cels are implicit in .ase
+        return false; // empty cels are implicit in .ase
     }
     let mut b = Vec::new();
     b.extend_from_slice(&(li as u16).to_le_bytes());
@@ -255,6 +300,7 @@ fn write_cel_chunk(out: &mut Vec<u8>, s: &Sprite, li: usize, frame: usize, depth
         }
     }
     write_chunk(out, CHUNK_CEL, &b);
+    true
 }
 
 fn write_chunk(out: &mut Vec<u8>, chunk_type: u16, body: &[u8]) {
@@ -313,6 +359,7 @@ struct Import {
     tilesets: Vec<Tileset>,
     tilemaps: Vec<TilemapCel>,
     tags: Vec<Tag>,
+    raw_chunks: Vec<RawChunk>,
 }
 
 impl Import {
@@ -498,6 +545,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         tilesets: Vec::new(),
         tilemaps: Vec::new(),
         tags: Vec::new(),
+        raw_chunks: Vec::new(),
     };
     let has_uuid = u32_at(&data, 14) & 4 != 0;
     let mut layers: Vec<Layer> = Vec::new();
@@ -515,6 +563,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         let frame_end = pos + frame_size;
         durations.push(u16_at(&data, pos + 6));
         pos += 16;
+        let mut anchor = ChunkAnchor::FrameStart;
 
         while pos + 6 <= frame_end {
             let chunk_size = u32_at(&data, pos) as usize; // includes the header
@@ -527,18 +576,45 @@ pub fn load(path: &Path) -> Result<Sprite> {
             };
             match chunk_type {
                 CHUNK_LAYER => {
+                    let li = layers.len() as u16;
                     let (layer, tileset) = parse_layer(body, has_uuid)?;
                     layers.push(layer);
                     im.cels.push(vec![None; im.frames]);
                     im.layer_tilesets.push(tileset);
+                    anchor = ChunkAnchor::Layer(li);
                 }
-                CHUNK_CEL => cel_bodies.push((frame, body.to_vec())),
-                CHUNK_TAGS => im.tags.extend(parse_tags(body)),
-                CHUNK_TILESET => im.tilesets.push(parse_tileset(body, depth, &im.palette)?),
-                CHUNK_PALETTE => parse_palette_new(body, &mut im.palette)?,
-                CHUNK_PALETTE_RGB => parse_palette_rgb(body, &mut im.palette, false),
-                CHUNK_PALETTE_RGBA => parse_palette_rgb(body, &mut im.palette, true),
-                _ => {}
+                CHUNK_CEL => {
+                    let li = u16_at(body, 0);
+                    cel_bodies.push((frame, body.to_vec()));
+                    anchor = ChunkAnchor::Cel(li);
+                }
+                CHUNK_TAGS => {
+                    im.tags.extend(parse_tags(body));
+                    anchor = ChunkAnchor::Tags;
+                }
+                CHUNK_TILESET => {
+                    let ti = im.tilesets.len() as u16;
+                    im.tilesets.push(parse_tileset(body, depth, &im.palette)?);
+                    anchor = ChunkAnchor::Tileset(ti);
+                }
+                CHUNK_PALETTE => {
+                    parse_palette_new(body, &mut im.palette)?;
+                    anchor = ChunkAnchor::Palette;
+                }
+                CHUNK_PALETTE_RGB => {
+                    parse_palette_rgb(body, &mut im.palette, false);
+                    anchor = ChunkAnchor::Palette;
+                }
+                CHUNK_PALETTE_RGBA => {
+                    parse_palette_rgb(body, &mut im.palette, true);
+                    anchor = ChunkAnchor::Palette;
+                }
+                _ => im.raw_chunks.push(RawChunk {
+                    frame,
+                    kind: chunk_type,
+                    body: body.to_vec(),
+                    after: anchor,
+                }),
             }
             pos += chunk_size;
         }
@@ -596,6 +672,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         // Aseprite files carry an optional ICC/gamma chunk; this build reads
         // the pixels as-is, which is sRGB for anything Aseprite writes.
         color_profile: crate::sprite::ColorProfile::Srgb,
+        raw_chunks: im.raw_chunks,
     };
     sprite.normalize_levels();
     sprite.clamp_tags();
@@ -1165,6 +1242,147 @@ mod tests {
         assert_eq!(loaded.tags[0].repeat, 3);
         assert_eq!(loaded.tags[1].name, "idle");
         assert_eq!((loaded.tags[1].from, loaded.tags[1].to), (2, 2));
+    }
+
+    fn walk_chunks(data: &[u8]) -> Vec<(usize, u16, Vec<u8>)> {
+        let frames = u16_at(data, 6) as usize;
+        let mut out = Vec::new();
+        let mut pos = 128usize;
+        for frame in 0..frames {
+            let frame_size = u32_at(data, pos) as usize;
+            let end = pos + frame_size;
+            let mut p = pos + 16;
+            while p + 6 <= end {
+                let size = u32_at(data, p) as usize;
+                if size < 6 {
+                    break;
+                }
+                let kind = u16_at(data, p + 4);
+                out.push((
+                    frame,
+                    kind,
+                    data.get(p + 6..p + size).unwrap_or(&[]).to_vec(),
+                ));
+                p += size;
+            }
+            pos = end;
+        }
+        out
+    }
+
+    fn frame_counts(data: &[u8], frame: usize) -> (u16, u32) {
+        let mut pos = 128usize;
+        for _ in 0..frame {
+            pos += u32_at(data, pos) as usize;
+        }
+        (u16_at(data, pos + 6), u32_at(data, pos + 12))
+    }
+
+    #[test]
+    fn frame_headers_count_every_chunk() {
+        let mut s = Sprite::new(1, 1);
+        s.set(0, 0, 0, 0, Rgba(1, 2, 3, 255));
+        s.tags.push(Tag {
+            name: "t".into(),
+            from: 0,
+            to: 0,
+            color: Rgba(1, 2, 3, 255),
+            direction: PlayDirection::Forward,
+            repeat: 0,
+        });
+        let path = tmp("vixel_ase_counts.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let actual = walk_chunks(&data)
+            .iter()
+            .filter(|(f, _, _)| *f == 0)
+            .count() as u32;
+        let (old, new) = frame_counts(&data, 0);
+        assert_eq!(new, actual, "the new count field is exact");
+        assert_eq!(old as u32, actual.min(u16::MAX as u32));
+        assert!(actual >= 4, "palette, layer, tags and cel");
+    }
+
+    #[test]
+    fn unknown_chunks_keep_their_frame_and_anchor() {
+        let mut raw = Vec::new();
+        raw.extend_from_slice(&[255, 0, 0, 255]);
+        let mut data = ase_header(1, 1, 32, 1);
+        data.extend(ase_frame(&[
+            (0x3333, vec![3, 3, 3]), // frame start
+            (CHUNK_LAYER, layer_chunk(0, 0)),
+            (0x1234, vec![1, 2, 3]), // after the layer
+            (CHUNK_CEL, cel_chunk(0, 0, &raw)),
+            (0x2020, vec![9, 9]), // after the cel (user-data shape)
+            (0x2222, vec![7]),    // still after the cel
+        ]));
+        let s = load_bytes("vixel_ase_unknown.ase", data);
+        assert_eq!(s.raw_chunks.len(), 4);
+
+        let path = tmp("vixel_ase_unknown_rt.ase");
+        save(&s, &path).unwrap();
+        let out = std::fs::read(&path).unwrap();
+        let chunks = walk_chunks(&out);
+        let kinds: Vec<u16> = chunks.iter().map(|(_, k, _)| *k).collect();
+        let at = |k: u16| {
+            kinds
+                .iter()
+                .position(|x| *x == k)
+                .unwrap_or_else(|| panic!("missing {k:#x} in {kinds:?}"))
+        };
+        assert!(
+            at(0x3333) < at(CHUNK_LAYER),
+            "frame-start chunk stays first"
+        );
+        assert!(at(CHUNK_LAYER) < at(0x1234) && at(0x1234) < at(CHUNK_CEL));
+        assert!(at(CHUNK_CEL) < at(0x2020) && at(0x2020) < at(0x2222));
+        assert_eq!(chunks[at(0x1234)].2, vec![1, 2, 3]);
+
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.raw_chunks.len(), 4, "a reopen still sees them");
+    }
+
+    #[test]
+    fn real_fixtures_survive_open_save_open() {
+        for name in [
+            "prop.ase",
+            "test_grayscale.ase",
+            "test_nrgba.ase",
+            "test_paletted.ase",
+        ] {
+            let src = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/ase")
+                .join(name);
+            let a = load(&src).unwrap_or_else(|e| panic!("{name}: {e}"));
+            let out = tmp(&format!("vixel_ase_rt_{name}"));
+            save(&a, &out).unwrap();
+            let b = load(&out).unwrap();
+            let _ = std::fs::remove_file(&out);
+
+            assert_eq!(b.frames.len(), a.frames.len(), "{name} frames");
+            assert_eq!(b.layers.len(), a.layers.len(), "{name} layers");
+            for f in 0..a.frames.len() {
+                assert_eq!(b.composite(f), a.composite(f), "{name} frame {f}");
+            }
+            // Groups are re-emitted after their anchor object, so compare the
+            // set of (frame, kind, body) rather than the regrouped order.
+            let mut raw_a: Vec<_> = a
+                .raw_chunks
+                .iter()
+                .map(|c| (c.frame, c.kind, c.body.clone()))
+                .collect();
+            let mut raw_b: Vec<_> = b
+                .raw_chunks
+                .iter()
+                .map(|c| (c.frame, c.kind, c.body.clone()))
+                .collect();
+            raw_a.sort();
+            raw_b.sort();
+            assert_eq!(raw_b, raw_a, "{name} unknown chunks");
+        }
     }
 
     #[test]

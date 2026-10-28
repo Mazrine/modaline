@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **104 tests green** (96 lib + 8 bin)
+- `cargo test` → **107 tests green** (99 lib + 8 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-02 selection clips paint** (see batch 39).
+- Last completed batch: **P5-07 .ase unknown chunks** (see batch 40).
 
 ## How to resume
 
@@ -219,6 +219,13 @@ Read, in order:
     `FillOptions` gained a clip mask, so bucket fills (contiguous and global)
     stop at the selection edge and a seed outside it does nothing. 7 new tests
     (104 total).
+40. **P5-07 — `.ase` unknown chunks** — `Sprite.raw_chunks` + `ChunkAnchor`
+    retain every unparsed chunk with its frame and the object it followed;
+    `save` re-emits each group after the same layer/cel/palette/tags anchor and
+    falls back to the frame end if that object was not written. Frame headers
+    now carry real chunk counts. 3 new tests (107 total), including
+    open→save→open on all four real fixtures; composites, chunk bodies and
+    frame/kind survive (group order may differ).
 
 ## Next step (exact)
 
@@ -227,9 +234,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-07** — `.ase` unknown-chunk pass-through + harness (first open task).
-- Then P5-05 (19 blend modes), P5-03 (real indexed colour), in that order of the
-  roadmap.
+- **P5-05** — all 19 blend modes (first open task).
+- Then P5-03 (real indexed colour), in that order of the roadmap.
 
 ## Known limitations (do not forget)
 

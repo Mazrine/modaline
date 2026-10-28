@@ -142,7 +142,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Capability | Status | Task |
 |---|---|---|
 | `.ase`/`.aseprite` core read/write | Covered | — |
-| `.ase` unknown-chunk preservation | Missing | P5-07 |
+| `.ase` unknown-chunk preservation | Covered | P5-07 |
 | `.ase` grid origin/size | Missing | P5-08 |
 | `.ase` cel bounds + z-index | Missing | P5-10, P5-11 |
 | `.ase` linked-cel write | Missing | P5-12 |

@@ -153,7 +153,10 @@ L-shaped corners for the 1 px pencil/eraser.
   - Writes the declared colour mode when one is set (`:mode`), else the
     automatically chosen **lossless** depth: grayscale when every pixel is
     gray, indexed when the sprite uses <= 255 colors, else 32-bit RGBA. The
-    pixel ratio is written to and read from the header.
+    pixel ratio is written to and read from the header. Unknown chunks
+    (slices, user data, ICC, external files, ...) are retained verbatim with
+    their frame and anchor, and frame chunk counts are written, so an
+    open→save keeps data this build does not interpret yet.
     Layer masks are `.vpx`-only (the `.ase` format has no per-layer mask);
     tilemap layers are rasterized on import (tile editing is out of scope,
     see ROADMAP).

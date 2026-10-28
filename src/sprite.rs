@@ -181,6 +181,36 @@ fn tag_color() -> Rgba {
     Rgba(120, 170, 255, 255)
 }
 
+/// Where an opaque `.ase` chunk sat relative to the chunks vixel understands.
+/// User-data chunks attach to the preceding object, so preserving this anchor
+/// keeps slices, tag/layer/cel user data and unknown chunks attached across an
+/// open→save round trip.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChunkAnchor {
+    #[default]
+    FrameStart,
+    Layer(u16),
+    Cel(u16),
+    Palette,
+    Tags,
+    Tileset(u16),
+    /// No matching known chunk was written (e.g. the tileset writer is not
+    /// implemented yet): emit at the end of the frame.
+    End,
+}
+
+/// An `.ase` chunk this build does not interpret, kept so saving does not
+/// destroy data it has not learned yet (slices, user data, ICC, ...).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RawChunk {
+    pub frame: usize,
+    pub kind: u16,
+    #[serde(default)]
+    pub body: Vec<u8>,
+    #[serde(default)]
+    pub after: ChunkAnchor,
+}
+
 /// A sprite: a grid of cels indexed `[layer][frame]`.
 ///
 /// `layers[0]` is the topmost layer (drawn last, matching Aseprite's list).
@@ -208,6 +238,10 @@ pub struct Sprite {
     /// Which transfer function the pixel values are in.
     #[serde(default)]
     pub color_profile: ColorProfile,
+    /// Opaque `.ase` chunks (slices, user data, ICC, ...) retained verbatim
+    /// so an open→save round trip does not discard them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub raw_chunks: Vec<RawChunk>,
 }
 
 /// The two working spaces this editor understands. A sprite authored in linear
@@ -299,6 +333,7 @@ impl Sprite {
             pixel_aspect: (1, 1),
             grid: (0, 0),
             color_profile: ColorProfile::Srgb,
+            raw_chunks: Vec::new(),
         }
     }
 

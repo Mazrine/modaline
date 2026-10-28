@@ -83,6 +83,9 @@ thin shells:
   shared by `:open` and the command-line argument.
 - Bump `Editor::revision` (via `touch`) on every sprite mutation; the timeline
   caches thumbnails by it, so a missed bump shows a stale frame.
+- Opaque `.ase` chunks live in `Sprite.raw_chunks` with a `ChunkAnchor`; keep
+  them when adding or removing chunks so open→save never destroys data this
+  build does not parse yet.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not
