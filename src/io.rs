@@ -59,9 +59,28 @@ fn frame_image(sprite: &Sprite, frame: usize) -> image::RgbaImage {
     img
 }
 
+/// Nearest-neighbour integer upscale, so exported pixels stay crisp.
+fn scaled(img: image::RgbaImage, scale: u32) -> image::RgbaImage {
+    if scale <= 1 {
+        return img;
+    }
+    let (w, h) = img.dimensions();
+    image::imageops::resize(
+        &img,
+        w * scale,
+        h * scale,
+        image::imageops::FilterType::Nearest,
+    )
+}
+
 /// Export the composite of one frame as a PNG.
 pub fn export_png(sprite: &Sprite, frame: usize, path: &Path) -> Result<()> {
-    frame_image(sprite, frame)
+    export_png_scaled(sprite, frame, path, 1)
+}
+
+/// Export one frame at an integer scale (2x, 4x, ...).
+pub fn export_png_scaled(sprite: &Sprite, frame: usize, path: &Path, scale: u32) -> Result<()> {
+    scaled(frame_image(sprite, frame), scale)
         .save(path)
         .with_context(|| format!("save {}", path.display()))?;
     Ok(())
@@ -88,13 +107,24 @@ pub fn columns_for(frames: usize) -> u32 {
 
 /// Write every frame into one grid PNG. `columns` defaults to `columns_for`.
 pub fn export_sheet(sprite: &Sprite, path: &Path, columns: Option<u32>) -> Result<Sheet> {
+    export_sheet_scaled(sprite, path, columns, 1)
+}
+
+/// `export_sheet` with an integer upscale; `Sheet` reports the scaled frame
+/// size, so the meta stays sliceable.
+pub fn export_sheet_scaled(
+    sprite: &Sprite,
+    path: &Path,
+    columns: Option<u32>,
+    scale: u32,
+) -> Result<Sheet> {
     let n = sprite.frames.len().max(1);
     let columns = columns.unwrap_or_else(|| columns_for(n)).clamp(1, n as u32);
     let rows = (n as u32).div_ceil(columns);
-    let (fw, fh) = (sprite.width, sprite.height);
+    let (fw, fh) = (sprite.width * scale.max(1), sprite.height * scale.max(1));
     let mut sheet = image::RgbaImage::new(fw * columns, fh * rows);
     for frame in 0..n {
-        let cell = frame_image(sprite, frame);
+        let cell = scaled(frame_image(sprite, frame), scale);
         let (ox, oy) = (frame as u32 % columns * fw, frame as u32 / columns * fh);
         image::imageops::overlay(&mut sheet, &cell, ox as i64, oy as i64);
     }
@@ -111,6 +141,11 @@ pub fn export_sheet(sprite: &Sprite, path: &Path, columns: Option<u32>) -> Resul
 
 /// Write the frames as a looping GIF, honouring each frame's duration.
 pub fn export_gif(sprite: &Sprite, path: &Path) -> Result<()> {
+    export_gif_scaled(sprite, path, 1)
+}
+
+/// `export_gif` with an integer upscale.
+pub fn export_gif_scaled(sprite: &Sprite, path: &Path, scale: u32) -> Result<()> {
     use image::codecs::gif::{GifEncoder, Repeat};
     let file = std::fs::File::create(path).with_context(|| format!("create {}", path.display()))?;
     let mut encoder = GifEncoder::new_with_speed(std::io::BufWriter::new(file), 10);
@@ -123,7 +158,7 @@ pub fn export_gif(sprite: &Sprite, path: &Path) -> Result<()> {
             .max(10) as u32;
         encoder
             .encode_frame(image::Frame::from_parts(
-                frame_image(sprite, frame),
+                scaled(frame_image(sprite, frame), scale),
                 0,
                 0,
                 image::Delay::from_numer_denom_ms(delay, 1),
@@ -247,14 +282,24 @@ pub fn export_animation(
     stem: &Path,
     columns: Option<u32>,
 ) -> Result<Vec<PathBuf>> {
+    export_animation_scaled(sprite, stem, columns, 1)
+}
+
+/// `export_animation` with an integer upscale for the sheet and GIF.
+pub fn export_animation_scaled(
+    sprite: &Sprite,
+    stem: &Path,
+    columns: Option<u32>,
+    scale: u32,
+) -> Result<Vec<PathBuf>> {
     let sheet_path = with_suffix(stem, ".sheet.png");
     let gif_path = with_suffix(stem, ".gif");
     let meta_path = with_suffix(stem, ".json");
     if let Some(dir) = stem.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
     }
-    let sheet = export_sheet(sprite, &sheet_path, columns)?;
-    export_gif(sprite, &gif_path)?;
+    let sheet = export_sheet_scaled(sprite, &sheet_path, columns, scale)?;
+    export_gif_scaled(sprite, &gif_path, scale)?;
     let image_name = sheet_path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -278,6 +323,106 @@ pub fn import_png(path: &Path) -> Result<Sprite> {
         for x in 0..w {
             let p = img.get_pixel(x, y);
             sprite.set(0, 0, x, y, Rgba(p[0], p[1], p[2], p[3]));
+        }
+    }
+    Ok(sprite)
+}
+
+/// The sidecar `:export` writes beside a sheet: `<stem>.json` for
+/// `<stem>.sheet.png`, else the same stem with `.json`.
+fn meta_beside(path: &Path) -> PathBuf {
+    if let Some(name) = path.file_name().and_then(|n| n.to_str())
+        && let Some(stem) = name.strip_suffix(".sheet.png")
+    {
+        return path.with_file_name(format!("{stem}.json"));
+    }
+    path.with_extension("json")
+}
+
+#[derive(serde::Deserialize)]
+struct SheetMeta {
+    frame_w: u32,
+    frame_h: u32,
+    columns: u32,
+    rows: u32,
+    #[serde(default)]
+    frames: Vec<MetaFrame>,
+}
+
+#[derive(serde::Deserialize)]
+struct MetaFrame {
+    #[serde(default = "default_duration")]
+    duration_ms: u16,
+}
+
+fn default_duration() -> u16 {
+    100
+}
+
+/// Split a sheet PNG back into frames. `cols`/`rows` of 0 mean "read the
+/// sidecar"; explicit values tile the image evenly. The G6 round trip.
+pub fn import_sheet(path: &Path, cols: u32, rows: u32) -> Result<Sprite> {
+    let img = image::open(path)
+        .with_context(|| format!("open {}", path.display()))?
+        .to_rgba8();
+    let (iw, ih) = img.dimensions();
+    let (columns, rows, fw, fh, durations) = if cols > 0 && rows > 0 {
+        if iw % cols != 0 || ih % rows != 0 {
+            anyhow::bail!("{iw}x{ih} does not tile as {cols}x{rows}");
+        }
+        (cols, rows, iw / cols, ih / rows, Vec::new())
+    } else {
+        let meta_path = meta_beside(path);
+        if !meta_path.exists() {
+            anyhow::bail!(
+                "no sheet meta beside {} (pass cols rows instead)",
+                path.display()
+            );
+        }
+        let text = std::fs::read_to_string(&meta_path)
+            .with_context(|| format!("read {}", meta_path.display()))?;
+        let meta: SheetMeta = serde_json::from_str(&text).context("parse sheet meta")?;
+        if meta.frame_w == 0 || meta.frame_h == 0 || meta.columns == 0 || meta.rows == 0 {
+            anyhow::bail!("sheet meta has an empty frame grid");
+        }
+        if iw != meta.frame_w * meta.columns || ih != meta.frame_h * meta.rows {
+            anyhow::bail!(
+                "sheet is {iw}x{ih}, meta says {}x{}",
+                meta.frame_w * meta.columns,
+                meta.frame_h * meta.rows
+            );
+        }
+        let durations = meta
+            .frames
+            .iter()
+            .map(|f| f.duration_ms.max(10))
+            .collect::<Vec<_>>();
+        (
+            meta.columns,
+            meta.rows,
+            meta.frame_w,
+            meta.frame_h,
+            durations,
+        )
+    };
+    let mut sprite = Sprite::new(fw, fh);
+    let count = (columns * rows) as usize;
+    for i in 0..count {
+        if i > 0 {
+            sprite.add_frame_after(sprite.frames.len() - 1);
+        }
+        let (ox, oy) = ((i as u32 % columns) * fw, (i as u32 / columns) * fh);
+        for y in 0..fh {
+            for x in 0..fw {
+                let p = img.get_pixel(ox + x, oy + y);
+                let c = Rgba(p[0], p[1], p[2], p[3]);
+                if !c.is_transparent() {
+                    sprite.set(0, i, x, y, c);
+                }
+            }
+        }
+        if let Some(d) = durations.get(i) {
+            sprite.frames[i].duration_ms = *d;
         }
     }
     Ok(sprite)
@@ -386,6 +531,62 @@ mod tests {
             }
         }
         s
+    }
+
+    #[test]
+    fn a_sheet_round_trips_through_import() {
+        let s = animation(6);
+        let dir = std::env::temp_dir().join(format!("vixel-importsheet-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let paths = export_animation(&s, &dir.join("idle"), None).unwrap();
+        assert_eq!(paths.len(), 3);
+        let sheet = dir.join("idle.sheet.png");
+
+        let from_meta = import_sheet(&sheet, 0, 0).unwrap();
+        assert_eq!(from_meta.frames.len(), 6);
+        assert_eq!((from_meta.width, from_meta.height), (3, 2));
+        for f in 0..6 {
+            assert_eq!(from_meta.composite(f), s.composite(f), "frame {f}");
+        }
+        assert_eq!(from_meta.frames[1].duration_ms, s.frames[1].duration_ms);
+
+        let explicit = import_sheet(&sheet, 3, 2).unwrap();
+        assert_eq!(explicit.frames.len(), 6);
+        assert_eq!(explicit.composite(5), s.composite(5));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_scale_upscales_raster_outputs() {
+        let s = animation(2);
+        let dir = std::env::temp_dir().join(format!("vixel-scale-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let png = dir.join("frame.png");
+        export_png_scaled(&s, 0, &png, 2).unwrap();
+        let img = image::open(&png).unwrap().to_rgba8();
+        assert_eq!(img.dimensions(), (6, 4));
+        let comp = s.composite(0);
+        assert_eq!(
+            img.get_pixel(1, 1).0,
+            [comp[0].0, comp[0].1, comp[0].2, comp[0].3],
+            "nearest-neighbour block"
+        );
+
+        let sheet_path = dir.join("anim.sheet.png");
+        let sheet = export_sheet_scaled(&s, &sheet_path, None, 2).unwrap();
+        assert_eq!((sheet.frame_w, sheet.frame_h), (6, 4));
+        let sheet_img = image::open(&sheet_path).unwrap().to_rgba8();
+        assert_eq!(sheet_img.dimensions(), (12, 4));
+
+        let meta = dir.join("anim.json");
+        export_meta(&s, sheet, "anim.sheet.png", &meta).unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&meta).unwrap()).unwrap();
+        assert_eq!(json["frame_w"], 6, "the meta stays sliceable");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

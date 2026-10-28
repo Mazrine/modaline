@@ -889,18 +889,28 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             }
         }
         "export" => {
-            if let Some(p) = arg {
-                let path = PathBuf::from(p);
+            let mut it = arg.unwrap_or("").split_whitespace();
+            let target = it.next().unwrap_or("");
+            let scale = it.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(1);
+            if target.is_empty() || it.next().is_some() || !(1..=16).contains(&scale) {
+                editor.msg = "usage: :export <stem | file.png | file.ase> [scale 1-16]".into();
+            } else {
+                let path = PathBuf::from(target);
                 // `.png` = this frame, `.ase` = the whole sprite, a bare stem =
                 // the animation bundle (sheet + gif + json), which is what a
-                // paperdoll pipeline actually needs.
+                // paperdoll pipeline actually needs. `scale` upscales the
+                // raster outputs with nearest-neighbour.
                 let res = if io::is_ase(&path) {
-                    ase::save(&editor.sprite, &path).map(|_| "exported".to_string())
+                    if scale != 1 {
+                        Err(anyhow::anyhow!(".ase export has no scale"))
+                    } else {
+                        ase::save(&editor.sprite, &path).map(|_| "exported".to_string())
+                    }
                 } else if io::is_png(&path) {
-                    io::export_png(&editor.sprite, editor.active_frame, &path)
+                    io::export_png_scaled(&editor.sprite, editor.active_frame, &path, scale)
                         .map(|_| "exported".to_string())
                 } else {
-                    io::export_animation(&editor.sprite, &path, None).map(|paths| {
+                    io::export_animation_scaled(&editor.sprite, &path, None, scale).map(|paths| {
                         format!(
                             "exported {}",
                             paths
@@ -916,12 +926,32 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     Ok(what) => editor.msg = what,
                     Err(err) => editor.msg = format!("export failed: {err}"),
                 }
-            } else {
-                editor.msg = "usage: :export <stem | file.png | file.ase>".into();
             }
         }
-        "import" => {
+        "importsheet" | "importsheet!" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            let p = it.next().unwrap_or("");
+            let cols = it.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+            let rows = it.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+            if p.is_empty() {
+                editor.msg = "usage: :importsheet <sheet.png> [cols rows]".into();
+            } else if replace_ok(editor, name.ends_with('!'), "importsheet") {
+                match io::import_sheet(PathBuf::from(p).as_path(), cols, rows) {
+                    Ok(s) => {
+                        let n = s.frames.len();
+                        editor.replace_sprite(s);
+                        editor.path = None;
+                        editor.msg = format!("imported sheet: {n} frames");
+                    }
+                    Err(e) => editor.msg = format!("import sheet failed: {e}"),
+                }
+            }
+        }
+        "import" | "import!" => {
             if let Some(p) = arg {
+                if !replace_ok(editor, name == "import!", "import") {
+                    return;
+                }
                 match io::import_png(PathBuf::from(p).as_path()) {
                     Ok(s) => {
                         editor.replace_sprite(s);
