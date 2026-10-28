@@ -171,6 +171,14 @@ impl eframe::App for VixelApp {
             clear_recovery();
         }
         self.was_dirty = self.editor.dirty;
+        // eframe sleeps while idle. Without an explicit wakeup the snapshot
+        // above would only run when input arrives, so a dirty sprite could sit
+        // unsnapshotted indefinitely.
+        if self.editor.dirty {
+            ui.ctx().request_repaint_after(
+                self.next_autosave.saturating_duration_since(Instant::now()),
+            );
+        }
 
         if self.playing {
             let now = Instant::now();
