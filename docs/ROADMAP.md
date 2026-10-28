@@ -148,14 +148,16 @@ met; blocked tasks are marked with the reason.
 
 ### Phase 0 — land P4 and set up the programme
 
-- [ ] **P5-00 — Review and merge P4; create `feat/aseprite-parity`** (M) —
-  deps: none.
-  Review `main..fix/data-loss-guards` (base `809d0cf`) commit by commit, run the full gate + the
-  `docs/TESTING.md` smoke pass (draw, select/copy, dirty close, `:w`/`:wq`,
-  `:open`, `:export`, `:recover`, `:recent`, drop). Fix anything found on the
-  P4 branch. Only then merge `fix/data-loss-guards` to `main` (ff if possible)
-  and create `feat/aseprite-parity` from it.
-  Gate: gate green, smoke pass recorded, `main` contains P4, branch created.
+- [x] **P5-00 — Review and merge P4; create `feat/aseprite-parity`** (M) —
+  deps: none. Landed 2026-10-28.
+  Review stayed clean; the gate was 97 tests + clippy + fmt + wgpu build. The
+  Xvfb/twm smoke pass (text stamp, mouse paint, dirty close guard, save/export,
+  recents, argv open, autosave recovery) found **one real bug**: eframe sleeps
+  while idle, so the 30 s autosave only ran when input arrived. Fixed in
+  `cc25a29` with `request_repaint_after`, then re-verified: recovery writes
+  while idle and `:q!` clears it. Drag-and-drop was not exercised (xdotool
+  cannot XDND). Fast-forward merged into `main`; this branch was created from
+  it.
 - [x] **P5-01 — Parity matrix + backlog wiring** (S) — deps: none.
   `docs/ASEPRITE_PARITY.md` (one row per Aseprite capability), this P5 section,
   PROGRESS/README/AGENTS pointers and the matrix-update convention. Landed

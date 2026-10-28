@@ -10,7 +10,7 @@
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **parity backlog opened** (see batch 37).
+- Last completed batch: **P5-00 review + P4 merge** (see batch 38).
 
 ## How to resume
 
@@ -204,6 +204,15 @@ Read, in order:
     `docs/ASEPRITE_PARITY.md`; the detailed rationale/architecture is in
     `docs/ROADMAP.md` P5 and the plan file. No capability changed yet; the loop
     starts at P5-00 (review + merge P4, create `feat/aseprite-parity`).
+38. **P5-00 — P4 review + merge** — reviewed the five P4/backlog commits and ran
+    the full gate: 97 tests, clippy, fmt, wgpu build. The Xvfb/twm smoke pass
+    (text stamp, mouse paint, dirty close guard, save/export, recents, argv
+    open, autosave recovery) found one real bug: eframe sleeps while idle, so
+    the 30 s autosave only ran when input arrived; fixed with
+    `request_repaint_after` (`cc25a29`), then re-verified that recovery writes
+    while idle and `:q!` clears it. Fast-forward merged
+    `fix/data-loss-guards` into `main` and created `feat/aseprite-parity`.
+    Drag-and-drop was not exercised (xdotool cannot XDND).
 
 ## Next step (exact)
 
@@ -212,9 +221,9 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-00** — review and merge the P4 branch, then create `feat/aseprite-parity`.
-- Then P5-02 (selection clips paint), P5-07 (`.ase` unknown chunks), P5-05
-  (19 blend modes), P5-03 (real indexed colour), in that order of the roadmap.
+- **P5-02** — selection clips every paint path (first open task).
+- Then P5-07 (`.ase` unknown chunks), P5-05 (19 blend modes), P5-03 (real
+  indexed colour), in that order of the roadmap.
 
 ## Known limitations (do not forget)
 

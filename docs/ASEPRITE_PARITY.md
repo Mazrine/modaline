@@ -10,6 +10,9 @@ missing · **Missing** = no equivalent · **Blocked** = task cannot proceed
 (reason given) · **Out of scope** = deliberate, user-approved.
 
 Last audited: 2026-10-28 (after P4; P5 just opened).
+Last smoke (P5-00): 2026-10-28 — text stamp, mouse paint, dirty close guard,
+save/export, recents, argv open, idle autosave recovery; drag-and-drop not
+exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 
 ## Timeline and animation
 
