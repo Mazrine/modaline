@@ -444,7 +444,31 @@ impl Editor {
         }
     }
 
+    /// Does the current selection allow a write at `(x, y)`? No selection
+    /// means the whole canvas. The persistent selection is checked without
+    /// cloning; a live marquee (visual mode) resolves its combined mask.
+    fn selection_allows(&self, x: u32, y: u32) -> bool {
+        if self.select_anchor.is_some() {
+            return self.current_selection().is_none_or(|s| s.contains(x, y));
+        }
+        self.selection.as_ref().is_none_or(|s| s.contains(x, y))
+    }
+
     pub fn paint_pixel(&mut self, x: u32, y: u32, color: Rgba) {
+        if x >= self.sprite.width || y >= self.sprite.height || !self.selection_allows(x, y) {
+            return;
+        }
+        self.paint_pixel_unclipped(x, y, color);
+    }
+
+    /// Write one pixel without the selection clip. Only for operations that
+    /// own their mask (paste, transform writes, contour); recorded truth
+    /// (undo/redo) uses `sprite.set` directly. Everything else must go through
+    /// `paint_pixel`, which is where the selection clips.
+    pub(crate) fn paint_pixel_unclipped(&mut self, x: u32, y: u32, color: Rgba) {
+        if x >= self.sprite.width || y >= self.sprite.height {
+            return;
+        }
         let (l, f) = (self.active_layer, self.active_frame);
         if !self.sprite.layer_editable(l) {
             self.msg = "layer is locked or hidden".into();
@@ -578,7 +602,8 @@ impl Editor {
                     .iter()
                     .any(|&(nx, ny)| nx < w && ny < h && region[(ny * w + nx) as usize])
                 {
-                    self.paint_pixel(x, y, color);
+                    // The ring is just outside the selection by construction.
+                    self.paint_pixel_unclipped(x, y, color);
                 }
             }
         }
@@ -709,6 +734,14 @@ impl Editor {
     pub fn paint_symmetric(&mut self, x: u32, y: u32, color: Rgba) {
         for (px, py) in self.symmetry_points(x, y) {
             self.paint_pixel(px, py, color);
+        }
+    }
+
+    /// Symmetric paint without the selection clip, for paste: Aseprite's paste
+    /// replaces the selection rather than being limited by it.
+    fn paint_symmetric_unclipped(&mut self, x: u32, y: u32, color: Rgba) {
+        for (px, py) in self.symmetry_points(x, y) {
+            self.paint_pixel_unclipped(px, py, color);
         }
     }
 
@@ -917,9 +950,11 @@ impl Editor {
             return;
         }
         let color = self.fg;
+        let clip = self.has_selection().then(|| self.selection_grid());
         let opts = FillOptions {
             tol: self.wand_tolerance,
             contiguous: self.contiguous,
+            clip: clip.as_deref(),
         };
         self.begin_stroke();
         let mut n = 0;
@@ -1716,7 +1751,7 @@ impl Editor {
 
     /// The selection as a sprite-sized grid. Shape operations work here rather
     /// than inside the bbox, because every one of them can grow past it.
-    fn selection_grid(&self) -> Vec<bool> {
+    pub(crate) fn selection_grid(&self) -> Vec<bool> {
         let (w, h) = (self.sprite.width, self.sprite.height);
         let mut g = vec![false; (w * h) as usize];
         if let Some(sel) = self.current_selection() {
@@ -2198,7 +2233,7 @@ impl Editor {
                     if buf.mask[(yy * buf.w + xx) as usize] {
                         let color = buf.pixels[(yy * buf.w + xx) as usize];
                         if !color.is_transparent() {
-                            self.paint_symmetric(pos.0 + xx, pos.1 + yy, color);
+                            self.paint_symmetric_unclipped(pos.0 + xx, pos.1 + yy, color);
                         }
                     }
                 }
@@ -2667,7 +2702,10 @@ impl Editor {
             for xx in 0..uw {
                 let i = (yy * uw + xx) as usize;
                 if final_grid[i] != orig[i] {
-                    self.paint_pixel(ox + xx, oy + yy, final_grid[i]);
+                    // The mapped pixels leave the old mask; the selection is
+                    // replaced with the transformed shape below. Clip against
+                    // the old one and the move would delete its own content.
+                    self.paint_pixel_unclipped(ox + xx, oy + yy, final_grid[i]);
                 }
             }
         }
@@ -4128,6 +4166,147 @@ mod tests {
         let r = e.revision;
         e.add_layer();
         assert!(e.revision > r);
+    }
+
+    #[test]
+    fn paint_tools_are_clipped_to_the_selection() {
+        let mut e = Editor::new(8, 8);
+        e.selection = Some(Selection::rect(2, 2, 5, 5));
+
+        e.begin_stroke();
+        e.paint_with_tool(0, 0);
+        e.paint_with_tool(3, 3);
+        e.end_stroke();
+        assert!(e.sprite.get(0, 0, 0, 0).is_transparent());
+        assert_eq!(e.sprite.get(0, 0, 3, 3), e.fg);
+
+        // A line crossing the selection only paints inside it.
+        let ink = Rgba::rgb(9, 9, 9);
+        e.pending = Some(Pending {
+            shape: Shape::Line,
+            start: (0, 0),
+        });
+        e.cursor = (7, 7);
+        e.commit_shape(ink);
+        for (x, y) in [(0, 0), (1, 1), (6, 6), (7, 7)] {
+            assert!(e.sprite.get(0, 0, x, y).is_transparent(), "({x},{y})");
+        }
+        assert_eq!(e.sprite.get(0, 0, 3, 3), ink);
+
+        // The brush mirrors the clip per stamped pixel.
+        let mut b = Editor::new(8, 8);
+        b.selection = Some(Selection::rect(0, 0, 3, 7));
+        b.brush_size = 3;
+        b.symmetry = Symmetry::Horizontal;
+        b.begin_stroke();
+        b.paint_with_tool(1, 1);
+        b.end_stroke();
+        assert_eq!(b.sprite.get(0, 0, 1, 1), b.fg);
+        assert!(b.sprite.get(0, 0, 6, 1).is_transparent(), "mirror clipped");
+    }
+
+    #[test]
+    fn bucket_fill_stops_at_the_selection() {
+        let ink = Rgba::rgb(10, 10, 10);
+        let mut e = Editor::new(8, 1);
+        for x in 0..8 {
+            e.sprite.set(0, 0, x, 0, ink);
+        }
+        e.selection = Some(Selection::rect(2, 0, 4, 0));
+        e.fg = Rgba::rgb(200, 0, 0);
+        e.apply_bucket(2, 0);
+        for x in 2..=4 {
+            assert_eq!(e.sprite.get(0, 0, x, 0), e.fg, "x{x}");
+        }
+        for x in [0, 1, 5, 6, 7] {
+            assert_eq!(e.sprite.get(0, 0, x, 0), ink, "x{x}");
+        }
+
+        // Global mode still honours the clip.
+        let mut g = Editor::new(8, 1);
+        for x in 0..8 {
+            g.sprite.set(0, 0, x, 0, ink);
+        }
+        g.selection = Some(Selection::rect(2, 0, 4, 0));
+        g.fg = Rgba::rgb(0, 0, 200);
+        g.contiguous = false;
+        g.apply_bucket(2, 0);
+        for x in 2..=4 {
+            assert_eq!(g.sprite.get(0, 0, x, 0), g.fg, "x{x}");
+        }
+        assert_eq!(g.sprite.get(0, 0, 0, 0), ink);
+        assert_eq!(g.sprite.get(0, 0, 7, 0), ink);
+    }
+
+    #[test]
+    fn bucket_seed_outside_the_selection_does_nothing() {
+        let ink = Rgba::rgb(10, 10, 10);
+        let mut e = Editor::new(4, 1);
+        for x in 0..4 {
+            e.sprite.set(0, 0, x, 0, ink);
+        }
+        e.selection = Some(Selection::rect(1, 0, 2, 0));
+        e.fg = Rgba::rgb(1, 2, 3);
+        e.apply_bucket(0, 0);
+        for x in 0..4 {
+            assert_eq!(e.sprite.get(0, 0, x, 0), ink);
+        }
+    }
+
+    #[test]
+    fn a_fully_clipped_stroke_records_no_undo_step() {
+        let mut e = Editor::new(8, 8);
+        e.selection = Some(Selection::rect(4, 4, 7, 7));
+        e.begin_stroke();
+        e.paint_with_tool(0, 0);
+        e.paint_with_tool(1, 1);
+        e.end_stroke();
+        assert!(e.undo.is_empty(), "nothing changed, nothing to undo");
+    }
+
+    #[test]
+    fn text_and_bounds_respect_the_selection() {
+        let mut e = Editor::new(16, 16);
+        e.selection = Some(Selection::rect(12, 12, 15, 15));
+        e.stamp_text("A", 0, 0);
+        for x in 0..8 {
+            for y in 0..8 {
+                assert!(e.sprite.get(0, 0, x, y).is_transparent(), "({x},{y})");
+            }
+        }
+        // Out-of-bounds paint is a no-op instead of a panic.
+        e.paint_pixel(16, 0, Rgba::rgb(1, 2, 3));
+        e.paint_pixel(0, 16, Rgba::rgb(1, 2, 3));
+    }
+
+    #[test]
+    fn paste_and_contour_own_their_mask() {
+        let mut e = Editor::new(8, 8);
+        e.selection = Some(Selection::rect(0, 0, 1, 1));
+        e.clipboard = Some(Clipboard {
+            w: 1,
+            h: 1,
+            pixels: vec![Rgba::rgb(5, 6, 7)],
+            mask: vec![true],
+        });
+        e.paste_pos = Some((4, 4));
+        e.commit_paste();
+        assert_eq!(
+            e.sprite.get(0, 0, 4, 4),
+            Rgba::rgb(5, 6, 7),
+            "paste replaces the selection"
+        );
+
+        let mut c = Editor::new(8, 8);
+        c.selection = Some(Selection::rect(2, 2, 4, 4));
+        c.fg = Rgba::rgb(9, 9, 9);
+        c.contour_at(2, 2);
+        assert_eq!(
+            c.sprite.get(0, 0, 1, 2),
+            c.fg,
+            "the ring is outside the selection"
+        );
+        assert!(c.sprite.get(0, 0, 2, 2).is_transparent());
     }
 
     #[test]

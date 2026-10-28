@@ -71,8 +71,9 @@ same-color region around the cursor (active layer). Then `y` copies the active
 layer, `Y` copies the flattened selection (all visible layers), `x` cuts and
 `m` cuts-and-floats (move). `p` floats the clipboard for pasting — `hjkl`
 repositions it, `Enter` commits, `Esc` cancels. Cut and move act on the active
-layer's cel; `:copy merged` is the same as `Y`. `Esc` in normal mode clears the
-selection.
+layer's cel; `:copy merged` is the same as `Y`. Every paint tool is clipped to
+the selection; paste replaces it, and contour draws its ring just outside it.
+`Esc` in normal mode clears the selection.
 
 ### Mouse
 

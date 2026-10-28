@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate::color::Rgba;
 use crate::editor::{Editor, UndoStep};
 use crate::sprite::{
-    BlendMode, blend_over, ellipse_points, flood_fill, line_points, rect_filled_points, rect_points,
+    BlendMode, FillOptions, blend_over, ellipse_points, flood_fill_tol, line_points,
+    rect_filled_points, rect_points,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -150,7 +151,13 @@ impl Editor {
             self.msg = "palette locked: that colour is not in it".into();
             return;
         }
-        let changes = flood_fill(&mut self.sprite, l, f, x, y, color);
+        let clip = self.has_selection().then(|| self.selection_grid());
+        let opts = FillOptions {
+            tol: self.wand_tolerance,
+            contiguous: self.contiguous,
+            clip: clip.as_deref(),
+        };
+        let changes = flood_fill_tol(&mut self.sprite, l, f, x, y, color, opts);
         for (cx, cy, old, new) in &changes {
             self.record(l, f, *cx, *cy, *old, *new);
         }
@@ -213,6 +220,41 @@ mod tests {
                 color: Rgba(255, 255, 255, 128),
             },
         ]
+    }
+
+    #[test]
+    fn ops_are_clipped_to_the_selection() {
+        let mut e = editor();
+        e.selection = Some(crate::editor::Selection::rect(2, 2, 5, 5));
+        e.apply(&[
+            Op::Px {
+                x: 0,
+                y: 0,
+                color: Rgba::rgb(200, 0, 0),
+            },
+            Op::Px {
+                x: 3,
+                y: 3,
+                color: Rgba::rgb(0, 200, 0),
+            },
+        ]);
+        assert!(e.sprite.get(0, 0, 0, 0).is_transparent());
+        assert_eq!(e.sprite.get(0, 0, 3, 3), Rgba::rgb(0, 200, 0));
+
+        let mut f = editor();
+        for x in 0..8 {
+            for y in 0..8 {
+                f.sprite.set(0, 0, x, y, Rgba::rgb(10, 10, 10));
+            }
+        }
+        f.selection = Some(crate::editor::Selection::rect(2, 2, 4, 4));
+        f.apply(&[Op::Fill {
+            x: 2,
+            y: 2,
+            color: Rgba::rgb(0, 0, 200),
+        }]);
+        assert_eq!(f.sprite.get(0, 0, 3, 3), Rgba::rgb(0, 0, 200));
+        assert_eq!(f.sprite.get(0, 0, 0, 0), Rgba::rgb(10, 10, 10));
     }
 
     #[test]

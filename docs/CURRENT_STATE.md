@@ -49,6 +49,10 @@ L-shaped corners for the 1 px pencil/eraser.
   deterministic dither ramp (a mask is one bit per pixel).
 - **Mask-based**: selection is a bounding box + per-pixel mask, so copy/cut/
   move/paste preserve arbitrary shapes.
+- **Paint clip**: every paint tool — pencil, brush, eraser, shapes, text,
+  bucket, spray, shade, blur, symmetry mirrors and `Op` replay — is clipped to
+  the selection. Paste replaces the selection instead of being clipped, and
+  contour draws its ring just outside it.
 - Operators: `y` copy (active layer) · `Y` copy merged (flattened visible
   layers) · `x` cut · `m` move (cut + float) · `p` paste; `:copy merged|layer`
   does the same from the command line. `Esc` clears the selection. One undo

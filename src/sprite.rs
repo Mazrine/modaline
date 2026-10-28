@@ -896,19 +896,22 @@ pub fn color_close(a: Rgba, b: Rgba, tol: u8) -> bool {
         && (a.3 as i16 - b.3 as i16).abs() <= t
 }
 
-/// Match and reach for the bucket fill: a per-channel tolerance and whether
-/// the fill stays inside the seed's contiguous region.
+/// Match and reach for the bucket fill: a per-channel tolerance, whether the
+/// fill stays inside the seed's contiguous region, and an optional
+/// sprite-sized clip mask (the selection).
 #[derive(Clone, Copy, Debug)]
-pub struct FillOptions {
+pub struct FillOptions<'a> {
     pub tol: u8,
     pub contiguous: bool,
+    pub clip: Option<&'a [bool]>,
 }
 
-impl Default for FillOptions {
+impl Default for FillOptions<'_> {
     fn default() -> Self {
         Self {
             tol: 0,
             contiguous: true,
+            clip: None,
         }
     }
 }
@@ -936,11 +939,18 @@ pub fn flood_fill_tol(
     x: u32,
     y: u32,
     color: Rgba,
-    opts: FillOptions,
+    opts: FillOptions<'_>,
 ) -> Vec<(u32, u32, Rgba, Rgba)> {
     let w = s.width;
     let h = s.height;
     if x >= w || y >= h {
+        return Vec::new();
+    }
+    let allowed = |x: u32, y: u32| {
+        opts.clip
+            .is_none_or(|m| m.get((y * w + x) as usize).copied().unwrap_or(false))
+    };
+    if !allowed(x, y) {
         return Vec::new();
     }
     let target = s.get(layer, frame, x, y);
@@ -962,7 +972,10 @@ pub fn flood_fill_tol(
             ] {
                 if nx < w && ny < h {
                     let i = (ny * w + nx) as usize;
-                    if !seen[i] && color_close(s.get(layer, frame, nx, ny), target, opts.tol) {
+                    if !seen[i]
+                        && allowed(nx, ny)
+                        && color_close(s.get(layer, frame, nx, ny), target, opts.tol)
+                    {
                         seen[i] = true;
                         stack.push((nx, ny));
                     }
@@ -972,7 +985,7 @@ pub fn flood_fill_tol(
     } else {
         for yy in 0..h {
             for xx in 0..w {
-                if color_close(s.get(layer, frame, xx, yy), target, opts.tol) {
+                if allowed(xx, yy) && color_close(s.get(layer, frame, xx, yy), target, opts.tol) {
                     set_px(s, layer, frame, xx, yy, color, &mut changes);
                 }
             }

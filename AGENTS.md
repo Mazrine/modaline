@@ -59,6 +59,9 @@ thin shells:
    sibling that records), never `sprite.set` directly. Structural edits
    (layers, frames, tags) use `UndoStep::Structure` snapshots that carry the
    active indices; panel property edits use a cheap `LayerProps` step.
+   `paint_pixel` also enforces canvas bounds and the selection clip;
+   `paint_pixel_unclipped` is reserved for paste, selection-transform writes
+   and contour.
 4. **Rendering is backend-agnostic**: everything goes through
    `egui::TextureHandle` (composite → `ColorImage::from_rgba_unmultiplied` →
    `load_texture`/`set`, nearest-neighbor). No raw GL calls. Custom shaders are

@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **97 tests green** (89 lib + 8 bin)
+- `cargo test` → **104 tests green** (96 lib + 8 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-00 review + P4 merge** (see batch 38).
+- Last completed batch: **P5-02 selection clips paint** (see batch 39).
 
 ## How to resume
 
@@ -213,6 +213,12 @@ Read, in order:
     while idle and `:q!` clears it. Fast-forward merged
     `fix/data-loss-guards` into `main` and created `feat/aseprite-parity`.
     Drag-and-drop was not exercised (xdotool cannot XDND).
+39. **P5-02 — Selection clips paint** — `Editor::paint_pixel` now enforces
+    bounds and the current selection, with `paint_pixel_unclipped` as the
+    explicit exemption used by paste, selection transforms and contour.
+    `FillOptions` gained a clip mask, so bucket fills (contiguous and global)
+    stop at the selection edge and a seed outside it does nothing. 7 new tests
+    (104 total).
 
 ## Next step (exact)
 
@@ -221,9 +227,9 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-02** — selection clips every paint path (first open task).
-- Then P5-07 (`.ase` unknown chunks), P5-05 (19 blend modes), P5-03 (real
-  indexed colour), in that order of the roadmap.
+- **P5-07** — `.ase` unknown-chunk pass-through + harness (first open task).
+- Then P5-05 (19 blend modes), P5-03 (real indexed colour), in that order of the
+  roadmap.
 
 ## Known limitations (do not forget)
 

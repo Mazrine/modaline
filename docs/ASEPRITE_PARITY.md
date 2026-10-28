@@ -80,7 +80,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Spray, shade, blur, contour | Partial (fixed depth) | P5-21 |
 | Pixel-perfect freehand | Covered | — |
 | Symmetry (H/V/both/radial, movable centre) | Covered | — |
-| **Selection clips every paint tool** | **Missing** | **P5-02** |
+| **Selection clips every paint tool** | Covered | P5-02 |
 | Selection stroke / fill commands | Missing | P5-25 |
 | Colour-range selection | Missing | P5-25 |
 | Selection from layer alpha | Missing | P5-25 |

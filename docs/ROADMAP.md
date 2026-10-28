@@ -165,13 +165,15 @@ met; blocked tasks are marked with the reason.
 
 ### Epic 1 — Correctness foundation
 
-- [ ] **P5-02 — Selection clips every paint path** (M) — deps: none.
-  Clip at `Editor::paint_pixel` with a cached sprite-space selection mask; clip
-  `flood_fill_tol`; exempt paste, transform writes (update the mask first),
-  contour, unpaint, undo/redo, mask-apply and whole-sprite transforms; add the
-  missing bounds guard.
-  Gate: pencil, brush+symmetry, line/rect/ellipse, text, bucket (both modes),
-  `Op::Px`/`Op::Fill` tests; a fully clipped stroke leaves no undo step.
+- [x] **P5-02 — Selection clips every paint path** (M) — deps: none.
+  Landed 2026-10-28. `paint_pixel` now enforces bounds + the current selection
+  (checked without cloning; the live marquee resolves via `current_selection`).
+  `paint_pixel_unclipped` is the named exemption for paste, selection-transform
+  writes and contour. `FillOptions` gained a clip mask, so bucket fills stop at
+  the selection edge in both contiguous and global mode, and a seed outside the
+  selection does nothing. 7 new tests (104 total): pencil/line/brush+symmetry,
+  bucket, outside seed, empty stroke, text+bounds, paste/contour,
+  `Op::Px`/`Op::Fill`.
 - [ ] **P5-07 — `.ase` unknown-chunk pass-through + harness** (M) — deps: none.
   Chunk walker; retain unknown chunks and re-emit in their original frame; fix
   the frame chunk-count fields; fixture `open→save→open` round trips.
