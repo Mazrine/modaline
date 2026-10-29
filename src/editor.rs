@@ -300,6 +300,11 @@ pub enum UndoStep {
         before: i16,
         after: i16,
     },
+    /// Sprite user data (including the background colour).
+    SpriteUserData {
+        before: Option<crate::sprite::UserData>,
+        after: Option<crate::sprite::UserData>,
+    },
 }
 
 impl UndoStep {
@@ -314,6 +319,7 @@ impl UndoStep {
             }
             UndoStep::LayerProps { .. } => 64,
             UndoStep::CelZ { .. } => 32,
+            UndoStep::SpriteUserData { .. } => 128,
         }
     }
 
@@ -333,6 +339,7 @@ impl UndoStep {
             UndoStep::CelZ { layer, frame, .. } => {
                 format!("cel z: layer {} frame {}", layer + 1, frame + 1)
             }
+            UndoStep::SpriteUserData { .. } => "sprite properties".into(),
         }
     }
 }
@@ -747,7 +754,8 @@ impl Editor {
                 UndoStep::Snapshot { .. }
                 | UndoStep::Structure { .. }
                 | UndoStep::LayerProps { .. }
-                | UndoStep::CelZ { .. } => false,
+                | UndoStep::CelZ { .. }
+                | UndoStep::SpriteUserData { .. } => false,
             };
             if !empty {
                 self.push_undo(s);
@@ -2228,6 +2236,20 @@ impl Editor {
         self.end_stroke();
     }
 
+    /// Set the sprite-properties background colour (user-data colour) as one
+    /// undo step. `None` clears it while preserving other user data.
+    pub fn set_background_color(&mut self, color: Option<Rgba>) {
+        let before = self.sprite.user_data.clone();
+        self.sprite.set_background_color(color);
+        let after = self.sprite.user_data.clone();
+        if before == after {
+            return;
+        }
+        self.push_undo(UndoStep::SpriteUserData { before, after });
+        self.touch();
+        self.dirty = true;
+    }
+
     pub fn pick_color(&mut self, x: u32, y: u32) {
         let comp = self.sprite.composite(self.active_frame);
         let c = comp[(y * self.sprite.width + x) as usize];
@@ -2269,6 +2291,9 @@ impl Editor {
                 } => {
                     self.sprite.cels[*layer][*frame].z_index = *before;
                 }
+                UndoStep::SpriteUserData { before, .. } => {
+                    self.sprite.user_data = before.clone();
+                }
             }
             self.push_redo(step);
             self.dirty = true;
@@ -2304,6 +2329,9 @@ impl Editor {
                     ..
                 } => {
                     self.sprite.cels[*layer][*frame].z_index = *after;
+                }
+                UndoStep::SpriteUserData { after, .. } => {
+                    self.sprite.user_data = after.clone();
                 }
             }
             self.push_undo(step);
@@ -7936,6 +7964,27 @@ mod tests {
         e.commit_paste();
         assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(5, 6, 7));
         assert_eq!(e.sprite.get(0, 0, 7, 0), Rgba::rgb(5, 6, 7));
+    }
+
+    #[test]
+    fn background_colour_is_user_data_and_undoable() {
+        let mut e = Editor::new(4, 4);
+        e.sprite.user_data = Some(crate::sprite::UserData {
+            text: "keep me".into(),
+            ..Default::default()
+        });
+        assert_eq!(e.sprite.background_color(), None);
+        e.set_background_color(Some(Rgba::rgb(10, 20, 30)));
+        assert_eq!(e.sprite.background_color(), Some(Rgba::rgb(10, 20, 30)));
+        assert_eq!(e.sprite.user_data.as_ref().unwrap().text, "keep me");
+        e.undo();
+        assert_eq!(e.sprite.background_color(), None);
+        assert_eq!(e.sprite.user_data.as_ref().unwrap().text, "keep me");
+        e.redo();
+        assert_eq!(e.sprite.background_color(), Some(Rgba::rgb(10, 20, 30)));
+        e.set_background_color(None);
+        assert_eq!(e.sprite.background_color(), None);
+        assert_eq!(e.sprite.user_data.as_ref().unwrap().text, "keep me");
     }
 
     #[test]

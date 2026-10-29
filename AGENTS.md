@@ -161,6 +161,8 @@ thin shells:
 - Keymap actions run before the fixed modal handlers. When a char key is
   consumed, set `view.suppress_text` so the following `Event::Text` does not run
   the old handler again; `blocks_default` handles moved defaults.
+- The sprite background colour is the sprite user-data colour; keep
+  `Sprite::set_background_color` preserving text/property payload.
 - Undo pushes go through `Editor::push_undo`/`push_redo` so the count and byte
   budgets are enforced; add new step kinds to `UndoStep::bytes`.
 - Pixel writes use `Editor::record` (merged dirty rect); structural edits use

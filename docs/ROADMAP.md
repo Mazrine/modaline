@@ -598,7 +598,8 @@ met; blocked tasks are marked with the reason.
 - [ ] **P5-50 — Scripting API coverage** (L) — deps: P5-49. **Blocked** by
   P5-49/dependency availability. Aseprite API compatibility matrix; run
   representative scripts.
-- [ ] **P5-51 — Extensions** (L) — deps: P5-49, P5-50, P5-53.
+- [ ] **P5-51 — Extensions** (L) — deps: P5-49, P5-50, P5-53. **Blocked** by
+  the scripting dependency (`mlua` unavailable offline).
   `.aseprite-extension` zip/manifest, install/remove, scripts/themes.
 
 ### Epic 10 — App shell and UX
@@ -681,9 +682,13 @@ met; blocked tasks are marked with the reason.
   the editor still waits for the result (no async preview). 2 tests (247 total)
   cover bounded history and parallel/sequential equivalence for every pointwise
   filter. Honest remaining gap: true off-UI-thread/async filtering.
-- [ ] **P5-60 — Sprite background colour property** (S) — deps: P5-14.
-  Aseprite's sprite-properties background colour (user data); show it in the
-  properties panel and round-trip `.ase`/`.vpx`.
+- [x] **P5-60 — Sprite background colour property** (S) — deps: P5-14.
+  Landed 2026-10-28. Stored as the sprite user-data colour
+  (`Sprite::background_color`/`set_background_color`), preserving text/property
+  payloads. `:bgcolor [#rrggbb|clear]` sets/queries it as one undo step; the side
+  panel shows a colour swatch with clear. Round-trips through `.ase` user data
+  and `.vpx` JSON. 3 tests (250 total): editor undo/preserve, ase round-trip, vpx
+  round-trip. Xvfb smoke showed `#ff8800` in the swatch and status.
 
 ### P5 definition of done
 

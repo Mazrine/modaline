@@ -1690,6 +1690,29 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     });
     ui.horizontal(|ui| {
+        ui.label("background");
+        let mut color = editor
+            .sprite
+            .background_color()
+            .map(|c| egui::Color32::from_rgb(c.0, c.1, c.2))
+            .unwrap_or(egui::Color32::TRANSPARENT);
+        if ui
+            .color_edit_button_srgba(&mut color)
+            .on_hover_text("sprite-properties background colour (:bgcolor)")
+            .changed()
+        {
+            editor.set_background_color(Some(crate::color::Rgba(
+                color.r(),
+                color.g(),
+                color.b(),
+                255,
+            )));
+        }
+        if editor.sprite.background_color().is_some() && ui.small_button("clear").clicked() {
+            editor.set_background_color(None);
+        }
+    });
+    ui.horizontal(|ui| {
         ui.label(view.tr("brush"));
         ui.add(egui::Slider::new(&mut editor.brush_size, 1..=64));
         egui::ComboBox::from_id_salt("brush_kind")
@@ -3562,6 +3585,7 @@ const HELP: &[&str] = &[
     "  :bind <action> <chord|wheel-up|wheel-down|none>   :bind list|reset",
     "  :lang [en|pt-BR|file.json]   :lang check|save <file>   (runtime language)",
     "  :prefs   (editor, grid, export, appearance, keys, workspace)",
+    "  :bgcolor [#rrggbb|clear]   (sprite-properties background colour)",
     "  :slices [<dir> [cols rows|named]]   (list, grid export, or named slices)",
     "  :grad linear|radial   :contour   :textobj <text>   (editable text object)",
     "  :textfont vixel   :textsize <8-64>   :textalign left|center|right",

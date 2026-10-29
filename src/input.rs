@@ -1662,6 +1662,25 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 }
             }
         }
+        "bgcolor" | "backgroundcolor" => match arg {
+            Some("clear" | "none") => {
+                editor.set_background_color(None);
+                editor.msg = "background colour: none".into();
+            }
+            Some(spec) => match crate::color::parse_hex(spec) {
+                Some(c) => {
+                    editor.set_background_color(Some(c));
+                    editor.msg = format!("background: #{:02x}{:02x}{:02x}", c.0, c.1, c.2);
+                }
+                None => editor.msg = "usage: :bgcolor #rrggbb|clear".into(),
+            },
+            None => {
+                editor.msg = match editor.sprite.background_color() {
+                    Some(c) => format!("background: #{:02x}{:02x}{:02x}", c.0, c.1, c.2),
+                    None => "background: none".into(),
+                };
+            }
+        },
         "fg" | "bg" => match arg.and_then(crate::color::parse_hex) {
             Some(c) => {
                 if name == "fg" {

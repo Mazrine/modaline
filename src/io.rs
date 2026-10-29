@@ -2455,4 +2455,15 @@ mod tests {
         assert!(!is_ase(&path));
         assert!(!is_png(&path));
     }
+
+    #[test]
+    fn project_round_trip_keeps_sprite_background_colour() {
+        let mut s = Sprite::new(2, 2);
+        s.set_background_color(Some(Rgba::rgb(7, 8, 9)));
+        let path = std::env::temp_dir().join("vixel_bg_roundtrip.vpx");
+        save_project(&s, &path).unwrap();
+        let loaded = load_project(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(loaded.background_color(), Some(Rgba::rgb(7, 8, 9)));
+    }
 }

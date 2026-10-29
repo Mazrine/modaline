@@ -1157,6 +1157,26 @@ impl Sprite {
         self.cels[layer][frame].link.is_some()
     }
 
+    /// Aseprite's sprite-properties background colour, carried in the sprite's
+    /// user-data colour field.
+    pub fn background_color(&self) -> Option<Rgba> {
+        self.user_data.as_ref().and_then(|u| u.color)
+    }
+
+    pub fn set_background_color(&mut self, color: Option<Rgba>) {
+        let mut data = self.user_data.clone().unwrap_or_default();
+        data.color = color;
+        if data.text.is_empty()
+            && data.properties.is_empty()
+            && data.flags == 0
+            && data.color.is_none()
+        {
+            self.user_data = None;
+        } else {
+            self.user_data = Some(data);
+        }
+    }
+
     pub fn get(&self, layer: usize, frame: usize, x: u32, y: u32) -> Rgba {
         self.content(layer, frame).get(x as i32, y as i32)
     }

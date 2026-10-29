@@ -2026,6 +2026,19 @@ mod tests {
         assert_eq!(loaded.get(1, 0, 1, 0), Rgba(10, 20, 30, 255));
     }
 
+    #[test]
+    fn round_trips_sprite_background_colour_user_data() {
+        let mut s = Sprite::new(1, 1);
+        s.set_background_color(Some(Rgba(12, 34, 56, 255)));
+        s.user_data.as_mut().unwrap().text = "sprite note".into();
+        let path = std::env::temp_dir().join("vixel_ase_background.ase");
+        save(&s, &path).unwrap();
+        let loaded = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(loaded.background_color(), Some(Rgba(12, 34, 56, 255)));
+        assert_eq!(loaded.user_data.as_ref().unwrap().text, "sprite note");
+    }
+
     // ---- depth selection + round trips ----
 
     fn tmp(name: &str) -> std::path::PathBuf {

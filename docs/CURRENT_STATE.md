@@ -136,6 +136,9 @@ L-shaped corners for the 1 px pencil/eraser.
   transparency checkerboard, cursor + selection + floating-paste previews.
   **Wide pixels** render at the sprite's `pixel_aspect` (checkbox "wide px");
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
+- **sprite background colour**: stored in the sprite's user-data colour;
+  `:bgcolor [#rrggbb|clear]` and a side-panel swatch edit it as one undo step,
+  and it round-trips through `.ase` and `.vpx` while preserving other user data.
 - **undo memory / filters**: undo history is capped by count (preferences/config,
   default 100) and a 256 MB byte budget; pointwise filters run on scoped worker
   threads for large images, neighborhood filters stay synchronous.

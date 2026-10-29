@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **247 tests green** (214 lib + 28 bin + 5 CLI; 1 ignored benchmark)
+- `cargo test` → **250 tests green** (217 lib + 28 bin + 5 CLI; 1 ignored benchmark)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-59 undo/filter** (see batch 93).
+- Last completed batch: **P5-60 background colour** (see batch 94).
 
 ## How to resume
 
@@ -472,6 +472,9 @@ Read, in order:
   prefs/config) + 256 MB byte budget trimming oldest; pointwise filters run on
   scoped workers (≥64 rows), neighborhood filters synchronous. 2 tests (247
   total). Remaining gap: async/off-UI-thread filtering (documented Partial).
+94. **P5-60 — sprite background colour** — sprite user-data colour with undo,
+  `:bgcolor`, side picker/swatch, `.ase`/`.vpx` round-trip. 3 tests (250 total);
+  Xvfb verified the swatch/status.
 
 ## Next step (exact)
 
@@ -480,10 +483,10 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-60** — sprite background colour property (deps P5-14 met), then the
-  unblocked programme is complete. P5-49/P5-50/P5-51 remain Blocked on an
-  offline `mlua` dependency; documented Partial rows remain (localization
-  strings, async filtering, CPU dirty compositing).
+- **No unblocked P5 tasks remain.** P5-49/P5-50/P5-51 are Blocked on an offline
+  `mlua` dependency; all other P5 tasks are checked. The loop stops here. The
+  remaining documented Partial rows are localization strings, async filtering
+  and CPU dirty compositing.
 
 ## Known limitations (do not forget)
 

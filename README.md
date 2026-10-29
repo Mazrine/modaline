@@ -164,6 +164,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:bind <action> <chord\|wheel-up\|wheel-down\|none>` / `:bind list\|reset` | customise action keys and wheel |
 | `:lang [en\|pt-BR\|file.json]` / `:lang list\|check\|save <file>` | runtime language and JSON catalogs |
 | `:prefs` | preferences window (editor, grid, export, appearance, keys, workspace) |
+| `:bgcolor [#rrggbb\|clear]` | sprite-properties background colour (user data) |
 | `:fg #rrggbb` / `:bg #rrggbb` | set fg / bg exactly |
 | `:pal load\|save <file>` / `:pal move <from> <to>` / `:pal from-sprite` / `:pal lock on\|off` | palette I/O, reorder, derive from the frame, lock |
 | `:pal preset <name>` / `:pal insert <i> [#hex]` / `:pal delete <i>` / `:pal sort [rgb\|luma\|hue]` / `:pal name <i> <name>` | presets, index edits, sort, names |
