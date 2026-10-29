@@ -18,6 +18,10 @@ pub struct Cel {
     /// Aseprite cel z-index: positive moves this cel towards the front.
     #[serde(default)]
     pub z_index: i16,
+    /// Linked cel: content comes from this frame in the same layer. Painting
+    /// materialises the content first (copy-on-write).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<usize>,
     pub pixels: Vec<Rgba>,
     /// 0..255, cel opacity (Aseprite stores this per cel).
     #[serde(default = "full")]
@@ -36,6 +40,7 @@ impl Cel {
             w,
             h,
             z_index: 0,
+            link: None,
             pixels: vec![Rgba::TRANSPARENT; (w * h) as usize],
             opacity: 255,
         }
@@ -148,6 +153,9 @@ pub struct Layer {
     /// exported.
     #[serde(default)]
     pub reference: bool,
+    /// New frames on this layer link to the previous frame's cel.
+    #[serde(default)]
+    pub prefer_linked: bool,
 }
 
 fn yes() -> bool {
@@ -167,6 +175,7 @@ impl Default for Layer {
             mask: None,
             background: false,
             reference: false,
+            prefer_linked: false,
         }
     }
 }
@@ -542,6 +551,7 @@ impl Sprite {
     /// 255 opaque colours are kept exactly; more go through median cut. The
     /// transparent slot is index 0.
     pub fn build_palette(&mut self) {
+        self.materialize_links();
         let mut seen = std::collections::HashSet::new();
         let mut colors = Vec::new();
         for cel in self.cels.iter().flatten() {
@@ -582,6 +592,7 @@ impl Sprite {
         if self.palette.is_empty() {
             return;
         }
+        self.materialize_links();
         self.color_mode = ColorMode::Indexed;
         if mode == DitherMode::None {
             self.remap_to_palette();
@@ -619,6 +630,7 @@ impl Sprite {
         if self.palette.is_empty() {
             return;
         }
+        self.materialize_links();
         let palette = self.palette.clone();
         let ti = self.transparent_slot();
         for cel in self.cels.iter_mut().flatten() {
@@ -638,6 +650,7 @@ impl Sprite {
         if self.color_profile == to {
             return;
         }
+        self.materialize_links();
         let f = match to {
             ColorProfile::Linear => crate::color::srgb_to_linear,
             ColorProfile::Srgb => crate::color::linear_to_srgb,
@@ -656,6 +669,7 @@ impl Sprite {
     /// Convert every pixel to its luminance, keeping alpha. Colour mode
     /// `Grayscale` is a real edit, not just a label.
     pub fn to_grayscale(&mut self) {
+        self.materialize_links();
         for cel in self.cels.iter_mut().flatten() {
             for p in cel.pixels.iter_mut() {
                 if p.3 == 0 {
@@ -677,6 +691,9 @@ impl Sprite {
         let (w, h) = (self.width, self.height);
         let area = (w * h) as usize;
         for cel in self.cels.iter_mut().flatten() {
+            if cel.link.is_some() {
+                continue;
+            }
             if cel.w == 0 || cel.h == 0 || cel.pixels.len() != cel.w as usize * cel.h as usize {
                 cel.x = 0;
                 cel.y = 0;
@@ -687,12 +704,103 @@ impl Sprite {
         }
     }
 
+    /// Resolve a cel's link chain to the cel that owns the pixels.
+    fn content(&self, layer: usize, frame: usize) -> &Cel {
+        let mut cel = &self.cels[layer][frame];
+        let mut cur = frame;
+        let mut hops = 0;
+        while let Some(t) = cel.link {
+            if t >= self.frames.len() || t == cur || hops > self.frames.len() {
+                break;
+            }
+            cel = &self.cels[layer][t];
+            cur = t;
+            hops += 1;
+        }
+        cel
+    }
+
+    /// Replace a linked cel with an independent copy of its content.
+    fn materialize(&mut self, layer: usize, frame: usize) {
+        let Some(target) = self.cels[layer][frame].link else {
+            return;
+        };
+        if target >= self.frames.len() {
+            self.cels[layer][frame].link = None;
+            return;
+        }
+        let mut cel = self.content(layer, target).clone();
+        let z = self.cels[layer][frame].z_index;
+        let op = self.cels[layer][frame].opacity;
+        cel.link = None;
+        cel.z_index = z;
+        cel.opacity = op;
+        self.cels[layer][frame] = cel;
+    }
+
+    /// Break every link, giving each cel its own copy of the pixels.
+    pub fn materialize_links(&mut self) {
+        for layer in 0..self.layers.len() {
+            for frame in 0..self.frames.len() {
+                self.materialize(layer, frame);
+            }
+        }
+    }
+
+    /// Link `frame` to another frame's cel in the same layer.
+    pub fn link_cel(&mut self, layer: usize, frame: usize, target: usize) -> bool {
+        if layer >= self.cels.len()
+            || frame >= self.frames.len()
+            || target >= self.frames.len()
+            || frame == target
+        {
+            return false;
+        }
+        let mut root = target;
+        let mut hops = 0;
+        while let Some(t) = self.cels[layer][root].link {
+            if t >= self.frames.len() || t == root || hops > self.frames.len() {
+                break;
+            }
+            root = t;
+            hops += 1;
+        }
+        if root == frame {
+            return false;
+        }
+        let cel = &mut self.cels[layer][frame];
+        let (z, op) = (cel.z_index, cel.opacity);
+        cel.link = Some(root);
+        cel.x = 0;
+        cel.y = 0;
+        cel.w = 0;
+        cel.h = 0;
+        cel.z_index = z;
+        cel.opacity = op;
+        cel.pixels.clear();
+        true
+    }
+
+    /// Break one link, copying the shared pixels into this cel.
+    pub fn unlink_cel(&mut self, layer: usize, frame: usize) -> bool {
+        if self.cels[layer][frame].link.is_none() {
+            return false;
+        }
+        self.materialize(layer, frame);
+        true
+    }
+
+    pub fn is_linked(&self, layer: usize, frame: usize) -> bool {
+        self.cels[layer][frame].link.is_some()
+    }
+
     pub fn get(&self, layer: usize, frame: usize, x: u32, y: u32) -> Rgba {
-        self.cels[layer][frame].get(x as i32, y as i32)
+        self.content(layer, frame).get(x as i32, y as i32)
     }
 
     pub fn set(&mut self, layer: usize, frame: usize, x: u32, y: u32, c: Rgba) {
         let c = self.indexed_color(c);
+        self.materialize(layer, frame);
         self.cels[layer][frame].set_extend(x as i32, y as i32, c);
     }
 
@@ -767,7 +875,7 @@ impl Sprite {
                 }
                 continue;
             }
-            let cel = &self.cels[i][frame];
+            let cel = self.content(i, frame);
             let (cw, ch) = (self.width as i32, self.height as i32);
             for yy in 0..cel.h {
                 let y = cel.y + yy as i32;
@@ -828,6 +936,7 @@ impl Sprite {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
+        self.materialize_links();
         let (ow, oh) = (self.width, self.height);
         for frame in 0..self.frames.len() {
             for layer in 0..self.layers.len() {
@@ -844,6 +953,7 @@ impl Sprite {
                     w: width,
                     h: height,
                     z_index: old.z_index,
+                    link: None,
                     pixels: np,
                     opacity: old.opacity,
                 };
@@ -869,6 +979,7 @@ impl Sprite {
         if (cx, cy, w, h) == (0, 0, ow, oh) {
             return;
         }
+        self.materialize_links();
         for layer in 0..self.layers.len() {
             for frame in 0..self.frames.len() {
                 let old = self.cels[layer][frame].clone();
@@ -887,6 +998,7 @@ impl Sprite {
                     w,
                     h,
                     z_index: old.z_index,
+                    link: None,
                     pixels: np,
                     opacity: old.opacity,
                 };
@@ -911,6 +1023,7 @@ impl Sprite {
 
     /// Mirror every cel horizontally.
     pub fn flip_h(&mut self) {
+        self.materialize_links();
         let (w, h) = (self.width, self.height);
         for frame in 0..self.frames.len() {
             for layer in 0..self.layers.len() {
@@ -936,6 +1049,7 @@ impl Sprite {
 
     /// Mirror every cel vertically.
     pub fn flip_v(&mut self) {
+        self.materialize_links();
         let (w, h) = (self.width, self.height);
         for frame in 0..self.frames.len() {
             for layer in 0..self.layers.len() {
@@ -961,6 +1075,7 @@ impl Sprite {
 
     /// Rotate every cel 90° clockwise (width/height swap).
     pub fn rotate_cw(&mut self) {
+        self.materialize_links();
         let (nw, nh) = (self.height, self.width);
         for frame in 0..self.frames.len() {
             for layer in 0..self.layers.len() {
@@ -995,13 +1110,31 @@ impl Sprite {
         self.height = nh;
     }
 
-    /// Insert a blank frame just after `idx`.
-    pub fn add_frame_after(&mut self, idx: usize) {
-        let cel = Cel::blank(self.width, self.height);
-        for layer in self.cels.iter_mut() {
-            layer.insert(idx + 1, cel.clone());
+    fn shift_links_insert(&mut self, at: usize) {
+        for cel in self.cels.iter_mut().flatten() {
+            if let Some(t) = cel.link
+                && t >= at
+            {
+                cel.link = Some(t + 1);
+            }
         }
-        self.frames.insert(idx + 1, Frame { duration_ms: 100 });
+    }
+
+    /// Insert a frame just after `idx`; prefer-linked layers link to `idx`.
+    pub fn add_frame_after(&mut self, idx: usize) {
+        let at = idx + 1;
+        self.shift_links_insert(at);
+        for l in 0..self.cels.len() {
+            let cel = if self.layers[l].prefer_linked {
+                let mut c = Cel::blank(0, 0);
+                c.link = Some(idx);
+                c
+            } else {
+                Cel::blank(self.width, self.height)
+            };
+            self.cels[l].insert(at, cel);
+        }
+        self.frames.insert(at, Frame { duration_ms: 100 });
         self.shift_tags_on_insert(idx);
     }
 
@@ -1014,6 +1147,7 @@ impl Sprite {
             self.cels[l].insert(idx + 1, cel);
         }
         self.frames.insert(idx + 1, self.frames[idx]);
+        self.shift_links_insert(idx + 1);
         self.shift_tags_on_insert(idx);
     }
 
@@ -1021,10 +1155,25 @@ impl Sprite {
         if self.frames.len() <= 1 {
             return false;
         }
+        // Links into the removed frame would dangle: materialise them first.
+        for l in 0..self.layers.len() {
+            for f in 0..self.frames.len() {
+                if self.cels[l][f].link == Some(idx) {
+                    self.materialize(l, f);
+                }
+            }
+        }
         for layer in self.cels.iter_mut() {
             layer.remove(idx);
         }
         self.frames.remove(idx);
+        for cel in self.cels.iter_mut().flatten() {
+            if let Some(t) = cel.link
+                && t > idx
+            {
+                cel.link = Some(t - 1);
+            }
+        }
         self.shift_tags_on_remove(idx);
         true
     }
@@ -1033,6 +1182,22 @@ impl Sprite {
     pub fn move_frame(&mut self, from: usize, to: usize) -> bool {
         if from >= self.frames.len() || to >= self.frames.len() || from == to {
             return false;
+        }
+        let map = |t: usize| {
+            if t == from {
+                to
+            } else if from < t && t <= to {
+                t - 1
+            } else if to <= t && t < from {
+                t + 1
+            } else {
+                t
+            }
+        };
+        for cel in self.cels.iter_mut().flatten() {
+            if let Some(t) = cel.link {
+                cel.link = Some(map(t));
+            }
         }
         for layer in &mut self.cels {
             let cel = layer.remove(from);
@@ -1142,6 +1307,7 @@ impl Sprite {
                 w: self.width,
                 h: self.height,
                 z_index: 0,
+                link: None,
                 pixels: buf,
                 opacity: 255,
             };
@@ -1174,6 +1340,7 @@ impl Sprite {
                 w: self.width,
                 h: self.height,
                 z_index: 0,
+                link: None,
                 pixels: self.export_composite(frame),
                 opacity: 255,
             });
@@ -1884,6 +2051,7 @@ mod tests {
             w: 1,
             h: 1,
             z_index: 0,
+            link: None,
             pixels: vec![Rgba::rgb(10, 20, 30)],
             opacity: 255,
         };
@@ -1908,6 +2076,7 @@ mod tests {
             w: 1,
             h: 1,
             z_index: 0,
+            link: None,
             pixels: vec![Rgba::rgb(128, 128, 128)],
             opacity: 255,
         }]);
@@ -1981,6 +2150,51 @@ mod tests {
     }
 
     #[test]
+    fn linked_cels_share_content_and_copy_on_write() {
+        let red = Rgba(255, 0, 0, 255);
+        let blue = Rgba(0, 0, 255, 255);
+        let mut s = Sprite::new(1, 1);
+        s.set(0, 0, 0, 0, red);
+        s.add_frame_after(0);
+        assert!(s.link_cel(0, 1, 0));
+        assert!(s.is_linked(0, 1));
+        assert_eq!(s.get(0, 1, 0, 0), red);
+        s.set(0, 1, 0, 0, blue);
+        assert!(!s.is_linked(0, 1), "painting materialises the link");
+        assert_eq!(s.get(0, 1, 0, 0), blue);
+        assert_eq!(s.get(0, 0, 0, 0), red, "the source is untouched");
+    }
+
+    #[test]
+    fn prefer_linked_layers_link_new_frames() {
+        let red = Rgba(255, 0, 0, 255);
+        let blue = Rgba(0, 0, 255, 255);
+        let mut s = Sprite::new(1, 1);
+        s.layers[0].prefer_linked = true;
+        s.set(0, 0, 0, 0, red);
+        s.add_frame_after(0);
+        assert_eq!(s.cels[0][1].link, Some(0));
+        assert_eq!(s.get(0, 1, 0, 0), red);
+        s.set(0, 1, 0, 0, blue);
+        assert_eq!(s.get(0, 0, 0, 0), red);
+        assert_eq!(s.get(0, 1, 0, 0), blue);
+    }
+
+    #[test]
+    fn frame_operations_keep_links_valid() {
+        let red = Rgba(255, 0, 0, 255);
+        let mut s = Sprite::new(1, 1);
+        s.set(0, 0, 0, 0, red);
+        s.add_frame_after(0);
+        s.link_cel(0, 1, 0);
+        s.move_frame(0, 1);
+        assert_eq!(s.get(0, 0, 0, 0), red, "the link follows the move");
+        s.remove_frame(1);
+        assert_eq!(s.get(0, 0, 0, 0), red, "removal materialises the link");
+        assert!(!s.is_linked(0, 0));
+    }
+
+    #[test]
     fn cel_z_orders_the_composite() {
         let mut s = Sprite::new(1, 1);
         let red = Rgba(255, 0, 0, 255);
@@ -1996,6 +2210,7 @@ mod tests {
             w: 1,
             h: 1,
             z_index: 0,
+            link: None,
             pixels: vec![blue],
             opacity: 255,
         }]);
@@ -2019,6 +2234,7 @@ mod tests {
             w: 2,
             h: 2,
             z_index: 0,
+            link: None,
             pixels: vec![red; 4],
             opacity: 255,
         };
@@ -2038,6 +2254,7 @@ mod tests {
             w: 2,
             h: 2,
             z_index: 0,
+            link: None,
             pixels: vec![red; 4],
             opacity: 255,
         };
@@ -2056,6 +2273,7 @@ mod tests {
             w: 2,
             h: 1,
             z_index: 0,
+            link: None,
             pixels: vec![red, blue],
             opacity: 255,
         };
@@ -2270,6 +2488,7 @@ mod tests {
                 w: 1,
                 h: 1,
                 z_index: 0,
+                link: None,
                 pixels: vec![Rgba::TRANSPARENT],
                 opacity: 255,
             }]);

@@ -293,11 +293,17 @@ met; blocked tasks are marked with the reason.
   tests (142 total): composite ordering, `.ase` z bytes + round trip, and
   undo/redo. UI drag not screenshotted (manual check: change z, see the stack
   reorder).
-- [ ] **P5-12 — Linked cels authoring** (L) — deps: P5-10.
-  Linked cel content, copy-on-write on paint, write cel type 1, prefer-linked
-  flag, timeline toggle.
+- [x] **P5-12 — Linked cels authoring** (L) — deps: P5-10.
+  Landed 2026-10-28. `Cel.link` resolves content by frame; painting materialises
+  it (copy-on-write). `.ase` reads and writes cel type 1, and `Layer.prefer_linked`
+  maps flag bit 16. `:link <frame>`, `:unlink`, `:preferlink on|off` and a
+  timeline toggle author links; frame insert/duplicate/remove/move remap or
+  materialise affected links. Global operations materialise links first. 5 new
+  tests (147 total): sharing/COW, prefer-linked frames, frame-op remapping,
+  type-1 round trip, and link/unlink undo. UI toggle not screenshotted (manual
+  check: link a cel, paint it, see only that frame change).
 - [ ] **P5-13 — Layer flags and UUIDs** (M) — deps: P5-07.
-  Lock movement, prefer linked cels, collapsed group, layer UUID + header bit.
+  Lock movement, collapsed group, layer UUID + header bit.
 - [ ] **P5-14 — User data 0x2020** (M) — deps: P5-07.
   Text/color/properties on layer/cel/tag/slice/tileset; implement the
   “attaches to the previous chunk” ordering rule.

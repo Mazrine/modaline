@@ -95,6 +95,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:dupframe` | duplicate the current frame (cels + duration) |
 | `:framemove <from> <to>` | move a frame (or drag a timeline thumbnail) |
 | `:celz <n>` | active cel z-index (+ moves towards the front) |
+| `:link <frame>` / `:unlink` / `:preferlink on\|off` | linked cels in the active layer |
 | `:tag <name> [from to]` | create/update a named frame tag |
 | `:tagdel [name]` | delete a frame tag (default: the active one) |
 | `:tagdir forward\|reverse\|pingpong\|pingpong-reverse` | play direction of the active tag |
@@ -173,16 +174,17 @@ per-backend code — deliberately avoided for now.)
 
 A sprite is a grid of **cels** indexed `[layer][frame]`, the same shape Aseprite
 uses: `layers[0]` is the topmost layer, each cel is a row-major `Vec<Rgba>`
-with its own `x/y/w/h` bounds and z-index. Editing writes to the active layer's
-cel on the active frame; the canvas shows the flattened composite of all visible
-layers, with cel z-index reordering them.
+with its own `x/y/w/h` bounds, z-index and optional link to another frame.
+Editing writes to the active layer's cel on the active frame; the canvas shows
+the flattened composite of all visible layers, with cel z-index reordering them.
+Linked cels share pixels and painting one copies them first.
 Offset cels from `.ase` keep their bounds; painting outside grows a cel, while
 crop/resize canonicalize to the canvas.
 
 ## File formats
 
 - **`.ase` / `.aseprite`** — the native Aseprite format (read + write): raw,
-  zlib, linked and compressed-tilemap cels; RGBA, grayscale and indexed pixels;
+  zlib, linked (read + write) and compressed-tilemap cels; RGBA, grayscale and indexed pixels;
   layer groups, cel opacity and frame durations. Export picks the smallest
   lossless depth (gray, indexed, or 32-bit RGBA). Indexed sprites carry a
   document palette and transparent index (header byte 28), and paint snaps to

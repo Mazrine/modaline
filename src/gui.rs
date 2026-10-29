@@ -437,6 +437,28 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
         if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
             editor.set_cel_z(z);
         }
+        let (l, f) = (editor.active_layer, editor.active_frame);
+        if let Some(target) = editor.sprite.cels[l][f].link {
+            if ui
+                .small_button(format!("linked→{target} (unlink)"))
+                .clicked()
+            {
+                editor.unlink_cel();
+            }
+        } else if ui
+            .small_button("link")
+            .on_hover_text("link this cel to the previous frame")
+            .clicked()
+        {
+            let target = if f > 0 {
+                f - 1
+            } else if editor.sprite.frames.len() > 1 {
+                1
+            } else {
+                f
+            };
+            editor.link_cel(target);
+        }
     });
 }
 
@@ -1663,7 +1685,8 @@ const HELP: &[&str] = &[
     "  :newframe / :dupframe / :delframe   (drag a thumbnail to reorder)",
     "  :tag <name> [from to] / :tagdel [name]   (named frame ranges)",
     "  :tagdir forward|reverse|pingpong|pingpong-reverse   :tagrepeat <n>   (0 = forever)",
-    "  :framemove <from> <to>   :celz <n>   (cel z-index; + = towards the front)",
+    "  :framemove <from> <to>   :celz <n>   :link <frame>   :unlink",
+    "  :preferlink on|off   (new frames link to the previous one)",
     "  :newlayer / :dellayer / :layerup / :layerdown / :layername <name>",
     "  :duplayer   :merge   :flatten   (duplicate / merge down / flatten)",
     "  :newgroup / :indent / :outdent / :lock / :unlock   (layer groups)",

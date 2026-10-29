@@ -91,9 +91,11 @@ L-shaped corners for the 1 px pencil/eraser.
   only when the sprite revision changes). Playback can
   loop or stop at the end, and bounce (**ping-pong**). The timeline also exposes the active
   cel's **opacity** and **z-index** (per layer + frame, as in Aseprite; `:celz`).
-  Cels keep their own **bounds/offset** (`x/y/w/h`), so partial and off-canvas
-  cels survive; painting outside a cel grows it, while crop/resize canonicalize
-  to the canvas.
+  Cels can also be **linked** to another frame (`:link`, `:unlink`, timeline
+  toggle); linked cels share pixels and painting one copies them first. Layers
+  with `:preferlink on` link new frames to the previous one. Cels keep their own
+  **bounds/offset** (`x/y/w/h`), so partial and off-canvas cels survive;
+  painting outside a cel grows it, while crop/resize canonicalize to the canvas.
 - **frame tags** (named inclusive ranges): `:tag <name> [from to]`,
   `:tagdel [name]`; tags are listed above the timeline, clicking one restricts
   playback to its range (click again to clear). Tags carry a play direction
@@ -167,9 +169,9 @@ L-shaped corners for the 1 px pencil/eraser.
 - **`.ase` / `.aseprite`** — native Aseprite format, read + write.
   - Reads raw (0), zlib-compressed (2), **linked (1)** and **compressed tilemap
     (3)** cels, including embedded tileset images with X/Y/diagonal flips.
-    Cel offsets, dimensions and z-index are preserved on import and written
-    back, so partial/off-canvas cels and stacking order round-trip instead of
-    being rasterized into the canvas.
+    Cel offsets, dimensions, z-index and linked-cel references are preserved
+    on import and written back (type 1), so partial/off-canvas cels, stacking
+    order and links round-trip instead of being rasterized into the canvas.
   - Reads RGBA (32), grayscale (16) and indexed (8) pixels, new and legacy
     palette chunks, layer names/visibility/blend/opacity, layer groups (type +
     child level), the editable flag, **per-cel opacity** and frame durations.
@@ -247,6 +249,7 @@ middle-drag = pan.
 `pal sort [rgb|luma|hue]` · `pal name <i> <name>` ·
 `mode auto|rgba|grayscale|indexed` · `dither none|bayer2|bayer4|bayer8|floyd` ·
 `aspect <x> <y>` · `sgrid [x y] <w> <h>` · `celz <n>` ·
+`link <frame>` · `unlink` · `preferlink on|off` ·
 `slices <dir> [cols rows]` · `export <file> [scale]` ·
 `profile [srgb|linear|icc <file>|gamma <g>|clear]` ·
 `renderer glow|wgpu` ·

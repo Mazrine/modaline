@@ -536,6 +536,16 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             Some(z) => editor.set_cel_z(z),
             None => editor.msg = "usage: :celz <n>".into(),
         },
+        "link" => match arg.and_then(|s| s.parse::<usize>().ok()) {
+            Some(frame) => editor.link_cel(frame),
+            None => editor.msg = "usage: :link <frame>".into(),
+        },
+        "unlink" => editor.unlink_cel(),
+        "preferlink" | "preferlinked" => match arg {
+            Some("on") | Some("true") | Some("1") => editor.set_prefer_linked(true),
+            Some("off") | Some("false") | Some("0") => editor.set_prefer_linked(false),
+            _ => editor.msg = "usage: :preferlink on|off".into(),
+        },
         "tagrepeat" => match arg.and_then(|s| s.parse::<u16>().ok()) {
             Some(n) => editor.set_tag_repeat(n),
             None => editor.msg = "usage: :tagrepeat <n> (0 = forever)".into(),

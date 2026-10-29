@@ -2726,6 +2726,46 @@ impl Editor {
         self.touch();
     }
 
+    /// Link the active cel to `target` (same layer, frame index).
+    pub fn link_cel(&mut self, target: usize) {
+        let (l, f) = (self.active_layer, self.active_frame);
+        let before = self.sprite.clone();
+        if self.sprite.link_cel(l, f, target) {
+            self.snapshot(before);
+            self.msg = format!("cel linked to frame {target}");
+        } else {
+            self.msg = "cannot link that frame".into();
+        }
+    }
+
+    /// Break the active cel's link, copying the shared pixels into it.
+    pub fn unlink_cel(&mut self) {
+        let (l, f) = (self.active_layer, self.active_frame);
+        let before = self.sprite.clone();
+        if self.sprite.unlink_cel(l, f) {
+            self.snapshot(before);
+            self.msg = "cel unlinked".into();
+        } else {
+            self.msg = "cel is not linked".into();
+        }
+    }
+
+    pub fn set_prefer_linked(&mut self, on: bool) {
+        let l = self.active_layer;
+        if self.sprite.layers[l].prefer_linked == on {
+            self.msg = format!("prefer linked: {on}");
+            return;
+        }
+        let before = self.sprite.clone();
+        self.sprite.layers[l].prefer_linked = on;
+        self.snapshot(before);
+        self.msg = if on {
+            "layer prefers linked cels".into()
+        } else {
+            "layer does not prefer linked cels".into()
+        };
+    }
+
     /// Set the active cel's z-index (positive = towards the front).
     pub fn set_cel_z(&mut self, z: i16) {
         let (l, f) = (self.active_layer, self.active_frame);
@@ -2823,6 +2863,7 @@ impl Editor {
         }
         let before = self.sprite.clone();
         let mask = self.sprite.layers[l].mask.take().unwrap();
+        self.sprite.materialize_links();
         let (width, height) = (self.sprite.width as i32, self.sprite.height as i32);
         for cel in &mut self.sprite.cels[l] {
             for yy in 0..cel.h {
@@ -4192,6 +4233,27 @@ mod tests {
     }
 
     #[test]
+    fn link_and_unlink_are_undoable() {
+        let red = Rgba(255, 0, 0, 255);
+        let mut e = Editor::new(1, 1);
+        e.paint_pixel(0, 0, red);
+        e.add_frame();
+        e.active_frame = 1;
+        e.link_cel(0);
+        assert!(e.sprite.is_linked(0, 1));
+        assert_eq!(e.sprite.get(0, 1, 0, 0), red);
+
+        e.undo();
+        assert!(!e.sprite.is_linked(0, 1));
+        e.redo();
+        assert!(e.sprite.is_linked(0, 1));
+
+        e.unlink_cel();
+        assert!(!e.sprite.is_linked(0, 1));
+        assert_eq!(e.sprite.get(0, 1, 0, 0), red);
+    }
+
+    #[test]
     fn cel_z_changes_are_undoable() {
         let mut e = Editor::new(1, 1);
         e.set_cel_z(4);
@@ -4212,6 +4274,7 @@ mod tests {
             w: 2,
             h: 2,
             z_index: 0,
+            link: None,
             pixels: vec![Rgba::TRANSPARENT; 4],
             opacity: 255,
         };

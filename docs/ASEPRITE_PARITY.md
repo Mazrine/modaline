@@ -30,7 +30,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Multi-cel selection (layer×frame) | Missing | P5-34 |
 | Cel copy/paste across frames/layers | Missing | P5-35 |
 | Empty cel vs empty frame | Missing | P5-35 |
-| Linked cels (authoring; read exists) | Partial | P5-12 |
+| Linked cels (authoring + write) | Covered | P5-12 |
 | Cel z-index | Covered | P5-11 |
 | Timeline layer×frame grid + per-cel cells | Missing | P5-37 |
 | Preview window / fullscreen | Missing | P5-36 |
@@ -46,7 +46,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Blend modes | Covered (19) | P5-05 |
 | Editable lock | Covered | — |
 | Lock movement | Missing | P5-13 |
-| Prefer linked cels | Missing | P5-13 |
+| Prefer linked cels | Covered | P5-12 |
 | Collapsed group | Missing | P5-13 |
 | Alpha masks | Covered (vixel extension) | — |
 | Duplicate / merge down / flatten | Covered | — |
@@ -146,7 +146,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | `.ase` grid origin/size | Covered | P5-08 |
 | `.ase` cel bounds / offsets | Covered | P5-10 |
 | `.ase` cel z-index | Covered | P5-11 |
-| `.ase` linked-cel write | Missing | P5-12 |
+| `.ase` linked-cel write | Covered | P5-12 |
 | `.ase` layer flags + UUIDs | Partial | P5-13 |
 | `.ase` user data (text/color/properties) | Missing | P5-14 |
 | `.ase` slices | Missing | P5-15 |

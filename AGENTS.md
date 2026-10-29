@@ -98,6 +98,9 @@ thin shells:
   composite code must honour cel bounds.
 - Composite order is `-layer_index + cel.z_index` (ties by z) because our layer
   list is top-first; positive z moves a cel towards the front.
+- A linked cel has `link: Some(frame)` and empty pixels; `Sprite::get`/composite
+  resolve it, `Sprite::set` materialises it first (copy-on-write), and frame
+  inserts/removes/moves must remap or materialise links.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not

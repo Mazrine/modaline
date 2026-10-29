@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **142 tests green** (133 lib + 9 bin)
+- `cargo test` → **147 tests green** (138 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-11 cel z-index** (see batch 48).
+- Last completed batch: **P5-12 linked-cel authoring** (see batch 49).
 
 ## How to resume
 
@@ -281,6 +281,12 @@ Read, in order:
     (ties by z), and `:celz <n>` / the timeline z drag set it. `UndoStep::CelZ`
     makes it undoable. 3 new tests (142 total): composite ordering, `.ase` z
     bytes + round trip, undo/redo.
+49. **P5-12 — linked-cel authoring** — `Cel.link` with copy-on-write on paint;
+    `.ase` reads/writes cel type 1; `Layer.prefer_linked` is flag bit 16.
+    `:link <frame>`, `:unlink`, `:preferlink` and a timeline toggle author
+    links; frame insert/duplicate/remove/move remap or materialise links, and
+    global operations materialise first. 5 new tests (147 total): sharing/COW,
+    prefer-linked frames, frame-op remapping, type-1 round trip, link undo.
 
 ## Next step (exact)
 
@@ -289,7 +295,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-12** — linked-cel authoring (first open task), then continue down the
+- **P5-13** — layer flags and UUIDs (first open task), then continue down the
   P5 roadmap in dependency order.
 
 ## Known limitations (do not forget)

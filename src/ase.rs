@@ -327,6 +327,9 @@ fn write_layer_chunk(out: &mut Vec<u8>, layer: &Layer) {
     if layer.reference {
         flags |= 64; // reference layer
     }
+    if layer.prefer_linked {
+        flags |= 16; // new frames prefer linked cels
+    }
     b.extend_from_slice(&flags.to_le_bytes());
     b.extend_from_slice(&(layer.group as u16).to_le_bytes()); // 0 image, 1 group
     b.extend_from_slice(&layer.child_level.to_le_bytes());
@@ -367,7 +370,8 @@ fn write_cel_chunk(
     depth: &OutDepth,
 ) -> bool {
     let cel = &s.cels[li][frame];
-    if cel.pixels.iter().all(|p| p.3 == 0) {
+    let link = cel.link.filter(|&t| t < s.frames.len() && t != frame);
+    if link.is_none() && cel.pixels.iter().all(|p| p.3 == 0) {
         return false; // empty cels are implicit in .ase
     }
     let mut b = Vec::new();
@@ -375,39 +379,46 @@ fn write_cel_chunk(
     b.extend_from_slice(&(cel.x.clamp(i16::MIN as i32, i16::MAX as i32) as i16).to_le_bytes());
     b.extend_from_slice(&(cel.y.clamp(i16::MIN as i32, i16::MAX as i32) as i16).to_le_bytes());
     b.push(cel.opacity);
-    b.extend_from_slice(&0u16.to_le_bytes()); // cel type: raw
-    b.extend_from_slice(&cel.z_index.to_le_bytes());
-    b.extend_from_slice(&[0u8; 5]); // reserved
-    b.extend_from_slice(&(cel.w.min(u16::MAX as u32) as u16).to_le_bytes());
-    b.extend_from_slice(&(cel.h.min(u16::MAX as u32) as u16).to_le_bytes());
-    match depth {
-        OutDepth::Rgba => {
-            for p in &cel.pixels {
-                b.extend_from_slice(&[p.0, p.1, p.2, p.3]);
+    if let Some(target) = link {
+        b.extend_from_slice(&1u16.to_le_bytes()); // cel type: linked
+        b.extend_from_slice(&cel.z_index.to_le_bytes());
+        b.extend_from_slice(&[0u8; 5]);
+        b.extend_from_slice(&(target as u16).to_le_bytes());
+    } else {
+        b.extend_from_slice(&0u16.to_le_bytes()); // cel type: raw
+        b.extend_from_slice(&cel.z_index.to_le_bytes());
+        b.extend_from_slice(&[0u8; 5]);
+        b.extend_from_slice(&(cel.w.min(u16::MAX as u32) as u16).to_le_bytes());
+        b.extend_from_slice(&(cel.h.min(u16::MAX as u32) as u16).to_le_bytes());
+        match depth {
+            OutDepth::Rgba => {
+                for p in &cel.pixels {
+                    b.extend_from_slice(&[p.0, p.1, p.2, p.3]);
+                }
             }
-        }
-        OutDepth::Gray => {
-            for p in &cel.pixels {
-                b.extend_from_slice(&[p.0, p.3]);
+            OutDepth::Gray => {
+                for p in &cel.pixels {
+                    b.extend_from_slice(&[p.0, p.3]);
+                }
             }
-        }
-        OutDepth::Indexed {
-            palette,
-            transparent,
-        } => {
-            for p in &cel.pixels {
-                let idx = if p.3 == 0 {
-                    *transparent
-                } else {
-                    palette
-                        .iter()
-                        .position(|c| c == p)
-                        .map(|i| i as u8)
-                        .unwrap_or_else(|| {
-                            crate::sprite::nearest_palette_index(palette, *transparent, *p)
-                        })
-                };
-                b.push(idx);
+            OutDepth::Indexed {
+                palette,
+                transparent,
+            } => {
+                for p in &cel.pixels {
+                    let idx = if p.3 == 0 {
+                        *transparent
+                    } else {
+                        palette
+                            .iter()
+                            .position(|c| c == p)
+                            .map(|i| i as u8)
+                            .unwrap_or_else(|| {
+                                crate::sprite::nearest_palette_index(palette, *transparent, *p)
+                            })
+                    };
+                    b.push(idx);
+                }
             }
         }
     }
@@ -540,13 +551,14 @@ impl Import {
                 self.place((li, frame), (ox, oy), (cw, ch), &px, opacity, z_index);
             }
             1 => {
-                // Linked cel: same pixels as the cel in the referenced frame.
+                // Linked cel: keep the reference; content resolves on read and
+                // painting copies it into this frame (copy-on-write).
                 let link = u16_at(body, 16) as usize;
-                if let Some(Some(mut cel)) = self.cels.get(li).and_then(|l| l.get(link)).cloned() {
-                    cel.opacity = opacity;
-                    cel.z_index = z_index;
-                    self.cels[li][frame] = Some(cel);
-                }
+                let mut cel = Cel::blank(0, 0);
+                cel.link = Some(link);
+                cel.opacity = opacity;
+                cel.z_index = z_index;
+                self.cels[li][frame] = Some(cel);
             }
             2 => {
                 let cw = u16_at(body, 16) as u32;
@@ -624,6 +636,7 @@ impl Import {
             y: oy,
             w: cw,
             h: ch,
+            link: None,
             z_index,
             pixels,
             opacity,
@@ -675,6 +688,7 @@ impl Import {
                     w: tw,
                     h: th,
                     z_index: tc.z_index,
+                    link: None,
                     pixels,
                     opacity: tc.opacity,
                 });
@@ -994,6 +1008,7 @@ fn parse_layer(body: &[u8], has_uuid: bool) -> Result<(Layer, u32)> {
             mask: None,
             background: flags & 8 != 0,
             reference: flags & 64 != 0,
+            prefer_linked: flags & 16 != 0,
         },
         tileset,
     ))
@@ -1180,6 +1195,37 @@ mod tests {
     }
 
     #[test]
+    fn linked_cels_write_type_one_and_round_trip() {
+        let mut s = Sprite::new(1, 1);
+        s.set(0, 0, 0, 0, Rgba(255, 0, 0, 255));
+        s.add_frame_after(0);
+        assert!(s.link_cel(0, 1, 0));
+        s.layers[0].prefer_linked = true;
+        s.color_mode = crate::sprite::ColorMode::Rgba;
+
+        let path = tmp("vixel_ase_linked_write.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let body = walk_chunks(&data)
+            .into_iter()
+            .find(|(f, k, _)| *f == 1 && *k == CHUNK_CEL)
+            .expect("linked cel")
+            .2;
+        assert_eq!(u16_at(&body, 7), 1, "cel type linked");
+        assert_eq!(u16_at(&body, 16), 0, "link target frame");
+
+        let mut back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(back.layers[0].prefer_linked);
+        assert!(back.is_linked(0, 1));
+        assert_eq!(back.get(0, 1, 0, 0), Rgba(255, 0, 0, 255));
+        back.set(0, 1, 0, 0, Rgba(0, 0, 255, 255));
+        assert!(!back.is_linked(0, 1), "painting copies-on-write");
+        assert_eq!(back.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
+        assert_eq!(back.get(0, 1, 0, 0), Rgba(0, 0, 255, 255));
+    }
+
+    #[test]
     fn cel_z_index_round_trips_through_ase() {
         let mut s = Sprite::new(1, 1);
         s.set(0, 0, 0, 0, Rgba(255, 0, 0, 255));
@@ -1208,6 +1254,7 @@ mod tests {
             w: 2,
             h: 2,
             z_index: 0,
+            link: None,
             pixels: vec![
                 red,
                 Rgba(0, 255, 0, 255),
@@ -1558,6 +1605,8 @@ mod tests {
         assert_eq!(s.frames.len(), 2);
         assert_eq!(s.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
         assert_eq!(s.get(0, 1, 0, 0), Rgba(255, 0, 0, 255));
+        assert!(s.is_linked(0, 1));
+        assert_eq!(s.cels[0][1].link, Some(0));
     }
 
     #[test]
