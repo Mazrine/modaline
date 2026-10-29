@@ -816,33 +816,6 @@ fn parse_color_profile(body: &[u8]) -> Option<AseProfile> {
     })
 }
 
-/// Atlas offset for destination pixel `(dx, dy)` of `tile`. Aseprite applies
-/// the diagonal flip first, then horizontal, then vertical.
-fn tile_pixel_offset(
-    ts: &Tileset,
-    tile: u32,
-    dx: u32,
-    dy: u32,
-    fx: bool,
-    fy: bool,
-    fd: bool,
-) -> Option<usize> {
-    let (mut sx, mut sy) = (dx, dy);
-    if fd {
-        (sx, sy) = (sy, sx);
-    }
-    if fx {
-        sx = ts.tile_w.checked_sub(1)?.checked_sub(sx)?;
-    }
-    if fy {
-        sy = ts.tile_h.checked_sub(1)?.checked_sub(sy)?;
-    }
-    if sx >= ts.tile_w || sy >= ts.tile_h {
-        return None;
-    }
-    Some(((tile * ts.tile_h + sy) * ts.tile_w + sx) as usize)
-}
-
 /// A tilemap cel, kept until every tileset chunk has been read.
 struct TilemapCel {
     layer: usize,
@@ -1043,33 +1016,27 @@ impl Import {
             let Some(ts) = self.tilesets.iter().find(|t| t.id == ts_id) else {
                 continue;
             };
-            if ts.external.is_some() || ts.image.is_empty() || ts.tile_w == 0 || ts.tile_h == 0 {
-                continue; // external tileset pixels are resolved by P5-33
+            if ts.tile_w == 0 || ts.tile_h == 0 {
+                continue;
             }
             let tiles_w = tc.tiles_w.max(1);
-            let tiles_h = (tc.tiles.len() as u32).div_ceil(tiles_w);
-            let (tw, th) = (tiles_w * ts.tile_w, tiles_h * ts.tile_h);
-            let mut pixels = vec![Rgba::TRANSPARENT; (tw * th) as usize];
-            for (i, &(id, fx, fy, fd)) in tc.tiles.iter().enumerate() {
-                let Some(tile) = id.checked_sub(ts.base_index) else {
-                    continue;
-                };
-                if id == 0 || tile >= ts.num_tiles {
-                    continue;
-                }
-                let tx = (i as u32 % tiles_w) * ts.tile_w;
-                let ty = (i as u32 / tiles_w) * ts.tile_h;
-                for dy in 0..ts.tile_h {
-                    for dx in 0..ts.tile_w {
-                        let Some(off) = tile_pixel_offset(ts, tile, dx, dy, fx, fy, fd) else {
-                            continue;
-                        };
-                        let src = *ts.image.get(off).unwrap_or(&Rgba::TRANSPARENT);
-                        let (x, y) = (tx + dx, ty + dy);
-                        pixels[(y * tw + x) as usize] = src;
-                    }
-                }
-            }
+            // Keep the refs even when an external atlas has not been resolved
+            // yet; `resolve_external_tilesets` rerasterizes after loading it.
+            let tm = crate::sprite::TilemapCel::new(
+                tiles_w,
+                tc.tiles
+                    .iter()
+                    .map(
+                        |&(id, flip_x, flip_y, flip_diagonal)| crate::sprite::TileRef {
+                            id,
+                            flip_x,
+                            flip_y,
+                            flip_diagonal,
+                        },
+                    )
+                    .collect(),
+            );
+            let (tw, th, pixels) = crate::sprite::render_tilemap(ts, &tm);
             if tc.frame < self.frames && tc.layer < self.cels.len() {
                 self.cels[tc.layer][tc.frame] = Some(Cel {
                     x: tc.ox,
@@ -1081,20 +1048,7 @@ impl Import {
                     pixels,
                     opacity: tc.opacity,
                     user_data: tc.user_data,
-                    tilemap: Some(crate::sprite::TilemapCel::new(
-                        tiles_w,
-                        tc.tiles
-                            .iter()
-                            .map(
-                                |&(id, flip_x, flip_y, flip_diagonal)| crate::sprite::TileRef {
-                                    id,
-                                    flip_x,
-                                    flip_y,
-                                    flip_diagonal,
-                                },
-                            )
-                            .collect(),
-                    )),
+                    tilemap: Some(tm),
                 });
             }
         }
@@ -1102,6 +1056,10 @@ impl Import {
 }
 
 pub fn load(path: &Path) -> Result<Sprite> {
+    load_inner(path, 0)
+}
+
+fn load_inner(path: &Path, nesting: u32) -> Result<Sprite> {
     let data = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
     if data.len() < 128 {
         bail!("not an .ase file (too small)");
@@ -1414,9 +1372,77 @@ pub fn load(path: &Path) -> Result<Sprite> {
         external_files: im.external_files,
         tilesets: im.tilesets,
     };
+    if let Some(dir) = path.parent() {
+        resolve_external_tilesets(&mut sprite, dir, nesting);
+    }
     sprite.normalize_levels();
     sprite.clamp_tags();
     Ok(sprite)
+}
+
+/// Load pixels for tilesets that reference an external PNG or `.aseprite`.
+fn resolve_external_tilesets(sprite: &mut Sprite, dir: &Path, nesting: u32) {
+    if nesting >= 3 {
+        return;
+    }
+    let targets: Vec<(usize, u32, String)> = sprite
+        .tilesets
+        .iter()
+        .enumerate()
+        .filter_map(|(i, ts)| {
+            let (file_id, _) = ts.external?;
+            let name = sprite
+                .external_files
+                .iter()
+                .find(|f| f.id == file_id)?
+                .name
+                .clone();
+            Some((i, file_id, name))
+        })
+        .collect();
+    for (i, _, name) in targets {
+        let path = dir.join(&name);
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let image = if ext == "png" {
+            image::open(&path).ok().map(|img| {
+                let rgba = img.to_rgba8();
+                rgba.pixels()
+                    .map(|p| Rgba(p[0], p[1], p[2], p[3]))
+                    .collect::<Vec<_>>()
+            })
+        } else if ext == "ase" || ext == "aseprite" {
+            let (_, ts_id) = sprite.tilesets[i].external.unwrap_or((0, 0));
+            load_inner(&path, nesting + 1).ok().and_then(|other| {
+                other
+                    .tilesets
+                    .iter()
+                    .find(|t| t.id == ts_id || other.tilesets.len() == 1)
+                    .map(|t| t.image.clone())
+            })
+        } else {
+            None
+        };
+        if let Some(image) = image.filter(|img| !img.is_empty())
+            && let Some(ts) = sprite.tilesets.get_mut(i)
+        {
+            if ts.tile_w > 0 && ts.tile_h > 0 {
+                ts.num_tiles = (image.len() as u32).div_ceil(ts.tile_w * ts.tile_h).max(1);
+            }
+            ts.image = image;
+            ts.flags |= 2;
+        }
+    }
+    for layer in 0..sprite.layers.len() {
+        if sprite.layers[layer].tilemap {
+            for frame in 0..sprite.frames.len() {
+                sprite.rasterize_tilemap(layer, frame);
+            }
+        }
+    }
 }
 
 fn parse_tags(body: &[u8]) -> Vec<Tag> {
@@ -2282,6 +2308,60 @@ mod tests {
     }
 
     #[test]
+    fn external_png_tileset_pixels_are_resolved_on_load() {
+        use crate::sprite::{ExternalFile, TileRef, TilemapCel, Tileset};
+        let dir = std::env::temp_dir().join(format!("vixel-ext-ts-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let mut img = image::RgbaImage::new(2, 2);
+        for (i, c) in [
+            [255, 0, 0, 255],
+            [0, 255, 0, 255],
+            [0, 0, 255, 255],
+            [255, 255, 255, 255],
+        ]
+        .iter()
+        .enumerate()
+        {
+            img.put_pixel(i as u32 % 2, i as u32 / 2, image::Rgba(*c));
+        }
+        img.save(dir.join("atlas.png")).unwrap();
+
+        let mut s = Sprite::new(2, 2);
+        s.layers[0].tilemap = true;
+        s.layers[0].tileset = 3;
+        s.external_files.push(ExternalFile {
+            id: 7,
+            kind: 0,
+            name: "atlas.png".into(),
+        });
+        s.tilesets.push(Tileset {
+            id: 3,
+            name: "atlas".into(),
+            tile_w: 2,
+            tile_h: 2,
+            base_index: 1,
+            flags: 1,
+            num_tiles: 1,
+            image: Vec::new(),
+            external: Some((7, 1)),
+        });
+        s.cels[0][0].tilemap = Some(TilemapCel::new(
+            1,
+            vec![TileRef {
+                id: 1,
+                ..Default::default()
+            }],
+        ));
+        let path = dir.join("scene.ase");
+        save(&s, &path).unwrap();
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(back.tilesets[0].image.len(), 4);
+        assert_eq!(back.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
+        assert_eq!(back.get(0, 0, 1, 1), Rgba(255, 255, 255, 255));
+    }
+
+    #[test]
     fn external_tileset_references_are_written() {
         let mut s = Sprite::new(2, 2);
         s.tilesets.push(Tileset {
@@ -2635,13 +2715,13 @@ mod tests {
         };
         // Diagonal then X: dest (0,0) reads transposed (0,0)=red, then X=green.
         assert_eq!(
-            tile_pixel_offset(&ts, 0, 0, 0, true, false, true),
+            crate::sprite::tile_pixel_offset(&ts, 0, 0, 0, true, false, true),
             Some(1),
             "green"
         );
         // X then diagonal would read blue; this documents the fixed order.
         assert_eq!(
-            tile_pixel_offset(&ts, 0, 0, 0, false, false, false),
+            crate::sprite::tile_pixel_offset(&ts, 0, 0, 0, false, false, false),
             Some(0)
         );
     }

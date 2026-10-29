@@ -448,8 +448,15 @@ met; blocked tasks are marked with the reason.
   pixel encoding is shared with the tileset writer. 2 new tests (195 total):
   open→save→open tilemap fixture (refs, flips, bytes) and external tileset
   reference write.
-- [ ] **P5-33 — Tileset depth** (M) — deps: P5-29, P5-32.
-  Edit tile pixels, `--export-tileset`, external tileset read, auto/stack modes.
+- [x] **P5-33 — Tileset depth** (M) — deps: P5-29, P5-32.
+  Landed 2026-10-28. Pixel-edit mode now maps the clicked cel pixel back through
+  the tile's flips into the tileset atlas, then rerasterizes every cel using that
+  tileset (one undo step). `--export-tileset in.ase [out.png]` and
+  `:exporttileset [path]` write the atlas. External tilesets resolve from
+  sibling PNG or `.aseprite` files (max depth 3) and rerasterize tilemaps.
+  `:tilemode manual|auto|stack|pixel` plus the panel combo: auto fills empty
+  orthogonal neighbours, stack advances variants. 3 new tests (198 total):
+  atlas pixel edit + auto/stack, external PNG resolution, atlas export.
 
 ### Epic 7 — Timeline and animation
 

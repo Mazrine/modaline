@@ -115,7 +115,9 @@ keyboard-first, but the mouse is fully wired.)
 | `:mask add\|apply\|del` | alpha mask from the selection (or full) / bake / remove |
 | `:tile [on\|off]` / `:tile x\|y <1-8>` / `:tile repeats <x> <y>` | seamless tiled preview with configurable repeats; cursor and shapes wrap |
 | `:tile opacity <0-255>` / `:tile preview on\|off` | dim or hide neighbour copies |
-| `:tileid <n>` / `:tileflip x\|y\|diag\|none` / `:tilemode manual\|pixel` | tile brush ID/flips and manual vs pixel editing |
+| `:tileid <n>` / `:tileflip x\|y\|diag\|none` / `:tilemode manual\|auto\|stack\|pixel` | tile brush ID/flips and editing mode |
+| `:exporttileset [out.png]` | export the retained tileset atlas |
+| `vixel --export-tileset in.ase [out.png]` | headless atlas export |
 | `:tilepick` / `:tileerase` | pick the tile under the cursor / place the empty tile |
 | `:fliph` / `:flipv` / `:rot90` | mirror H / V / rotate 90° (selection if any, else whole sprite) |
 | `:sym none\|h\|v\|both\|radial [axes]` | set symmetry (mirror painting) |

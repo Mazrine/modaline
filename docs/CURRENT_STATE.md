@@ -156,7 +156,10 @@ L-shaped corners for the 1 px pencil/eraser.
   flips, places the empty tile, and has a pixel-edit mode; each edit is one undo
   step (`:tileid`, `:tileflip`, `:tilemode`, `:tilepick`, `:tileerase`).
   `.ase` saving writes `0x2023` tilesets and type-3 tilemap cels (ID + flips);
-  external references are written without pixels.
+  external references are written without pixels and resolved on load from
+  sibling PNG/`.aseprite` files. Pixel-edit mode edits the atlas through the
+  tile's flips; `--export-tileset`/`:exporttileset` write it out. Manual, auto
+  (fills empty neighbours) and stack (variant advance) tile modes.
 - **slices**: named 9-patch/pivot slice objects with per-frame keys, read and
   written from `.ase` 0x2022 (colour from user data) and listed in the side
   panel. `:slices` lists them; `:slices <dir> named` exports one PNG per slice

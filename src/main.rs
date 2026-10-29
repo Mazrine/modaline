@@ -29,6 +29,39 @@ fn pick_renderer(want_wgpu: bool) -> eframe::Renderer {
 }
 
 fn main() -> eframe::Result {
+    // Headless tileset export: `vixel --export-tileset in.ase [out.png]`.
+    let argv: Vec<String> = std::env::args().collect();
+    if let Some(pos) = argv.iter().position(|a| a == "--export-tileset") {
+        let Some(input) = argv.get(pos + 1).map(PathBuf::from) else {
+            eprintln!("usage: vixel --export-tileset <file.ase|.vpx> [out.png]");
+            std::process::exit(2);
+        };
+        let sprite = match input.extension().and_then(|e| e.to_str()) {
+            Some("vpx") => io::load_project(&input),
+            _ => ase::load(&input),
+        };
+        let sprite = match sprite {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("export-tileset: {e:#}");
+                std::process::exit(1);
+            }
+        };
+        let output = argv
+            .get(pos + 2)
+            .map(PathBuf::from)
+            .unwrap_or_else(|| input.with_extension("tileset.png"));
+        match io::export_tileset(&sprite, None, &output) {
+            Ok(()) => {
+                println!("{}", output.display());
+                return Ok(());
+            }
+            Err(e) => {
+                eprintln!("export-tileset: {e:#}");
+                std::process::exit(1);
+            }
+        }
+    }
     // Optional first argument: the file to open, so another tool can launch
     // `vixel assets/fixes/<look>.vpx` instead of making the user press `:open`.
     let mut args = std::env::args_os().skip(1);

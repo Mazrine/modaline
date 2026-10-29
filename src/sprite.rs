@@ -1058,7 +1058,7 @@ impl Sprite {
             .tilesets
             .iter()
             .find(|t| t.id == ts_id)
-            .filter(|t| t.external.is_none() && !t.image.is_empty())
+            .filter(|t| !t.image.is_empty())
             .cloned()
         else {
             return false;

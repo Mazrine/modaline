@@ -116,12 +116,12 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Tileset model (id, name, base index, flags) + `.vpx` persistence | Covered | P5-29 |
 | Tilemap layer model + tile references | Covered | P5-30 |
 | Draw tiles / draw pixels in tiles | Covered | P5-31 |
-| Manual / auto / stack modes | Missing | P5-33 |
+| Manual / auto / stack modes | Covered | P5-33 |
 | Empty tile | Covered | P5-31 |
 | Tile flips X/Y/diagonal | Covered (diagonal-first order) | P5-29 |
 | Write tileset/tilemap chunks (`.ase`) | Covered | P5-32 |
-| Tileset editing + export | Missing | P5-33 |
-| External tileset files | Partial (references read/write) | P5-33 |
+| Tileset editing + export | Covered | P5-33 |
+| External tileset files | Covered (PNG/`.aseprite` loaded; refs written) | P5-33 |
 
 ## Slices
 

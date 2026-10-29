@@ -714,6 +714,22 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 _ => editor.msg = "usage: :symcenter cursor|reset|<x> <y>".into(),
             }
         }
+        "exporttileset" | "tilesetexport" => {
+            let path = arg
+                .filter(|p| !p.is_empty())
+                .map(std::path::PathBuf::from)
+                .or_else(|| {
+                    editor
+                        .path
+                        .as_ref()
+                        .map(|p| p.with_extension("tileset.png"))
+                })
+                .unwrap_or_else(|| std::path::PathBuf::from("tileset.png"));
+            match crate::io::export_tileset(&editor.sprite, None, &path) {
+                Ok(()) => editor.msg = format!("tileset exported: {}", path.display()),
+                Err(e) => editor.msg = format!("tileset export failed: {e:#}"),
+            }
+        }
         "tileid" => match arg.and_then(|v| v.parse::<u32>().ok()) {
             Some(id) => {
                 editor.tile_brush = id;
@@ -745,13 +761,24 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "tilemode" => match arg {
             Some("manual" | "tile") => {
                 editor.tile_pixel_mode = false;
+                editor.tile_edit_mode = crate::editor::TileMode::Manual;
                 editor.msg = "tile mode: manual".into();
+            }
+            Some("auto") => {
+                editor.tile_pixel_mode = false;
+                editor.tile_edit_mode = crate::editor::TileMode::Auto;
+                editor.msg = "tile mode: auto".into();
+            }
+            Some("stack") => {
+                editor.tile_pixel_mode = false;
+                editor.tile_edit_mode = crate::editor::TileMode::Stack;
+                editor.msg = "tile mode: stack".into();
             }
             Some("pixel" | "pixels") => {
                 editor.tile_pixel_mode = true;
                 editor.msg = "tile mode: pixel".into();
             }
-            _ => editor.msg = "usage: :tilemode manual|pixel".into(),
+            _ => editor.msg = "usage: :tilemode manual|auto|stack|pixel".into(),
         },
         "tilepick" => {
             let (x, y) = editor.cursor;

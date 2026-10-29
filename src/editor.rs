@@ -96,6 +96,14 @@ impl Tool {
 
 const TOOL_COUNT: usize = 15;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum TileMode {
+    #[default]
+    Manual,
+    Auto,
+    Stack,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Symmetry {
     None,
@@ -361,6 +369,7 @@ pub struct Editor {
     pub tile_flip_y: bool,
     pub tile_flip_diagonal: bool,
     pub tile_pixel_mode: bool,
+    pub tile_edit_mode: TileMode,
     pub wand_tolerance: u8,
     pub wand_all_layers: bool,
     /// Wand and bucket restrict themselves to the seed's contiguous region.
@@ -485,6 +494,7 @@ impl Editor {
             tile_flip_y: false,
             tile_flip_diagonal: false,
             tile_pixel_mode: false,
+            tile_edit_mode: TileMode::Manual,
             wand_tolerance: 0,
             wand_all_layers: false,
             contiguous: true,
@@ -720,7 +730,7 @@ impl Editor {
             Tool::Spray => self.spray_at(x, y),
             Tool::Blur => self.blur_at(x, y),
             Tool::Text => self.place_text_at(x, y),
-            Tool::Tile if self.tile_pixel_mode => self.paint_freehand(x, y, self.fg),
+            Tool::Tile if self.tile_pixel_mode => self.paint_tile_pixel_at(x, y, self.fg),
             Tool::Tile => self.paint_tile_at(x, y),
             _ => self.paint_symmetric(x, y, self.fg),
         }
@@ -731,7 +741,7 @@ impl Editor {
         match self.tool {
             Tool::Shade => self.shade_at(x, y, false),
             Tool::Pencil => self.paint_freehand(x, y, self.bg),
-            Tool::Tile if self.tile_pixel_mode => self.paint_freehand(x, y, self.bg),
+            Tool::Tile if self.tile_pixel_mode => self.paint_tile_pixel_at(x, y, self.bg),
             Tool::Tile => self.pick_tile_at(x, y),
             _ => self.paint_symmetric(x, y, self.bg),
         }
@@ -1384,7 +1394,7 @@ impl Editor {
             .tilesets
             .iter()
             .find(|t| t.id == layer.tileset)?;
-        if ts.external.is_some() || ts.image.is_empty() {
+        if ts.image.is_empty() {
             return None;
         }
         Some((self.active_layer, ts.tile_w, ts.tile_h, ts.num_tiles))
@@ -1397,7 +1407,7 @@ impl Editor {
             self.msg = "tile: active layer is not an embedded tilemap".into();
             return;
         };
-        let idx = {
+        let (idx, tiles_w, tiles_h, neighbours_empty) = {
             let cel = &self.sprite.cels[l][f];
             let Some(tm) = &cel.tilemap else {
                 self.msg = "tile: this cel has no tile references".into();
@@ -1409,8 +1419,28 @@ impl Editor {
                 self.msg = "tile: outside the tilemap bounds".into();
                 return;
             }
-            (ty as u32 * tm.tiles_w + tx as u32) as usize
+            let idx = ty as u32 * tm.tiles_w + tx as u32;
+            let mut empty = Vec::new();
+            for (dx, dy) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+                let (nx, ny) = (tx + dx, ty + dy);
+                if nx >= 0 && ny >= 0 && (nx as u32) < tm.tiles_w && (ny as u32) < tm.tiles_h {
+                    let i = (ny as u32 * tm.tiles_w + nx as u32) as usize;
+                    if tm.tiles.get(i).is_some_and(|t| t.id == 0) {
+                        empty.push(i);
+                    }
+                }
+            }
+            (idx as usize, tm.tiles_w, tm.tiles_h, empty)
         };
+        let id = match self.tile_edit_mode {
+            TileMode::Stack if self.tile_brush != 0 => self.tile_brush + (idx as u32 % 3),
+            _ => self.tile_brush,
+        };
+        let mut writes: Vec<usize> = vec![idx];
+        if self.tile_edit_mode == TileMode::Auto && id != 0 {
+            writes.extend(neighbours_empty);
+        }
+        let _ = (tiles_w, tiles_h);
         let before = self.sprite.clone();
         if let Some(cel) = self
             .sprite
@@ -1418,22 +1448,95 @@ impl Editor {
             .get_mut(l)
             .and_then(|frames| frames.get_mut(f))
             && let Some(tm) = &mut cel.tilemap
-            && let Some(slot) = tm.tiles.get_mut(idx)
         {
-            *slot = crate::sprite::TileRef {
-                id: self.tile_brush,
-                flip_x: self.tile_flip_x,
-                flip_y: self.tile_flip_y,
-                flip_diagonal: self.tile_flip_diagonal,
-            };
+            for i in writes {
+                if let Some(slot) = tm.tiles.get_mut(i) {
+                    *slot = crate::sprite::TileRef {
+                        id,
+                        flip_x: self.tile_flip_x,
+                        flip_y: self.tile_flip_y,
+                        flip_diagonal: self.tile_flip_diagonal,
+                    };
+                }
+            }
         }
         self.sprite.rasterize_tilemap(l, f);
         self.snapshot(before);
-        self.msg = if self.tile_brush == 0 {
+        self.msg = if id == 0 {
             "tile: empty".into()
         } else {
-            format!("tile: {} placed", self.tile_brush)
+            format!("tile: {id} placed")
         };
+    }
+
+    /// Edit the tileset atlas pixel shown under the cursor and re-render every
+    /// tilemap cel that uses the tileset.
+    pub fn paint_tile_pixel_at(&mut self, x: u32, y: u32, color: Rgba) {
+        let (l, f) = (self.active_layer, self.active_frame);
+        let Some((_, tw, th, _)) = self.tilemap_target() else {
+            self.msg = "tile: active layer is not an embedded tilemap".into();
+            return;
+        };
+        let Some(ts_id) = self.sprite.layers.get(l).map(|v| v.tileset) else {
+            return;
+        };
+        let Some(ts) = self.sprite.tilesets.iter().find(|t| t.id == ts_id).cloned() else {
+            return;
+        };
+        let (atlas_idx, base) = {
+            let cel = &self.sprite.cels[l][f];
+            let Some(tm) = &cel.tilemap else {
+                return;
+            };
+            let tx = (x as i32 - cel.x).div_euclid(tw as i32);
+            let ty = (y as i32 - cel.y).div_euclid(th as i32);
+            if tx < 0 || ty < 0 || tx as u32 >= tm.tiles_w || ty as u32 >= tm.tiles_h {
+                return;
+            }
+            let i = (ty as u32 * tm.tiles_w + tx as u32) as usize;
+            let Some(tile) = tm.tiles.get(i) else {
+                return;
+            };
+            let Some(tile_index) = tile.id.checked_sub(ts.base_index) else {
+                return;
+            };
+            if tile.id == 0 || tile_index >= ts.num_tiles {
+                return;
+            }
+            let dx = (x as i32 - cel.x).rem_euclid(tw as i32) as u32;
+            let dy = (y as i32 - cel.y).rem_euclid(th as i32) as u32;
+            let Some(off) = crate::sprite::tile_pixel_offset(
+                &ts,
+                tile_index,
+                dx,
+                dy,
+                tile.flip_x,
+                tile.flip_y,
+                tile.flip_diagonal,
+            ) else {
+                return;
+            };
+            (off, ts.base_index)
+        };
+        let _ = base;
+        if !self.sprite.tilesets.iter().any(|t| t.id == ts_id) {
+            return;
+        }
+        let before = self.sprite.clone();
+        if let Some(ts) = self.sprite.tilesets.iter_mut().find(|t| t.id == ts_id)
+            && let Some(slot) = ts.image.get_mut(atlas_idx)
+        {
+            *slot = color;
+        }
+        for layer in 0..self.sprite.layers.len() {
+            if self.sprite.layers[layer].tilemap && self.sprite.layers[layer].tileset == ts_id {
+                for frame in 0..self.sprite.frames.len() {
+                    self.sprite.rasterize_tilemap(layer, frame);
+                }
+            }
+        }
+        self.snapshot(before);
+        self.msg = "tile: pixel edited".into();
     }
 
     /// Pick the tile (and flips) under the cursor into the brush.
@@ -6358,6 +6461,36 @@ mod tests {
 
         e.erase_tile_at(0, 0);
         assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn tile_pixel_edits_update_the_atlas_and_tile_modes_apply() {
+        let mut e = tilemap_editor();
+        e.paint_tile_pixel_at(0, 0, Rgba::rgb(0, 0, 255));
+        assert_eq!(e.sprite.tilesets[0].image[0], Rgba::rgb(0, 0, 255));
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(0, 0, 255));
+        assert_eq!(e.undo.len(), 1);
+        e.undo();
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+
+        e.sprite.cels[0][0].tilemap.as_mut().unwrap().tiles[1].id = 0;
+        e.tile_brush = 2;
+        e.tile_edit_mode = TileMode::Auto;
+        e.paint_tile_at(0, 0);
+        assert_eq!(
+            e.sprite.cels[0][0].tilemap.as_ref().unwrap().tiles[1].id,
+            2,
+            "auto fills the empty neighbour"
+        );
+
+        e.tile_edit_mode = TileMode::Stack;
+        e.tile_brush = 1;
+        e.paint_tile_at(2, 0);
+        assert_eq!(
+            e.sprite.cels[0][0].tilemap.as_ref().unwrap().tiles[1].id,
+            2,
+            "stack advances variants"
+        );
     }
 
     #[test]

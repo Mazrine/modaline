@@ -1,9 +1,37 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::color::Rgba;
 use crate::sprite::Sprite;
+
+/// Export one retained tileset atlas as PNG (tile pixel dimensions).
+pub fn export_tileset(sprite: &Sprite, id: Option<u32>, path: &Path) -> Result<()> {
+    let ts = match id {
+        Some(id) => sprite
+            .tilesets
+            .iter()
+            .find(|t| t.id == id)
+            .with_context(|| format!("no tileset with id {id}"))?,
+        None => sprite.tilesets.first().context("sprite has no tilesets")?,
+    };
+    if ts.image.is_empty() {
+        bail!("tileset {} has no embedded pixels", ts.id);
+    }
+    let w = ts.tile_w.max(1);
+    let rows = (ts.image.len() as u32).div_ceil(w);
+    let h = rows.max(ts.tile_h);
+    let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+    for i in 0..(w * h) as usize {
+        let c = ts.image.get(i).copied().unwrap_or(Rgba::TRANSPARENT);
+        rgba.extend_from_slice(&[c.0, c.1, c.2, c.3]);
+    }
+    image::RgbaImage::from_raw(w, h, rgba)
+        .context("tileset atlas buffer")?
+        .save(path)
+        .with_context(|| format!("save {}", path.display()))?;
+    Ok(())
+}
 
 /// Save the whole sprite (frames + layers + cels) as JSON.
 pub fn save_project(sprite: &Sprite, path: &Path) -> Result<()> {
@@ -527,6 +555,30 @@ pub fn import_sheet(path: &Path, cols: u32, rows: u32) -> Result<Sprite> {
 mod tests {
     use super::*;
     use crate::color::Rgba;
+
+    #[test]
+    fn tileset_export_writes_the_atlas() {
+        let mut s = Sprite::new(2, 2);
+        s.tilesets.push(crate::sprite::Tileset {
+            id: 9,
+            tile_w: 2,
+            tile_h: 2,
+            num_tiles: 1,
+            image: vec![
+                Rgba::rgb(255, 0, 0),
+                Rgba::rgb(0, 255, 0),
+                Rgba::rgb(0, 0, 255),
+                Rgba::rgb(255, 255, 255),
+            ],
+            ..Default::default()
+        });
+        let path = std::env::temp_dir().join(format!("vixel-ts-export-{}.png", std::process::id()));
+        export_tileset(&s, Some(9), &path).unwrap();
+        let img = image::open(&path).unwrap().to_rgba8();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(img.dimensions(), (2, 2));
+        assert_eq!(img.get_pixel(1, 0).0, [0, 255, 0, 255]);
+    }
 
     #[test]
     fn tilesets_survive_vpx() {

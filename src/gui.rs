@@ -2,7 +2,7 @@ use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Texture
 
 use crate::brush::BrushKind;
 use crate::color::Rgba;
-use crate::editor::{Editor, Ink, LayerProps, Mode, SelectionOp, Shape, Symmetry, Tool};
+use crate::editor::{Editor, Ink, LayerProps, Mode, SelectionOp, Shape, Symmetry, TileMode, Tool};
 use crate::sprite::{BlendMode, DitherMode, ellipse_points, line_points, rect_points};
 
 /// Onion-skin settings: how many frames each side, how strong, and the two
@@ -716,6 +716,26 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             }
             ui.checkbox(&mut editor.tile_pixel_mode, "pixel edit")
                 .on_hover_text("paint pixels on the tilemap instead of placing tiles");
+            egui::ComboBox::from_id_salt("tile_edit_mode")
+                .selected_text(match editor.tile_edit_mode {
+                    TileMode::Manual => "manual",
+                    TileMode::Auto => "auto",
+                    TileMode::Stack => "stack",
+                })
+                .show_ui(ui, |ui| {
+                    for (mode, name) in [
+                        (TileMode::Manual, "manual"),
+                        (TileMode::Auto, "auto"),
+                        (TileMode::Stack, "stack"),
+                    ] {
+                        if ui
+                            .selectable_label(editor.tile_edit_mode == mode, name)
+                            .clicked()
+                        {
+                            editor.tile_edit_mode = mode;
+                        }
+                    }
+                });
             ui.add(
                 egui::DragValue::new(&mut editor.tile_brush)
                     .range(0..=1024)
@@ -2248,7 +2268,8 @@ const HELP: &[&str] = &[
     "  L / P              lasso / polygon selection (mouse)",
     "  s                  cycle symmetry (none / H / V / both)",
     "  :tile [on|off]|x|y <1-8>|repeats <x> <y>|opacity <0-255>|preview on|off",
-    "  :tileid <n>   :tileflip x|y|diag|none   :tilemode manual|pixel   :tilepick|erase",
+    "  :tileid <n>   :tileflip x|y|diag|none   :tilemode manual|auto|stack|pixel",
+    "  :tilepick   :tileerase   :exporttileset [out.png]   (--export-tileset headless)",
     "  t                  toggle filled shapes (rect / ellipse)",
     "  , / .              prev / next color",
     "  < / >              prev / next layer",
