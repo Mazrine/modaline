@@ -71,6 +71,7 @@ Rules that cost me a run each:
 | keymap | `:bind undo ctrl-z`, draw + `u` + `ctrl-z`; `:bind help h`, `h`; `:bind zoom-in wheel-down`, scroll | `u` does nothing, ctrl-z undoes; help opens on `h`; scroll zooms once; config shows the bindings |
 | language | `:lang pt-BR`, screenshot; `:lang check`; `:lang save <file>`; `:lang en` | tab says `sem título`, side says `claro`/`pincel`/`texto`/`simetria`, timeline says `reproduzir`/`+quadro`; check says complete; JSON re-reads |
 | preferences | `:prefs`, screenshot | one window shows editor, grid/canvas, export, appearance (theme/lang), keys and workspace sections; close dismisses it |
+| render cache | paint (`space`), screenshot; `u`, screenshot; idle for 5 s | the painted pixel appears, undo removes it, no flicker/stale texture while idle; `cargo test benchmark_canvas -- --ignored --nocapture` prints full vs cached cost |
 
 ## Checking a screenshot
 

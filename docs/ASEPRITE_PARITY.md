@@ -230,7 +230,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Undo history panel | Covered | P5-38 |
 | Non-linear undo | Covered (jump within the linear stack; branching documented) | P5-38 |
 | Compact/bounded undo memory | Partial | P5-59 |
-| Incremental rendering / large-canvas performance | Partial (CPU full-frame) | P5-58 |
+| Incremental rendering / large-canvas performance | Partial (revision/frame cache, dirty-rect texture uploads; dirty composite still CPU full-frame) | P5-58 |
 | Filter threading | Missing | P5-59 |
 
 ## vixel extras (not parity gaps)

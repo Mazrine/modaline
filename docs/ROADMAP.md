@@ -659,8 +659,17 @@ met; blocked tasks are marked with the reason.
   reset) and workspace (layout name, reset). All values are the live
   editor/view/config fields, so existing persistence applies. UI-only task:
   Xvfb smoke opened the dialog and showed all sections; 242 tests unchanged.
-- [ ] **P5-58 — Render cache / dirty rects** (L) — deps: none.
-  Incremental composite cache, dirty rects, texture reuse; benchmark.
+- [x] **P5-58 — Render cache / dirty rects** (L) — deps: none.
+  Landed 2026-10-28. The canvas texture is keyed by revision/frame/size and
+  skipped entirely when unchanged; onion textures refresh only when
+  revision/frame/count changes. Pixel writes (`Editor::record`) accumulate a
+  merged dirty rectangle (structural edits set `dirty_full`), and the canvas
+  patches the texture with `set_partial` instead of uploading the whole frame.
+  Composite CPU work still runs full-frame when dirty (documented). 3 tests
+  (245 total) cover upload plans, dirty merging and sub-image extraction; an
+  ignored benchmark on a debug build measured 164.8 ms for a 256×256×8-layer
+  composite vs 24 ns for a cache decision (`cargo test benchmark_canvas
+  -- --ignored --nocapture`). Xvfb paint/undo smoke showed changes rendering.
 - [ ] **P5-59 — Undo memory + filter threading** (M) — deps: P5-38.
   Compact structural undo, bounded history, filters off the UI thread where
   safe.

@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **242 tests green** (212 lib + 25 bin + 5 CLI)
+- `cargo test` → **245 tests green** (212 lib + 28 bin + 5 CLI; 1 ignored benchmark)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-57 preferences dialog** (see batch 91).
+- Last completed batch: **P5-58 render cache** (see batch 92).
 
 ## How to resume
 
@@ -463,6 +463,11 @@ Read, in order:
 91. **P5-57 — preferences dialog** — `:prefs` window with editor, grid/canvas,
   export, appearance, keys and workspace sections using live config fields.
   Xvfb smoke verified the dialog and sections; 242 tests unchanged (UI-only).
+92. **P5-58 — render cache / dirty rects** — canvas texture skipped when
+  revision/frame/size unchanged; onion cache keyed by revision/frame/count;
+  pixel dirty rectangles patch via `set_partial`, structural edits force full.
+  Composite still full-frame when dirty. 3 tests (245 total) + debug benchmark;
+  Xvfb paint/undo smoke.
 
 ## Next step (exact)
 
@@ -471,8 +476,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-58** — render cache / dirty rects (first open task), then continue down
-  the P5 roadmap.
+- **P5-59** — undo memory + filter threading (deps P5-38 met), then the parity
+  programme is complete.
 
 ## Known limitations (do not forget)
 

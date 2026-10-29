@@ -80,6 +80,8 @@ pub struct View {
     pub i18n: crate::i18n::Translator,
     /// Consolidated preferences dialog (`:prefs`).
     pub prefs_open: bool,
+    canvas_cache: Option<CanvasCache>,
+    onion_key: Option<(u64, usize, u8)>,
     /// Mirrored from the editor each frame: 0 = no snapping.
     pub snap_grid: u32,
     pub onion: Onion,
@@ -163,6 +165,8 @@ impl View {
             language: "en".into(),
             i18n: crate::i18n::Translator::default(),
             prefs_open: false,
+            canvas_cache: None,
+            onion_key: None,
             snap_grid: 0,
             onion: Onion::default(),
             drag_frame: None,
@@ -2573,12 +2577,46 @@ fn canvas(
     let panel = ui.max_rect();
     view.pixel_scale = editor.sprite.pixel_aspect;
 
-    upload(
-        ui,
-        texture,
-        "canvas",
-        frame_composite(editor, editor.active_frame),
+    let frame = editor.active_frame;
+    let plan = upload_plan(
+        view.canvas_cache.as_ref(),
+        editor.revision,
+        frame,
+        [w as usize, h as usize],
+        editor.dirty_full,
+        editor.dirty_frame,
+        editor.dirty_rect,
     );
+    match plan {
+        UploadPlan::Skip => {}
+        UploadPlan::Full => {
+            let img = frame_composite(editor, frame);
+            upload(ui, texture, "canvas", img);
+            view.canvas_cache = Some(CanvasCache {
+                revision: editor.revision,
+                frame,
+                size: [w as usize, h as usize],
+            });
+        }
+        UploadPlan::Partial(rect) => {
+            let img = frame_composite(editor, frame);
+            if let Some(tex) = texture.as_mut() {
+                tex.set_partial(
+                    [rect.0 as usize, rect.1 as usize],
+                    sub_image(&img, rect),
+                    egui::TextureOptions::NEAREST,
+                );
+            } else {
+                upload(ui, texture, "canvas", img);
+            }
+            view.canvas_cache = Some(CanvasCache {
+                revision: editor.revision,
+                frame,
+                size: [w as usize, h as usize],
+            });
+        }
+    }
+    editor.clear_dirty();
 
     if !view.initialized {
         view.fit(panel, w, h);
@@ -2620,7 +2658,9 @@ fn canvas(
 
     let n = editor.sprite.frames.len();
     let onion = view.onion;
-    if onion.enabled && n > 1 {
+    let onion_key = (editor.revision, editor.active_frame, onion.count);
+    if onion.enabled && n > 1 && view.onion_key != Some(onion_key) {
+        view.onion_key = Some(onion_key);
         // Each step back/forward is dimmer than the one before it, so three
         // frames of history read as history and not as a crowd.
         for k in 1..=(onion.count as usize).min(n - 1) {
@@ -2682,6 +2722,64 @@ fn canvas(
         Sense::click_and_drag(),
     );
     canvas_input(ui, editor, view, resp, w, h);
+}
+
+struct CanvasCache {
+    revision: u64,
+    frame: usize,
+    size: [usize; 2],
+}
+
+#[derive(Debug, PartialEq)]
+enum UploadPlan {
+    Skip,
+    Partial((u32, u32, u32, u32)),
+    Full,
+}
+
+/// Decide whether the canvas texture can be reused, patched in place, or must
+/// be rebuilt. A cache hit skips compositing entirely; a pixel-only dirty
+/// rectangle patches the texture; structural edits force a full upload.
+fn upload_plan(
+    cache: Option<&CanvasCache>,
+    revision: u64,
+    frame: usize,
+    size: [usize; 2],
+    dirty_full: bool,
+    dirty_frame: Option<usize>,
+    dirty_rect: Option<(u32, u32, u32, u32)>,
+) -> UploadPlan {
+    let Some(cache) = cache else {
+        return UploadPlan::Full;
+    };
+    if cache.frame != frame || cache.size != size {
+        return UploadPlan::Full;
+    }
+    if cache.revision == revision {
+        return UploadPlan::Skip;
+    }
+    if dirty_full || dirty_frame != Some(frame) {
+        return UploadPlan::Full;
+    }
+    let Some((x, y, x1, y1)) = dirty_rect else {
+        return UploadPlan::Full;
+    };
+    if x >= x1 || y >= y1 || x1 as usize > size[0] || y1 as usize > size[1] {
+        return UploadPlan::Full;
+    }
+    UploadPlan::Partial((x, y, x1, y1))
+}
+
+fn sub_image(img: &egui::ColorImage, rect: (u32, u32, u32, u32)) -> egui::ColorImage {
+    let (x, y, x1, y1) = rect;
+    let w = (x1 - x) as usize;
+    let h = (y1 - y) as usize;
+    let mut pixels = Vec::with_capacity(w * h);
+    for row in y as usize..y1 as usize {
+        let start = row * img.size[0] + x as usize;
+        pixels.extend_from_slice(&img.pixels[start..start + w]);
+    }
+    egui::ColorImage::new([w, h], pixels)
 }
 
 fn upload(ui: &egui::Ui, slot: &mut Option<TextureHandle>, name: &str, img: egui::ColorImage) {
@@ -3566,5 +3664,126 @@ mod tests {
         assert!((wheel_hue(c, Pos2::new(50.0, 100.0)) - 90.0).abs() < 0.01);
         assert!((wheel_hue(c, Pos2::new(0.0, 50.0)) - 180.0).abs() < 0.01);
         assert!((wheel_hue(c, Pos2::new(50.0, 0.0)) - 270.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn canvas_upload_plans_skip_patch_or_rebuild() {
+        let cache = CanvasCache {
+            revision: 7,
+            frame: 0,
+            size: [8, 8],
+        };
+        assert_eq!(
+            upload_plan(Some(&cache), 7, 0, [8, 8], false, None, None),
+            UploadPlan::Skip
+        );
+        assert_eq!(
+            upload_plan(
+                Some(&cache),
+                8,
+                0,
+                [8, 8],
+                false,
+                Some(0),
+                Some((2, 3, 4, 5))
+            ),
+            UploadPlan::Partial((2, 3, 4, 5))
+        );
+        assert_eq!(
+            upload_plan(Some(&cache), 8, 0, [8, 8], true, Some(0), None),
+            UploadPlan::Full
+        );
+        assert_eq!(
+            upload_plan(
+                Some(&cache),
+                8,
+                1,
+                [8, 8],
+                false,
+                Some(1),
+                Some((0, 0, 8, 8))
+            ),
+            UploadPlan::Full
+        );
+        assert_eq!(
+            upload_plan(None, 8, 0, [8, 8], false, Some(0), Some((0, 0, 1, 1))),
+            UploadPlan::Full
+        );
+        assert_eq!(
+            upload_plan(
+                Some(&cache),
+                8,
+                0,
+                [8, 8],
+                false,
+                Some(0),
+                Some((0, 0, 9, 1))
+            ),
+            UploadPlan::Full
+        );
+    }
+
+    #[test]
+    fn dirty_pixels_merge_and_structural_edits_force_full() {
+        let mut e = Editor::new(16, 16);
+        e.touch();
+        e.clear_dirty();
+        e.paint_pixel(2, 3, crate::color::Rgba::rgb(1, 2, 3));
+        e.paint_pixel(5, 1, crate::color::Rgba::rgb(1, 2, 3));
+        assert!(!e.dirty_full);
+        assert_eq!(e.dirty_rect, Some((2, 1, 6, 4)));
+        assert_eq!(e.dirty_frame, Some(0));
+        e.clear_dirty();
+        e.add_frame();
+        assert!(e.dirty_full, "structural edits rebuild the whole composite");
+    }
+
+    #[test]
+    fn partial_image_matches_the_composite_region() {
+        let mut e = Editor::new(4, 4);
+        e.paint_pixel(1, 2, crate::color::Rgba::rgb(200, 10, 20));
+        e.paint_pixel(3, 0, crate::color::Rgba::rgb(5, 6, 7));
+        let full = frame_composite(&e, 0);
+        let patch = sub_image(&full, (1, 0, 4, 3));
+        assert_eq!(patch.size, [3, 3]);
+        assert_eq!(patch.pixels[2], egui::Color32::from_rgb(5, 6, 7));
+        assert_eq!(patch.pixels[2 * 3], egui::Color32::from_rgb(200, 10, 20));
+    }
+
+    #[test]
+    #[ignore = "benchmark; run with --ignored --nocapture"]
+    fn benchmark_canvas_composite_and_cache_hit() {
+        let mut e = Editor::new(256, 256);
+        for layer in 0..8 {
+            if layer > 0 {
+                e.sprite.add_layer_after(layer - 1);
+            }
+            for y in 0..256 {
+                for x in 0..256 {
+                    e.sprite
+                        .set(layer, 0, x, y, crate::color::Rgba::rgb(1, 2, 3));
+                }
+            }
+        }
+        let start = std::time::Instant::now();
+        for _ in 0..20 {
+            let _ = frame_composite(&e, 0);
+        }
+        let full = start.elapsed() / 20;
+        let cache = CanvasCache {
+            revision: e.revision,
+            frame: 0,
+            size: [256, 256],
+        };
+        let start = std::time::Instant::now();
+        for _ in 0..100_000 {
+            let _ = upload_plan(Some(&cache), e.revision, 0, [256, 256], false, None, None);
+        }
+        let hit = start.elapsed() / 100_000;
+        println!("256x256 x8 layers: composite {full:?}, cache decision {hit:?}");
+        assert!(
+            full.as_nanos() > hit.as_nanos(),
+            "cache hit must be cheaper"
+        );
     }
 }

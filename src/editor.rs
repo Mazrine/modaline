@@ -446,6 +446,11 @@ pub struct Editor {
     /// Monotonic counter for cache invalidation (timeline thumbnails). Every
     /// edit bumps it; the view compares it instead of rebuilding each frame.
     pub revision: u64,
+    /// Bounds and frame of a pixel-only edit since the canvas last consumed the
+    /// dirty state; `dirty_full` means the whole composite must be rebuilt.
+    pub dirty_rect: Option<(u32, u32, u32, u32)>,
+    pub dirty_frame: Option<usize>,
+    pub dirty_full: bool,
     pub should_quit: bool,
     pub g_prefix: bool,
     pub path: Option<PathBuf>,
@@ -560,6 +565,9 @@ impl Editor {
             msg: "press ? for help".into(),
             dirty: false,
             revision: 0,
+            dirty_rect: None,
+            dirty_frame: None,
+            dirty_full: true,
             should_quit: false,
             g_prefix: false,
             path: None,
@@ -605,7 +613,41 @@ impl Editor {
     /// Bump the cache revision. Every edit calls this; the view compares it so
     /// timeline thumbnails are only rebuilt when the sprite changed.
     pub fn touch(&mut self) {
+        self.bump();
+        self.dirty_full = true;
+        self.dirty_rect = None;
+        self.dirty_frame = None;
+    }
+
+    fn bump(&mut self) {
         self.revision = self.revision.wrapping_add(1);
+    }
+
+    /// Record one pixel write's bounds for a partial canvas upload. Structural
+    /// edits go through `touch`, which forces a full rebuild.
+    fn mark_dirty_pixel(&mut self, frame: usize, x: u32, y: u32) {
+        if self.dirty_full {
+            return;
+        }
+        if let Some(f) = self.dirty_frame
+            && f != frame
+        {
+            self.dirty_full = true;
+            self.dirty_rect = None;
+            return;
+        }
+        self.dirty_frame = Some(frame);
+        self.dirty_rect = Some(match self.dirty_rect {
+            Some((x0, y0, x1, y1)) => (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1)),
+            None => (x, y, x + 1, y + 1),
+        });
+    }
+
+    /// The canvas has consumed the dirty region.
+    pub fn clear_dirty(&mut self) {
+        self.dirty_rect = None;
+        self.dirty_frame = None;
+        self.dirty_full = false;
     }
 
     pub(crate) fn record(
@@ -625,7 +667,8 @@ impl Editor {
             });
             self.redo.clear();
         }
-        self.touch();
+        self.bump();
+        self.mark_dirty_pixel(frame, x, y);
     }
 
     pub fn begin_stroke(&mut self) {

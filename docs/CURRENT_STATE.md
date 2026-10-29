@@ -136,6 +136,10 @@ L-shaped corners for the 1 px pencil/eraser.
   transparency checkerboard, cursor + selection + floating-paste previews.
   **Wide pixels** render at the sprite's `pixel_aspect` (checkbox "wide px");
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
+- **render cache**: the canvas texture is rebuilt only when revision, frame or
+  size changes; onion textures are cached by revision/frame/count. Pixel edits
+  accumulate a dirty rectangle and patch the texture with `set_partial`;
+  structural edits rebuild. Dirty composites are still CPU full-frame.
 - **preferences dialog**: `:prefs` consolidates editor, grid/canvas, export,
   appearance (theme/font/language), keys and workspace settings in one window,
   all backed by the live editor/view fields and existing config persistence.

@@ -161,6 +161,9 @@ thin shells:
 - Keymap actions run before the fixed modal handlers. When a char key is
   consumed, set `view.suppress_text` so the following `Event::Text` does not run
   the old handler again; `blocks_default` handles moved defaults.
+- Pixel writes use `Editor::record` (merged dirty rect); structural edits use
+  `Editor::touch` (full rebuild). The canvas consumes dirty state with
+  `clear_dirty`; do not bypass `record` for pixel edits or caching goes stale.
 - Timeline/side panel content must fill `ui.max_rect()`; the unified egui Panel
   sizes to content otherwise. Loading a layout seeds `PanelState` via
   `force_panel_size` so remembered sizes do not win.
