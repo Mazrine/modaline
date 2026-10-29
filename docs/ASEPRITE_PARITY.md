@@ -93,7 +93,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Alpha-lock painting flag | Covered | P5-18 |
 | Pressure/tablet sensitivity | Covered (manual + device force where reported) | P5-20 |
 | Tiled mode | Covered (configurable repeats, opacity, preview) | P5-27 |
-| Move layer/cel content tool | Partial (selection/cel move; no layer-content drag tool) | P6-00 |
+| Move layer/cel content tool | Covered (M move tool drags the active cel content) | P6-00 |
 | Text tool (editable, fonts, sizes) | Covered (bitmap font) | P5-28 |
 
 ## Transformations

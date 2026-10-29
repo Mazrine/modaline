@@ -280,6 +280,9 @@ fn handle_key(
                 }
             }
             Escape => {
+                if editor.cel_move.is_some() {
+                    editor.cancel_cel_move();
+                }
                 if editor.has_lasso() {
                     editor.lasso_cancel();
                 }
@@ -460,6 +463,7 @@ fn handle_char(editor: &mut Editor, ch: char) {
         'n' => editor.set_tool(Tool::Blur),
         'T' => editor.set_tool(Tool::Text),
         'K' => editor.set_tool(Tool::Tile),
+        'M' => editor.set_tool(Tool::Move),
         'C' => {
             let (x, y) = editor.cursor;
             editor.contour_at(x, y);

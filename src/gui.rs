@@ -1152,6 +1152,7 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             (Tool::Polygon, "Poly"),
             (Tool::Text, "Text"),
             (Tool::Tile, "Tile"),
+            (Tool::Move, "Move"),
         ] {
             if ui.selectable_label(editor.tool == tool, name).clicked() {
                 editor.set_tool(tool);
@@ -2747,6 +2748,7 @@ fn canvas(
     draw_selection(ui.painter(), editor, view);
     draw_transform_handles(ui.painter(), editor, view);
     draw_floating_paste(ui.painter(), editor, view);
+    draw_floating_cel(ui.painter(), editor, view);
     draw_lasso(ui.painter(), editor, view);
     draw_symmetry(ui.painter(), editor, view, rect);
     draw_cursor(ui.painter(), editor, view);
@@ -3294,6 +3296,28 @@ fn transform_input(
     true
 }
 
+fn draw_floating_cel(painter: &egui::Painter, editor: &Editor, view: &View) {
+    let Some(m) = &editor.cel_move else {
+        return;
+    };
+    let cell = view.cell();
+    let (w, h) = (editor.sprite.width as i32, editor.sprite.height as i32);
+    for yy in 0..m.cel.h as i32 {
+        for xx in 0..m.cel.w as i32 {
+            let c = m.cel.get(m.cel.x + xx, m.cel.y + yy);
+            let (sx, sy) = (m.pos.0 + xx, m.pos.1 + yy);
+            if c.3 == 0 || sx < 0 || sy < 0 || sx >= w || sy >= h {
+                continue;
+            }
+            let r = Rect::from_min_size(
+                view.pan + Vec2::new(sx as f32 * cell.x, sy as f32 * cell.y),
+                cell,
+            );
+            painter.rect_filled(r, 0.0, Color32::from_rgba_unmultiplied(c.0, c.1, c.2, c.3));
+        }
+    }
+}
+
 fn draw_floating_paste(painter: &egui::Painter, editor: &Editor, view: &View) {
     if let (Some(buf), Some(pos)) = (&editor.clipboard, editor.paste_pos) {
         let cell = view.cell();
@@ -3395,6 +3419,22 @@ fn canvas_input(
                 && let Some((x, y)) = view.screen_to_pixel(pos, w, h)
             {
                 editor.lasso_add(x, y);
+            }
+            return;
+        }
+        Tool::Move => {
+            if resp.drag_started_by(PB::Primary)
+                && let Some((x, y)) = view.screen_to_pixel(pos, w, h)
+            {
+                editor.start_cel_move(x, y);
+            }
+            if resp.dragged_by(PB::Primary)
+                && let Some((x, y)) = view.screen_to_pixel(pos, w, h)
+            {
+                editor.move_cel_to(x, y);
+            }
+            if resp.drag_stopped_by(PB::Primary) {
+                editor.commit_cel_move();
             }
             return;
         }
@@ -3515,6 +3555,7 @@ const HELP: &[&str] = &[
     "  n / C              blur / contour outline",
     "  T                  text tool (click to place; edit in the panel)",
     "  K                  tile tool (paint tiles; right-click picks)",
+    "  M                  move tool (drag the active cel's content; Esc cancels)",
     "  v                  visual select (V = all)   then:",
     "    y                yank (copy)      Y   copy merged",
     "    x                cut              m   move (cut + float)   p   paste",

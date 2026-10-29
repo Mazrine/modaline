@@ -35,6 +35,7 @@ pub enum Tool {
     Polygon,
     Text,
     Tile,
+    Move,
 }
 
 /// How a brush colour combines with the destination pixel.
@@ -91,11 +92,12 @@ impl Tool {
             Tool::Polygon => 12,
             Tool::Text => 13,
             Tool::Tile => 14,
+            Tool::Move => 15,
         }
     }
 }
 
-const TOOL_COUNT: usize = 15;
+const TOOL_COUNT: usize = 16;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum TileMode {
@@ -237,6 +239,17 @@ pub struct Clipboard {
 pub struct Pending {
     pub shape: Shape,
     pub start: (u32, u32),
+}
+
+/// A layer-content move in progress: the active cel is detached (its source
+/// emptied) and drawn as a floating preview until the drag is committed.
+pub struct CelMove {
+    pub cel: Cel,
+    /// Sprite pixel where the drag started.
+    pub from: (u32, u32),
+    /// Target top-left of the floating content, in sprite coordinates.
+    pub pos: (i32, i32),
+    before: Box<Sprite>,
 }
 
 /// Active indices at one side of a structural edit.
@@ -467,6 +480,8 @@ pub struct Editor {
     /// Persistent export options (command and dialog share it).
     pub export_config: crate::io::ExportConfig,
     pub paste_pos: Option<(u32, u32)>,
+    /// Active layer-content move (floating cel), if any.
+    pub cel_move: Option<CelMove>,
     pub cmdline: String,
     pub msg: String,
     pub dirty: bool,
@@ -597,6 +612,7 @@ impl Editor {
             cel_clipboard: None,
             export_config: crate::io::ExportConfig::default(),
             paste_pos: None,
+            cel_move: None,
             cmdline: String::new(),
             msg: "press ? for help".into(),
             dirty: false,
@@ -1050,6 +1066,7 @@ impl Editor {
             Tool::Text => self.place_text_at(x, y),
             Tool::Tile if self.tile_pixel_mode => self.paint_tile_pixel_at(x, y, self.fg),
             Tool::Tile => self.paint_tile_at(x, y),
+            Tool::Move => {}
             _ => self.paint_symmetric(x, y, self.fg),
         }
     }
@@ -1061,6 +1078,7 @@ impl Editor {
             Tool::Pencil => self.paint_freehand(x, y, self.bg),
             Tool::Tile if self.tile_pixel_mode => self.paint_tile_pixel_at(x, y, self.bg),
             Tool::Tile => self.pick_tile_at(x, y),
+            Tool::Move => {}
             _ => self.paint_symmetric(x, y, self.bg),
         }
     }
@@ -3962,6 +3980,9 @@ impl Editor {
     }
 
     pub fn set_tool(&mut self, tool: Tool) {
+        if self.cel_move.is_some() {
+            self.commit_cel_move();
+        }
         if self.tool == Tool::Text && tool != Tool::Text {
             self.commit_text_edit();
         }
@@ -4117,6 +4138,88 @@ impl Editor {
     pub fn cancel_paste(&mut self) {
         self.paste_pos = None;
         self.mode = Mode::Normal;
+    }
+
+    // ---- layer-content move ----
+
+    /// Detach the active cel at `(x, y)` for dragging. The source is emptied
+    /// and the content floats until `commit_cel_move`; locked, hidden,
+    /// reference and empty cels refuse to start.
+    pub fn start_cel_move(&mut self, x: u32, y: u32) -> bool {
+        if self.cel_move.is_some() {
+            return true;
+        }
+        let l = self.active_layer;
+        if !self.sprite.layer_movable(l) {
+            self.msg = "layer movement is locked".into();
+            return false;
+        }
+        if !self.sprite.layer_editable(l) {
+            self.msg = "layer is locked or hidden".into();
+            return false;
+        }
+        let cel = self.active_cel_content();
+        if cel.w == 0 || cel.h == 0 || cel.pixels.iter().all(|p| p.3 == 0) {
+            self.msg = "cel is empty".into();
+            return false;
+        }
+        let before = Box::new(self.sprite.clone());
+        self.empty_cel_at(l, self.active_frame);
+        self.cel_move = Some(CelMove {
+            pos: (cel.x, cel.y),
+            cel,
+            from: (x, y),
+            before,
+        });
+        self.msg = "move: drag the cel content".into();
+        true
+    }
+
+    /// Move the floating content so the pixel under the cursor follows it.
+    pub fn move_cel_to(&mut self, x: u32, y: u32) {
+        if let Some(m) = &mut self.cel_move {
+            m.pos = (
+                m.cel.x + x as i32 - m.from.0 as i32,
+                m.cel.y + y as i32 - m.from.1 as i32,
+            );
+        }
+    }
+
+    /// Bake the floating cel into the active cel, clipped to the canvas, as a
+    /// single undo step. A zero move restores the source untouched.
+    pub fn commit_cel_move(&mut self) {
+        let Some(m) = self.cel_move.take() else {
+            return;
+        };
+        let (w, h) = (self.sprite.width as i32, self.sprite.height as i32);
+        let (dx, dy) = (m.pos.0 - m.cel.x, m.pos.1 - m.cel.y);
+        let (l, f) = (self.active_layer, self.active_frame);
+        for yy in 0..m.cel.h as i32 {
+            for xx in 0..m.cel.w as i32 {
+                let c = m.cel.get(m.cel.x + xx, m.cel.y + yy);
+                let (x, y) = (m.cel.x + xx + dx, m.cel.y + yy + dy);
+                if c.3 == 0 || x < 0 || y < 0 || x >= w || y >= h {
+                    continue;
+                }
+                self.sprite.set(l, f, x as u32, y as u32, c);
+            }
+        }
+        self.snapshot(*m.before);
+        self.msg = if dx == 0 && dy == 0 {
+            "move: unchanged".into()
+        } else {
+            format!("cel moved {dx:+},{dy:+}")
+        };
+    }
+
+    /// Abandon the drag and put the cel back where it was.
+    pub fn cancel_cel_move(&mut self) {
+        if let Some(m) = self.cel_move.take() {
+            self.sprite = *m.before;
+            self.dirty = true;
+            self.touch();
+            self.msg = "move cancelled".into();
+        }
     }
 
     // ---- layer / frame / transform ----
@@ -5623,6 +5726,65 @@ mod tests {
         assert!(p.3 > 0);
         e.undo();
         e.filter(Filter::Sharpen(1.0));
+    }
+
+    #[test]
+    fn cel_move_translates_keeps_alpha_clips_and_undoes_once() {
+        let mut e = Editor::new(8, 8);
+        let (l, f) = (e.active_layer, e.active_frame);
+        let solid = Rgba::rgb(10, 20, 30);
+        let half = Rgba(40, 50, 60, 128);
+        e.paint_pixel(1, 1, solid);
+        e.paint_pixel(2, 1, half);
+        e.undo.clear();
+
+        assert!(e.start_cel_move(1, 1));
+        assert_eq!(e.sprite.get(l, f, 1, 1), Rgba::TRANSPARENT, "source floats");
+        e.move_cel_to(6, 6);
+        e.commit_cel_move();
+        assert_eq!(e.sprite.get(l, f, 6, 6), solid);
+        assert_eq!(e.sprite.get(l, f, 7, 6), half, "alpha is preserved");
+        assert_eq!(e.sprite.get(l, f, 1, 1), Rgba::TRANSPARENT);
+
+        e.undo();
+        assert_eq!(
+            e.sprite.get(l, f, 1, 1),
+            solid,
+            "one undo restores the move"
+        );
+        assert_eq!(e.sprite.get(l, f, 6, 6), Rgba::TRANSPARENT);
+
+        // Dragging past the right edge drops what no longer fits.
+        assert!(e.start_cel_move(1, 1));
+        e.move_cel_to(7, 1);
+        e.commit_cel_move();
+        assert_eq!(e.sprite.get(l, f, 7, 1), solid);
+        assert_eq!(
+            e.sprite.get(l, f, 7, 6),
+            Rgba::TRANSPARENT,
+            "the clipped pixel is gone, not wrapped"
+        );
+    }
+
+    #[test]
+    fn cel_move_refuses_locked_layers_and_cancels_cleanly() {
+        let mut e = Editor::new(4, 4);
+        let l = e.active_layer;
+        e.paint_pixel(0, 0, Rgba::rgb(9, 9, 9));
+        e.sprite.layers[l].lock_movement = true;
+        assert!(!e.start_cel_move(0, 0));
+        assert!(e.cel_move.is_none());
+        e.sprite.layers[l].lock_movement = false;
+        e.sprite.layers[l].editable = false;
+        assert!(!e.start_cel_move(0, 0));
+        e.sprite.layers[l].editable = true;
+
+        e.undo.clear();
+        assert!(e.start_cel_move(0, 0));
+        e.move_cel_to(2, 2);
+        e.cancel_cel_move();
+        assert_eq!(e.sprite.get(l, e.active_frame, 0, 0), Rgba::rgb(9, 9, 9));
+        assert!(e.undo.is_empty(), "a cancelled drag records no history");
     }
 
     #[test]

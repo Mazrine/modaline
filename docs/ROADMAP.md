@@ -718,11 +718,15 @@ is checked or marked blocked with a reason; the full gate is green; and the
 P5 shipped every planned task. P6 tracks the remaining matrix rows that are
 Partial or Not supported, so "no unexplained gap" is true again.
 
-- [ ] **P6-00 — Move layer/cel content tool** (M) — deps: P5-24.
-  Add a layer-content move tool (not just selection-mask transform): drag the
-  active cel's pixels with a floating preview, clip at canvas edges, respect
-  lock/editable/reference, commit as one undo step. Tests: drag preserves
-  transparency and alpha, clipping, undo, locked layer refusal. UI Xvfb smoke.
+- [x] **P6-00 — Move layer/cel content tool** (M) — deps: P5-24.
+  Landed 2026-10-29. `Tool::Move` (`M`, toolbar) detaches the active cel into a
+  floating preview (`Editor::start_cel_move`/`move_cel_to`/`commit_cel_move`);
+  the source is emptied while dragging, commits clip at the canvas edges, and
+  the whole drag is one `UndoStep::Snapshot` (zero move restores untouched).
+  `Esc` cancels, switching tools commits. Locked movement, hidden/locked and
+  reference layers refuse to start. 2 tests (226 total): translate + alpha
+  preservation + clipping + single undo, and locked/editable refusal + cancel.
+  Xvfb smoke: `M`, drag, content moved; `Esc` put it back; `u` undid a commit.
 - [ ] **P6-01 — Reopen closed documents** (S) — deps: P5-52.
   Keep a bounded stack of closed clean documents (path + active tab) and add
   `:reopen`/`:closed` to restore the most recent; never retain dirty content

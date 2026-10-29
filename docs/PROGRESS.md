@@ -488,6 +488,11 @@ Read, in order:
   Partial/Not-supported matrix rows: layer-content move, reopen closed docs,
   Lua object API/fs, full string extraction, dirty-rect composition, async
   filtering, PCX/FLC/FLI codecs. Docs-only; 261 tests unchanged.
+99. **P6-00 — move layer/cel content tool** — new `Tool::Move` (`M`, toolbar)
+  detaches the active cel into a floating preview and bakes it back clipped to
+  the canvas as one undo step; Esc cancels, tool switch commits, locked/hidden/
+  reference layers refuse. 2 tests (263 total). Xvfb smoke: preview
+  followed the drag, commit moved the block, `u` restored it, Esc cancelled.
 
 ## Next step (exact)
 
@@ -496,10 +501,10 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P6)
 
-P5 is complete; **P6 is open (0/7)** in `docs/ROADMAP.md`:
+P5 is complete; **P6 is open (1/7)** in `docs/ROADMAP.md`:
 
-- **P6-00** — move layer/cel content tool (first open task).
-- **P6-01** — reopen closed documents.
+- ~~**P6-00** — move layer/cel content tool~~ (done 2026-10-29).
+- **P6-01** — reopen closed documents (first open task).
 - **P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects.
 - **P6-03** — localization string extraction.
 - **P6-04** — incremental dirty compositing.
