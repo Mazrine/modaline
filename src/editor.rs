@@ -336,6 +336,10 @@ pub struct Editor {
     pub gradient_stops: Vec<(f32, Rgba)>,
     /// Ordered-dither mode applied while painting a gradient.
     pub gradient_dither: DitherMode,
+    /// Pivot for free transforms, in sprite coordinates; `None` = bbox centre.
+    pub transform_pivot: Option<(f32, f32)>,
+    /// RotSprite-style supersampled mode sampling instead of nearest.
+    pub transform_rotsprite: bool,
     pub spray_seed: u64,
     /// Airbrush dots per dab and scatter radius, in pixels.
     pub spray_rate: u32,
@@ -446,6 +450,8 @@ impl Editor {
             gradient_radial: false,
             gradient_stops: Vec::new(),
             gradient_dither: DitherMode::None,
+            transform_pivot: None,
+            transform_rotsprite: false,
             spray_seed: 0x9E37_79B9_7F4A_7C15,
             spray_rate: 6,
             spray_radius: 3,
@@ -2519,9 +2525,12 @@ impl Editor {
             None => (0, 0, w, h),
         };
         let (sx, sy) = (sx.abs().max(0.01), sy.abs().max(0.01));
-        let (cx, cy) = (rx as f32 + rw as f32 / 2.0, ry as f32 + rh as f32 / 2.0);
+        let centre = (rx as f32 + rw as f32 / 2.0, ry as f32 + rh as f32 / 2.0);
+        let (px0, py0) = self.transform_pivot.unwrap_or(centre);
         let (sin, cos) = (-angle_deg).to_radians().sin_cos();
         let tan = (-skew_deg).to_radians().tan();
+        let rotsprite = self.transform_rotsprite
+            && (angle_deg.abs() > 0.01 || sx != 1.0 || sy != 1.0 || skew_deg.abs() > 0.01);
         let src: Vec<Rgba> = (0..w * h)
             .map(|i| self.sprite.get(l, f, i % w, i / w))
             .collect();
@@ -2543,12 +2552,49 @@ impl Editor {
                 if !inside(x, y) || x >= w || y >= h {
                     continue;
                 }
-                let (mut dx, mut dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+                if rotsprite {
+                    // RotSprite in spirit: sample a 4x4 grid inside the
+                    // destination pixel and keep the most frequent source
+                    // colour, so clusters survive where nearest would alias.
+                    let mut counts: Vec<(Rgba, u32)> = Vec::new();
+                    for suby in 0..4 {
+                        for subx in 0..4 {
+                            let mut dx = x as f32 + (subx as f32 + 0.5) / 4.0 - px0;
+                            let mut dy = y as f32 + (suby as f32 + 0.5) / 4.0 - py0;
+                            dx -= tan * dy;
+                            dx /= sx;
+                            dy /= sy;
+                            let (sxf, syf) = (dx * cos - dy * sin, dx * sin + dy * cos);
+                            let (spx, spy) = ((px0 + sxf).floor(), (py0 + syf).floor());
+                            if spx < 0.0 || spy < 0.0 || spx >= w as f32 || spy >= h as f32 {
+                                continue;
+                            }
+                            let (spx, spy) = (spx as u32, spy as u32);
+                            if !inside(spx, spy) {
+                                continue;
+                            }
+                            let c = src[(spy * w + spx) as usize];
+                            if c.3 == 0 {
+                                continue;
+                            }
+                            if let Some(slot) = counts.iter_mut().find(|(k, _)| *k == c) {
+                                slot.1 += 1;
+                            } else {
+                                counts.push((c, 1));
+                            }
+                        }
+                    }
+                    if let Some((c, _)) = counts.iter().max_by_key(|(_, n)| *n) {
+                        self.paint_pixel(x, y, *c);
+                    }
+                    continue;
+                }
+                let (mut dx, mut dy) = (x as f32 + 0.5 - px0, y as f32 + 0.5 - py0);
                 dx -= tan * dy;
                 dx /= sx;
                 dy /= sy;
                 let (sxf, syf) = (dx * cos - dy * sin, dx * sin + dy * cos);
-                let (px, py) = ((cx + sxf).floor(), (cy + syf).floor());
+                let (px, py) = ((px0 + sxf).floor(), (py0 + syf).floor());
                 if px < 0.0 || py < 0.0 || px >= w as f32 || py >= h as f32 {
                     continue;
                 }
@@ -4587,6 +4633,53 @@ mod tests {
         assert_eq!(e.sprite.get(l, f, 11, 5), Rgba::rgb(0, 0, 200));
         // Outside the selection nothing is touched.
         assert_eq!(e.sprite.get(l, f, 0, 0), Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn rotsprite_and_custom_pivots_change_the_transform() {
+        let mut e = Editor::new(16, 16);
+        let (l, f) = (e.active_layer, e.active_frame);
+        e.selection = Some(Selection::rect(2, 2, 12, 12));
+        for y in 2..14 {
+            for x in 2..14 {
+                let c = if (x + y) % 2 == 0 {
+                    Rgba::rgb(240, 240, 240)
+                } else {
+                    Rgba::rgb(20, 20, 20)
+                };
+                e.paint_pixel(x, y, c);
+            }
+        }
+        let before: Vec<Rgba> = (0..16 * 16)
+            .map(|i| e.sprite.get(l, f, i % 16, i / 16))
+            .collect();
+        e.free_transform(45.0, 1.0, 1.0, 0.0);
+        let nearest: Vec<Rgba> = (0..16 * 16)
+            .map(|i| e.sprite.get(l, f, i % 16, i / 16))
+            .collect();
+        e.undo();
+        assert_eq!(
+            (0..16 * 16)
+                .map(|i| e.sprite.get(l, f, i % 16, i / 16))
+                .collect::<Vec<_>>(),
+            before
+        );
+
+        e.transform_rotsprite = true;
+        e.free_transform(45.0, 1.0, 1.0, 0.0);
+        let smooth: Vec<Rgba> = (0..16 * 16)
+            .map(|i| e.sprite.get(l, f, i % 16, i / 16))
+            .collect();
+        assert!(smooth != nearest, "rotsprite differs from nearest");
+        e.undo();
+
+        // A 90 degree rotation about (2,2) sends pixel (1,0) to (3,1).
+        e.selection = Some(Selection::rect(0, 0, 8, 8));
+        e.sprite.set(l, f, 1, 0, Rgba::rgb(200, 0, 0));
+        e.transform_pivot = Some((2.0, 2.0));
+        e.free_transform(90.0, 1.0, 1.0, 0.0);
+        assert_eq!(e.sprite.get(l, f, 1, 0), Rgba::TRANSPARENT);
+        assert_eq!(e.sprite.get(l, f, 3, 1), Rgba::rgb(200, 0, 0));
     }
 
     #[test]

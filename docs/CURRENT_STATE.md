@@ -130,7 +130,9 @@ L-shaped corners for the 1 px pencil/eraser.
   blur, sharpen, median, 3×3 convolution (custom kernel/divisor/bias) and
   emboss — selection-aware, one undo step.
 - **free transform** (panel + `:rotate`/`:scale`/`:skew`): rotate, scale and
-  skew the selection (or the cel) about its centre, nearest-neighbour.
+  skew the selection (or the cel) about any pivot (`:pivot`), nearest-neighbour
+  or **RotSprite-style supersampling** (`:rotsprite`). With "handles" enabled,
+  corner/edge/rotate handles and inside-drag move run on the canvas.
 - **crop / trim**: `:crop [x y w h]` (no args = the selection) and `:trim`
   (non-transparent content) resize every cel and layer mask, one undo step.
 - **text**: an 8x8 bitmap font at scale 1-8, stamped at the cursor as one undo

@@ -957,6 +957,54 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             Some(deg) => editor.free_transform(0.0, 1.0, 1.0, deg),
             None => editor.msg = "usage: :skew <degrees>".into(),
         },
+        "rotsprite" => match arg {
+            Some("on") | Some("1") => {
+                editor.transform_rotsprite = true;
+                editor.msg = "rotsprite: on".into();
+            }
+            Some("off") | Some("0") => {
+                editor.transform_rotsprite = false;
+                editor.msg = "rotsprite: off".into();
+            }
+            _ => {
+                editor.transform_rotsprite = !editor.transform_rotsprite;
+                editor.msg = format!(
+                    "rotsprite: {}",
+                    if editor.transform_rotsprite {
+                        "on"
+                    } else {
+                        "off"
+                    }
+                );
+            }
+        },
+        "pivot" => match arg {
+            Some("clear") | Some("none") => {
+                editor.transform_pivot = None;
+                editor.msg = "transform pivot: bbox centre".into();
+            }
+            Some(v) => {
+                let mut it = v.split_whitespace();
+                let x = it.next().and_then(|n| n.parse::<f32>().ok());
+                let y = it.next().and_then(|n| n.parse::<f32>().ok());
+                match (x, y) {
+                    (Some(x), Some(y)) => {
+                        editor.transform_pivot = Some((x, y));
+                        editor.msg = format!("transform pivot: {x:.1},{y:.1}");
+                    }
+                    _ => editor.msg = "usage: :pivot <x> <y>|clear".into(),
+                }
+            }
+            None => {
+                editor.msg = format!(
+                    "transform pivot: {}",
+                    editor
+                        .transform_pivot
+                        .map(|(x, y)| format!("{x:.1},{y:.1}"))
+                        .unwrap_or_else(|| "bbox centre".into())
+                )
+            }
+        },
         "filter" | "fx" => {
             let args: Vec<&str> = arg.unwrap_or("").split_whitespace().collect();
             match crate::editor::Filter::parse_args(&args) {

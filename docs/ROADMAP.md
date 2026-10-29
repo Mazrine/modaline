@@ -286,9 +286,15 @@ met; blocked tasks are marked with the reason.
   `median r`, `convolve k0..k8 [div] [bias]`, `posterize n`, `emboss`).
   4 new tests (181 total): colour remaps, median/convolution/emboss, selection +
   single undo, and parser coverage.
-- [ ] **P5-24 — Transform depth** (L) — deps: P5-10.
-  RotSprite rotation; interactive move/scale/rotate/skew handles with pivot;
-  command/panel equivalents stay.
+- [x] **P5-24 — Transform depth** (L) — deps: P5-10.
+  Landed 2026-10-28. RotSprite-style rotation/scale/skew samples a 4×4 grid per
+  destination pixel and keeps the most frequent source colour (`:rotsprite
+  on|off`). Free transforms can pivot on any point (`:pivot x y|clear`), drawn
+  as a cross. With "handles" enabled, the canvas shows corner scale, edge skew
+  and rotate handles plus an inside-drag move; drags apply one free transform
+  on release. 2 new tests (183 total: 173 lib + 10 bin): RotSprite vs nearest
+  and pivot rotation; handle hit-testing/pivot mapping. Handles are UI-only
+  and were not screenshotted (manual check: enable handles and drag a corner).
 - [ ] **P5-25 — Selection extras** (M) — deps: none.
   Stroke/fill selection, colour-range, selection from layer alpha, selection
   transform handles.

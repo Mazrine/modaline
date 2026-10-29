@@ -102,9 +102,9 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Flip H/V, rotate 90° | Covered | — |
 | Resize, crop, trim | Covered | — |
 | Free rotate/scale/skew (nearest) | Covered | — |
-| RotSprite rotation | Missing | P5-24 |
-| Interactive transform handles + pivot | Missing | P5-24 |
-| Transform multiple layers/frames/cels | Missing | P5-24, P5-34 |
+| RotSprite rotation | Covered (supersampled mode sampling) | P5-24 |
+| Interactive transform handles + pivot | Covered | P5-24 |
+| Transform multiple layers/frames/cels | Missing | P5-34 |
 | Canvas transforms | Covered | — |
 
 ## Tilemap

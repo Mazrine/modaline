@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **181 tests green** (172 lib + 9 bin)
+- `cargo test` → **183 tests green** (173 lib + 10 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-23 filters breadth** (see batch 60).
+- Last completed batch: **P5-24 transform depth** (see batch 61).
 
 ## How to resume
 
@@ -350,6 +350,10 @@ Read, in order:
     posterize, median, 3×3 convolution (custom kernel/divisor/bias) and emboss;
     selection-clipped and one undo step. 4 new tests (181 total): colour remaps,
     median/convolution/emboss, selection + undo, parser coverage.
+61. **P5-24 — transform depth** — RotSprite-style supersampling, custom pivot,
+    corner/edge/rotate handles with inside-drag move, applied on release.
+    `:rotsprite`/`:pivot`; "handles" panel toggle. 2 new tests (183 total):
+    RotSprite vs nearest + pivot rotation, handle hit-testing/pivot mapping.
 
 ## Next step (exact)
 
@@ -358,7 +362,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-24** — transform depth (first open task), then continue down the P5
+- **P5-25** — selection extras (first open task), then continue down the P5
   roadmap in dependency order.
 
 ## Known limitations (do not forget)

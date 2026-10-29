@@ -28,6 +28,14 @@ impl Default for Onion {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TransformDrag {
+    Move { last: (u32, u32), started: bool },
+    Scale { start: (f32, f32), axis: (i8, i8) },
+    Rotate { start_angle: f32 },
+    Skew { start: (f32, f32) },
+}
+
 /// The canvas view: zoom (screen px per sprite px) and pan (screen pos of the
 /// sprite's top-left pixel).
 pub struct View {
@@ -62,6 +70,9 @@ pub struct View {
     /// Opacity slider drag in progress: the layer and its properties at drag
     /// start, so the whole drag is one undo step.
     layer_prop_drag: Option<(usize, LayerProps)>,
+    /// Show the transform handles and route canvas drags to them.
+    pub transform_mode: bool,
+    transform_drag: Option<TransformDrag>,
 }
 
 impl View {
@@ -86,6 +97,8 @@ impl View {
             scale: 1.0,
             skew: 0.0,
             layer_prop_drag: None,
+            transform_mode: false,
+            transform_drag: None,
         }
     }
 
@@ -1115,6 +1128,10 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         );
         ui.label("skew");
         ui.add(egui::DragValue::new(&mut view.skew).speed(1.0).suffix("°"));
+        ui.checkbox(&mut editor.transform_rotsprite, "rotsprite")
+            .on_hover_text("supersampled rotation instead of nearest-neighbour");
+        ui.checkbox(&mut view.transform_mode, "handles")
+            .on_hover_text("drag corner/edge/rotate handles on the canvas");
     });
     if ui
         .button("apply transform")
@@ -1376,6 +1393,7 @@ fn canvas(
     }
     draw_pending(ui.painter(), editor, view);
     draw_selection(ui.painter(), editor, view);
+    draw_transform_handles(ui.painter(), editor, view);
     draw_floating_paste(ui.painter(), editor, view);
     draw_lasso(ui.painter(), editor, view);
     draw_symmetry(ui.painter(), editor, view, rect);
@@ -1635,6 +1653,207 @@ fn draw_selection(painter: &egui::Painter, editor: &Editor, view: &View) {
     }
 }
 
+fn sprite_point(view: &View, pos: Pos2) -> (f32, f32) {
+    let f = (pos - view.pan) / view.zoom as f32;
+    (f.x, f.y)
+}
+
+fn near_point(a: (f32, f32), b: (f32, f32), zoom: f32) -> bool {
+    (a.0 - b.0).abs() * zoom <= 8.0 && (a.1 - b.1).abs() * zoom <= 8.0
+}
+
+fn transform_pivot(editor: &Editor, sel: &crate::editor::Selection) -> (f32, f32) {
+    editor.transform_pivot.unwrap_or((
+        sel.x as f32 + sel.w as f32 / 2.0,
+        sel.y as f32 + sel.h as f32 / 2.0,
+    ))
+}
+
+fn draw_transform_handles(painter: &egui::Painter, editor: &Editor, view: &View) {
+    if !view.transform_mode {
+        return;
+    }
+    let Some(sel) = editor.current_selection() else {
+        return;
+    };
+    let z = view.zoom as f32;
+    let (bx, by) = (sel.x as f32, sel.y as f32);
+    let (bw, bh) = (sel.w as f32, sel.h as f32);
+    let at = |x: f32, y: f32| view.pan + Vec2::new(x, y) * z;
+    let white = Color32::WHITE;
+    let dark = Color32::from_gray(30);
+    for (x, y) in [(bx, by), (bx + bw, by), (bx, by + bh), (bx + bw, by + bh)] {
+        let p = at(x, y);
+        let r = Rect::from_center_size(p, Vec2::splat(8.0));
+        painter.rect_filled(r, 0.0, white);
+        painter.rect_stroke(r, 0.0, Stroke::new(1.0, dark), StrokeKind::Inside);
+    }
+    for (x, y) in [
+        (bx + bw / 2.0, by),
+        (bx + bw / 2.0, by + bh),
+        (bx, by + bh / 2.0),
+        (bx + bw, by + bh / 2.0),
+    ] {
+        let p = at(x, y);
+        painter.circle_filled(p, 3.5, white);
+        painter.circle_stroke(p, 3.5, Stroke::new(1.0, dark));
+    }
+    let top = at(bx + bw / 2.0, by);
+    let rotate = at(bx + bw / 2.0, by - 1.2);
+    painter.line_segment([top, rotate], Stroke::new(1.0, white));
+    painter.circle_filled(rotate, 4.0, white);
+    painter.circle_stroke(rotate, 4.0, Stroke::new(1.0, dark));
+
+    let (px, py) = transform_pivot(editor, &sel);
+    let p = at(px, py);
+    let red = Color32::from_rgb(255, 120, 120);
+    painter.line_segment(
+        [p - Vec2::new(6.0, 0.0), p + Vec2::new(6.0, 0.0)],
+        Stroke::new(1.5, red),
+    );
+    painter.line_segment(
+        [p - Vec2::new(0.0, 6.0), p + Vec2::new(0.0, 6.0)],
+        Stroke::new(1.5, red),
+    );
+}
+
+fn transform_input(
+    editor: &mut Editor,
+    view: &mut View,
+    resp: &egui::Response,
+    w: u32,
+    h: u32,
+) -> bool {
+    use egui::PointerButton as PB;
+    if !view.transform_mode {
+        return false;
+    }
+    let Some(sel) = editor.current_selection() else {
+        return false;
+    };
+    let (bx, by) = (sel.x as f32, sel.y as f32);
+    let (bw, bh) = (sel.w as f32, sel.h as f32);
+    let (px, py) = transform_pivot(editor, &sel);
+    let pos = resp.interact_pointer_pos().unwrap_or_default();
+    let (mx, my) = sprite_point(view, pos);
+    let zoom = view.zoom as f32;
+
+    if resp.drag_started_by(PB::Primary) {
+        let corners = [(bx, by), (bx + bw, by), (bx, by + bh), (bx + bw, by + bh)];
+        let mut picked = None;
+        for (i, (cx, cy)) in corners.iter().enumerate() {
+            if near_point((mx, my), (*cx, *cy), zoom) {
+                picked = Some(TransformDrag::Scale {
+                    start: (mx, my),
+                    axis: (if i % 2 == 0 { -1 } else { 1 }, if i < 2 { -1 } else { 1 }),
+                });
+            }
+        }
+        if picked.is_none() && near_point((mx, my), (bx + bw / 2.0, by - 1.2), zoom) {
+            picked = Some(TransformDrag::Rotate {
+                start_angle: (my - py).atan2(mx - px),
+            });
+        }
+        if picked.is_none() {
+            let mids = [
+                (bx + bw / 2.0, by),
+                (bx + bw / 2.0, by + bh),
+                (bx, by + bh / 2.0),
+                (bx + bw, by + bh / 2.0),
+            ];
+            if mids
+                .iter()
+                .any(|&(x, y)| near_point((mx, my), (x, y), zoom))
+            {
+                picked = Some(TransformDrag::Skew { start: (mx, my) });
+            }
+        }
+        if picked.is_none() && mx >= bx && mx < bx + bw && my >= by && my < by + bh {
+            let last = (
+                (mx.floor().max(0.0) as u32).min(w.saturating_sub(1)),
+                (my.floor().max(0.0) as u32).min(h.saturating_sub(1)),
+            );
+            picked = Some(TransformDrag::Move {
+                last,
+                started: false,
+            });
+        }
+        view.transform_drag = picked;
+        return true;
+    }
+
+    if let Some(mut drag) = view.transform_drag {
+        if resp.dragged_by(PB::Primary)
+            && let TransformDrag::Move { last, started } = &mut drag
+        {
+            let now = (
+                (mx.floor().max(0.0) as u32).min(w.saturating_sub(1)),
+                (my.floor().max(0.0) as u32).min(h.saturating_sub(1)),
+            );
+            if !*started && now != *last {
+                editor.start_move();
+                *started = true;
+            }
+            if *started {
+                let (dx, dy) = (now.0 as i32 - last.0 as i32, now.1 as i32 - last.1 as i32);
+                if dx != 0 || dy != 0 {
+                    editor.move_paste(dx, dy);
+                }
+            }
+            *last = now;
+        }
+        if resp.drag_stopped_by(PB::Primary) {
+            view.transform_drag = None;
+            match drag {
+                TransformDrag::Move { started, .. } => {
+                    if started {
+                        editor.commit_paste();
+                    }
+                }
+                TransformDrag::Scale { start, axis } => {
+                    let den_x = start.0 - px;
+                    let den_y = start.1 - py;
+                    let sx = if axis.0 == 0 || den_x.abs() < 0.001 {
+                        1.0
+                    } else {
+                        ((mx - px) / den_x).abs().clamp(0.05, 8.0)
+                    };
+                    let sy = if axis.1 == 0 || den_y.abs() < 0.001 {
+                        1.0
+                    } else {
+                        ((my - py) / den_y).abs().clamp(0.05, 8.0)
+                    };
+                    if (sx - 1.0).abs() > 0.001 || (sy - 1.0).abs() > 0.001 {
+                        editor.free_transform(0.0, sx, sy, 0.0);
+                    }
+                }
+                TransformDrag::Rotate { start_angle } => {
+                    let mut deg = ((my - py).atan2(mx - px) - start_angle).to_degrees();
+                    while deg > 180.0 {
+                        deg -= 360.0;
+                    }
+                    while deg < -180.0 {
+                        deg += 360.0;
+                    }
+                    if deg.abs() > 0.01 {
+                        editor.free_transform(deg, 1.0, 1.0, 0.0);
+                    }
+                }
+                TransformDrag::Skew { start } => {
+                    let deg = ((mx - start.0) / bw.max(1.0) * 45.0).clamp(-80.0, 80.0);
+                    if deg.abs() > 0.01 {
+                        editor.free_transform(0.0, 1.0, 1.0, deg);
+                    }
+                }
+            }
+        } else {
+            view.transform_drag = Some(drag);
+        }
+        return true;
+    }
+    true
+}
+
 fn draw_floating_paste(painter: &egui::Painter, editor: &Editor, view: &View) {
     if let (Some(buf), Some(pos)) = (&editor.clipboard, editor.paste_pos) {
         let z = view.zoom as f32;
@@ -1700,6 +1919,10 @@ fn canvas_input(
         && let Some(pos) = resp.hover_pos()
     {
         view.zoom_at(pos, if scroll > 0.0 { 1 } else { -1 });
+    }
+
+    if transform_input(editor, view, &resp, w, h) {
+        return;
     }
 
     // lasso / polygon selection tools
@@ -1881,7 +2104,8 @@ const HELP: &[&str] = &[
     "  :sel expand|contract|border|feather <n>   :sel invert|none|all",
     "  :filter invert|brightness|contrast|hue|saturation|desaturate|posterize|outline|",
     "          blur|sharpen|median|emboss [amount]   :filter curves|levels|balance|convolve ...",
-    "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   (free transform)",
+    "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   :rotsprite on|off",
+    "  :pivot <x> <y>|clear   (free transform about a point)",
     "  :brush <1-64>|square|circle <n>|spacing <pct>|load <png>|save|use|list",
     "  :pressure <0-100>|auto   :spray <dots> [r]   :shade <pct>   :blur <r>",
     "  :contour [1-64] [inside|outside]   (tool depth)",
@@ -1904,6 +2128,22 @@ const HELP: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn transform_helpers_map_screen_and_hit_handles() {
+        let mut view = View::new();
+        view.zoom = 8;
+        view.pan = Pos2::new(10.0, 20.0);
+        assert_eq!(sprite_point(&view, Pos2::new(26.0, 36.0)), (2.0, 2.0));
+        assert!(near_point((1.0, 1.0), (1.5, 1.0), 8.0), "4 screen px");
+        assert!(!near_point((1.0, 1.0), (2.5, 1.0), 8.0), "12 screen px");
+
+        let mut e = Editor::new(4, 4);
+        let sel = crate::editor::Selection::rect(1, 1, 2, 2);
+        assert_eq!(transform_pivot(&e, &sel), (2.0, 2.0));
+        e.transform_pivot = Some((0.0, 0.0));
+        assert_eq!(transform_pivot(&e, &sel), (0.0, 0.0));
+    }
 
     #[test]
     fn wheel_maps_screen_angles() {
