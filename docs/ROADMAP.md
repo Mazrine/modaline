@@ -650,8 +650,15 @@ met; blocked tasks are marked with the reason.
   frame buttons); status/help strings remain English. 4 tests (242 total). Xvfb
   smoke: `pt-BR` rendered `sem título`/`pincel`/`texto`/`simetria` and localized
   frame buttons, `check` reported complete, save/export re-read.
-- [ ] **P5-57 — Preferences dialog** (M) — deps: none.
-  One dialog for editor/grid/export/theme/keys settings.
+- [x] **P5-57 — Preferences dialog** (M) — deps: none.
+  Landed 2026-10-28. `:prefs` opens one `preferences` window with collapsible
+  sections: editor (brush/shape/spacing/pixel-perfect/snap/aspect), grid and
+  canvas (pixel grid, design grid, snap cell, reset zoom/pan), export
+  (sheet/gif/meta/sequence, trim/ignore/merge, scale, open export panel),
+  appearance (theme, UI font size, language), keys (binding/conflict counts,
+  reset) and workspace (layout name, reset). All values are the live
+  editor/view/config fields, so existing persistence applies. UI-only task:
+  Xvfb smoke opened the dialog and showed all sections; 242 tests unchanged.
 - [ ] **P5-58 — Render cache / dirty rects** (L) — deps: none.
   Incremental composite cache, dirty rects, texture reuse; benchmark.
 - [ ] **P5-59 — Undo memory + filter threading** (M) — deps: P5-38.

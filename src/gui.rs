@@ -78,6 +78,8 @@ pub struct View {
     /// Active language spec and its catalog (with English fallback).
     pub language: String,
     pub i18n: crate::i18n::Translator,
+    /// Consolidated preferences dialog (`:prefs`).
+    pub prefs_open: bool,
     /// Mirrored from the editor each frame: 0 = no snapping.
     pub snap_grid: u32,
     pub onion: Onion,
@@ -160,6 +162,7 @@ impl View {
             suppress_text: false,
             language: "en".into(),
             i18n: crate::i18n::Translator::default(),
+            prefs_open: false,
             snap_grid: 0,
             onion: Onion::default(),
             drag_frame: None,
@@ -357,6 +360,7 @@ pub fn draw(
     preview_viewport(ui.ctx(), editor, view);
     history_window(ui.ctx(), editor, view);
     export_window(ui.ctx(), editor, view);
+    preferences_window(ui.ctx(), editor, view);
     file_browser_window(ui.ctx(), editor, view);
 
     if editor.mode == Mode::Help {
@@ -576,6 +580,169 @@ fn file_browser_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View
             });
         });
     view.browser_open = open;
+}
+
+fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
+    if !view.prefs_open {
+        return;
+    }
+    let mut open = view.prefs_open;
+    let mut close_clicked = false;
+    egui::Window::new("preferences")
+        .open(&mut open)
+        .resizable(true)
+        .default_width(430.0)
+        .default_height(520.0)
+        .show(ctx, |ui| {
+            egui::ScrollArea::vertical()
+                .max_height(430.0)
+                .show(ui, |ui| {
+                    egui::CollapsingHeader::new("editor")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label("brush");
+                                ui.add(egui::Slider::new(&mut editor.brush_size, 1..=64));
+                                egui::ComboBox::from_id_salt("prefs_brush")
+                                    .selected_text(editor.brush_kind.name())
+                                    .show_ui(ui, |ui| {
+                                        for kind in [
+                                            BrushKind::Square,
+                                            BrushKind::Circle,
+                                            BrushKind::Custom,
+                                        ] {
+                                            ui.selectable_value(
+                                                &mut editor.brush_kind,
+                                                kind,
+                                                kind.name(),
+                                            );
+                                        }
+                                    });
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label("spacing");
+                                ui.add(
+                                    egui::Slider::new(&mut editor.brush_spacing, 1..=200)
+                                        .suffix("%"),
+                                );
+                                ui.checkbox(&mut editor.pixel_perfect, "pixel perfect");
+                            });
+                            ui.horizontal(|ui| {
+                                ui.checkbox(&mut editor.snap, "snap");
+                                ui.checkbox(&mut view.show_aspect, "wide px");
+                            });
+                        });
+                    egui::CollapsingHeader::new("grid and canvas")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.checkbox(&mut view.show_grid, "pixel grid");
+                                ui.label("grid");
+                                ui.add(egui::DragValue::new(&mut editor.grid).range(1..=64));
+                                ui.label("snap cell");
+                                ui.add(egui::DragValue::new(&mut view.snap_grid).range(0..=64));
+                            });
+                            if ui.button("reset zoom / pan").clicked() {
+                                view.initialized = false;
+                            }
+                        });
+                    egui::CollapsingHeader::new("export").show(ui, |ui| {
+                        let cfg = &mut editor.export_config;
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut cfg.sheet, "sheet");
+                            ui.checkbox(&mut cfg.gif, "gif");
+                            ui.checkbox(&mut cfg.meta, "meta");
+                            ui.checkbox(&mut cfg.sequence, "sequence");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut cfg.trim, "trim");
+                            ui.checkbox(&mut cfg.ignore_empty, "ignore empty");
+                            ui.checkbox(&mut cfg.merge_duplicates, "merge dup");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("scale");
+                            ui.add(egui::DragValue::new(&mut cfg.scale).range(1..=16));
+                            if ui.button("open export panel").clicked() {
+                                view.export_open = true;
+                            }
+                        });
+                    });
+                    egui::CollapsingHeader::new("appearance")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label("theme");
+                                egui::ComboBox::from_id_salt("prefs_theme")
+                                    .selected_text(view.theme.clone())
+                                    .show_ui(ui, |ui| {
+                                        for name in crate::theme::names() {
+                                            if ui
+                                                .selectable_label(view.theme == *name, *name)
+                                                .clicked()
+                                            {
+                                                view.theme = (*name).to_string();
+                                                if let Ok(theme) = crate::theme::resolve(name) {
+                                                    crate::theme::apply(ctx, &theme);
+                                                }
+                                            }
+                                        }
+                                    });
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label("UI font size");
+                                ui.add(egui::Slider::new(&mut view.ui_font_size, 8.0..=32.0));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label("language");
+                                let current = crate::i18n::resolve(&view.language)
+                                    .map(|c| c.name)
+                                    .unwrap_or_else(|_| view.language.clone());
+                                egui::ComboBox::from_id_salt("prefs_lang")
+                                    .selected_text(current)
+                                    .show_ui(ui, |ui| {
+                                        for code in crate::i18n::BUILTINS {
+                                            let name = crate::i18n::builtin(code)
+                                                .map(|c| c.name)
+                                                .unwrap_or_else(|| (*code).to_string());
+                                            if ui
+                                                .selectable_label(view.language == *code, name)
+                                                .clicked()
+                                                && let Ok(catalog) = crate::i18n::resolve(code)
+                                            {
+                                                view.language = (*code).to_string();
+                                                view.i18n = crate::i18n::Translator::new(catalog);
+                                            }
+                                        }
+                                    });
+                            });
+                        });
+                    egui::CollapsingHeader::new("keys").show(ui, |ui| {
+                        ui.label(format!(
+                            "{} actions bound, {} conflicts",
+                            view.keymap.bindings.len(),
+                            view.keymap.conflicts().len()
+                        ));
+                        ui.label("rebind with :bind <action> <chord>; list with :bind list");
+                        if ui.button("reset bindings").clicked() {
+                            view.keymap = crate::keymap::Keymap::default();
+                        }
+                    });
+                    egui::CollapsingHeader::new("workspace").show(ui, |ui| {
+                        ui.label(format!("layout: {}", view.layout.name));
+                        if ui.button("reset layout").clicked() {
+                            view.layout = crate::layout::Layout::default();
+                            view.layout_pending = true;
+                        }
+                    });
+                });
+            ui.separator();
+            ui.horizontal(|ui| {
+                if ui.button("close").clicked() {
+                    close_clicked = true;
+                }
+            });
+        });
+    view.prefs_open = open && !close_clicked;
 }
 
 fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
@@ -3279,6 +3446,7 @@ const HELP: &[&str] = &[
     "  :layout [default|drawing|animation|compact|file.json]   :layout reset|save <file>",
     "  :bind <action> <chord|wheel-up|wheel-down|none>   :bind list|reset",
     "  :lang [en|pt-BR|file.json]   :lang check|save <file>   (runtime language)",
+    "  :prefs   (editor, grid, export, appearance, keys, workspace)",
     "  :slices [<dir> [cols rows|named]]   (list, grid export, or named slices)",
     "  :grad linear|radial   :contour   :textobj <text>   (editable text object)",
     "  :textfont vixel   :textsize <8-64>   :textalign left|center|right",

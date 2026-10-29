@@ -136,6 +136,9 @@ L-shaped corners for the 1 px pencil/eraser.
   transparency checkerboard, cursor + selection + floating-paste previews.
   **Wide pixels** render at the sprite's `pixel_aspect` (checkbox "wide px");
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
+- **preferences dialog**: `:prefs` consolidates editor, grid/canvas, export,
+  appearance (theme/font/language), keys and workspace settings in one window,
+  all backed by the live editor/view fields and existing config persistence.
 - **localization**: JSON catalogs in `lang/` (`en`, `pt-BR`) with English
   fallback; `:lang` switches at runtime, `:lang check` lists missing keys and
   `:lang save` exports. Core labels (theme, brush, text, symmetry, timeline,

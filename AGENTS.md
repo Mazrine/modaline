@@ -40,7 +40,7 @@ thin shells:
 | `ops.rs` | an `Op` list replayed through `Editor::apply` (one undo step) |
 | `config.rs` | `config.json` load/save + the autosave `recovery.vpx` path |
 | `input.rs` | vim keymap + `:` command line (reads `egui::Event`) |
-| `gui.rs` | `View` (zoom/pan), canvas drawing, panels, help overlay |
+| `gui.rs` | `View` (zoom/pan), canvas drawing, panels, preferences/export/help windows |
 | `app.rs` | `eframe::App` + `Doc` tabs: event loop, per-doc view/textures, playback, session persistence |
 | `theme.rs` | JSON themes + built-ins, egui visuals application, UI font/size loading |
 | `keymap.rs` | action layer, chord parsing, conflicts, wheel actions, default suppression |

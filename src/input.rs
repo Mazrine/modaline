@@ -551,6 +551,11 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
         }
         return;
     }
+    if cmd == "prefs" || cmd == "preferences" {
+        view.prefs_open = true;
+        editor.msg = "preferences".into();
+        return;
+    }
     if let Some(rest) = cmd.strip_prefix("lang")
         && (rest.is_empty() || rest.starts_with(char::is_whitespace))
     {

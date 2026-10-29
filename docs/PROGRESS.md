@@ -10,7 +10,7 @@
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-56 localization** (see batch 90).
+- Last completed batch: **P5-57 preferences dialog** (see batch 91).
 
 ## How to resume
 
@@ -460,6 +460,9 @@ Read, in order:
   `:lang` switch/list/check/save, global across tabs and persisted; localized
   core labels. 4 tests (242 total); Xvfb smoke verified pt-BR labels and export.
   Status/help strings remain English (documented).
+91. **P5-57 — preferences dialog** — `:prefs` window with editor, grid/canvas,
+  export, appearance, keys and workspace sections using live config fields.
+  Xvfb smoke verified the dialog and sections; 242 tests unchanged (UI-only).
 
 ## Next step (exact)
 
@@ -468,8 +471,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-57** — preferences dialog (first open task), then continue down the P5
-  roadmap.
+- **P5-58** — render cache / dirty rects (first open task), then continue down
+  the P5 roadmap.
 
 ## Known limitations (do not forget)
 
