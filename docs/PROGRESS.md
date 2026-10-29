@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **207 tests green** (194 lib + 13 bin)
+- `cargo test` → **209 tests green** (196 lib + 13 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-39 export config** (see batch 76).
+- Last completed batch: **P5-40 PNG sequence** (see batch 77).
 
 ## How to resume
 
@@ -410,6 +410,9 @@ Read, in order:
   ignore-empty, merge dup, scale, trim, padding, sheet/GIF/meta toggles;
   configured sprite derivation, padded sheets, `:exportcfg` and export dialog.
   2 new tests (207 total): derivation and bundle output.
+77. **P5-40 — PNG sequence** — per-frame/per-layer sequence export with scale,
+  token templates, sanitizing, dedupe and `.png` enforcement. 2 new tests (209
+  total): token rendering and 2x2 sequence output.
 
 ## Next step (exact)
 
@@ -418,8 +421,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-40** — PNG sequence + filename templates (first open task), then
-  continue down the P5 roadmap in dependency order.
+- **P5-41** — sheet layouts (first open task), then continue down the P5 roadmap
+  in dependency order.
 
 ## Known limitations (do not forget)
 

@@ -128,6 +128,10 @@ pub struct ExportConfig {
     pub sheet: bool,
     pub gif: bool,
     pub meta: bool,
+    /// One PNG per frame (or per layer) using `filename`.
+    pub sequence: bool,
+    pub filename: String,
+    pub per_layer: bool,
 }
 
 impl Default for ExportConfig {
@@ -145,6 +149,9 @@ impl Default for ExportConfig {
             sheet: true,
             gif: true,
             meta: true,
+            sequence: false,
+            filename: "{title}_{frame}".into(),
+            per_layer: false,
         }
     }
 }
@@ -279,10 +286,115 @@ pub fn export_config(sprite: &Sprite, cfg: &ExportConfig, stem: &Path) -> Result
         export_gif_scaled(&view, &gif_path, scale)?;
         paths.push(gif_path);
     }
+    if cfg.sequence {
+        paths.extend(write_sequence(&view, cfg, stem)?);
+    }
     if paths.is_empty() {
         bail!("export config has no output enabled");
     }
     Ok(paths)
+}
+
+/// Render a sequence filename. `{frame}` is 1-based and zero-padded to three
+/// digits; `{layer}` is `all` when not splitting.
+pub fn render_filename(
+    pattern: &str,
+    title: &str,
+    frame: usize,
+    layer: Option<&str>,
+    tag: &str,
+    duration: u32,
+) -> String {
+    let layer = layer.unwrap_or("all");
+    let mut name = pattern
+        .replace("{title}", title)
+        .replace("{frame}", &format!("{:03}", frame + 1))
+        .replace("{layer}", layer)
+        .replace("{tag}", tag)
+        .replace("{duration}", &duration.to_string());
+    name = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if !name.to_ascii_lowercase().ends_with(".png") {
+        name.push_str(".png");
+    }
+    name
+}
+
+fn unique_path(dir: &Path, base: &str, used: &mut std::collections::HashSet<String>) -> PathBuf {
+    let mut name = base.to_string();
+    let mut n = 2;
+    while !used.insert(name.clone()) {
+        let stem = base.strip_suffix(".png").unwrap_or(base);
+        name = format!("{stem}_{n}.png");
+        n += 1;
+    }
+    dir.join(name)
+}
+
+fn write_sequence(sprite: &Sprite, cfg: &ExportConfig, stem: &Path) -> Result<Vec<PathBuf>> {
+    let dir = stem
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
+    let title = stem
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "vixel".into());
+    let tag = cfg.tag.as_deref().unwrap_or("all");
+    let scale = cfg.scale.clamp(1, 16);
+    let per_layer = cfg.per_layer || cfg.filename.contains("{layer}");
+    let mut used = std::collections::HashSet::new();
+    let mut paths = Vec::new();
+    for frame in 0..sprite.frames.len() {
+        let duration = u32::from(sprite.frames[frame].duration_ms);
+        if per_layer {
+            for layer in 0..sprite.layers.len() {
+                if sprite.layers[layer].group {
+                    continue;
+                }
+                let mut only = sprite.clone();
+                for (i, l) in only.layers.iter_mut().enumerate() {
+                    l.visible = i == layer;
+                }
+                let name = render_filename(
+                    &cfg.filename,
+                    &title,
+                    frame,
+                    Some(&sprite.layers[layer].name),
+                    tag,
+                    duration,
+                );
+                let path = unique_path(dir, &name, &mut used);
+                scaled(frame_image(&only, frame), scale)
+                    .save(&path)
+                    .with_context(|| format!("save {}", path.display()))?;
+                paths.push(path);
+            }
+        } else {
+            let name = render_filename(&cfg.filename, &title, frame, None, tag, duration);
+            let path = unique_path(dir, &name, &mut used);
+            scaled(frame_image(sprite, frame), scale)
+                .save(&path)
+                .with_context(|| format!("save {}", path.display()))?;
+            paths.push(path);
+        }
+    }
+    Ok(paths)
+}
+
+/// Export only a PNG sequence (filters/scale from `cfg`).
+pub fn export_sequence(sprite: &Sprite, cfg: &ExportConfig, stem: &Path) -> Result<Vec<PathBuf>> {
+    let view = configured_sprite(sprite, cfg)?;
+    write_sequence(&view, cfg, stem)
 }
 
 /// The composite of one frame as an image, the unit every export shares.
@@ -784,6 +896,62 @@ pub fn import_sheet(path: &Path, cols: u32, rows: u32) -> Result<Sprite> {
 mod tests {
     use super::*;
     use crate::color::Rgba;
+
+    #[test]
+    fn filename_tokens_render_and_sanitize() {
+        assert_eq!(
+            render_filename(
+                "{title}_{frame}_{layer}_{tag}_{duration}",
+                "walk",
+                0,
+                Some("Layer 1"),
+                "run",
+                100
+            ),
+            "walk_001_Layer_1_run_100.png"
+        );
+        assert_eq!(
+            render_filename("{title}", "walk", 0, None, "all", 100),
+            "walk.png"
+        );
+    }
+
+    #[test]
+    fn sequence_export_writes_frames_and_layers() {
+        let mut s = Sprite::new(2, 2);
+        s.set(0, 0, 0, 0, Rgba::rgb(255, 0, 0));
+        s.add_layer_after(0);
+        let top = s.layers.len() - 1;
+        s.set(top, 0, 1, 1, Rgba::rgb(0, 0, 255));
+        s.add_frame_after(0);
+        let dir = std::env::temp_dir().join(format!("vixel-seq-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let cfg = ExportConfig {
+            sheet: false,
+            gif: false,
+            meta: false,
+            sequence: true,
+            per_layer: true,
+            filename: "{title}_f{frame}_l{layer}".into(),
+            scale: 2,
+            ..Default::default()
+        };
+        let paths = export_sequence(&s, &cfg, &dir.join("walk")).unwrap();
+        assert_eq!(paths.len(), 4, "2 frames x 2 layers");
+        assert!(
+            paths
+                .iter()
+                .any(|p| p.to_string_lossy().contains("walk_f001_lLayer_1"))
+        );
+        assert!(
+            paths
+                .iter()
+                .any(|p| p.to_string_lossy().contains("walk_f002_lLayer_2"))
+        );
+        let img = image::open(&paths[0]).unwrap().to_rgba8();
+        assert_eq!(img.dimensions(), (4, 4), "nearest upscale");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn export_config_filters_merges_trims_and_layers() {

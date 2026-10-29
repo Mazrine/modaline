@@ -1667,6 +1667,15 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     "--no-gif" => cfg.gif = false,
                     "--meta" => cfg.meta = true,
                     "--no-meta" => cfg.meta = false,
+                    "--sequence" => cfg.sequence = true,
+                    "--per-layer" => {
+                        cfg.per_layer = true;
+                        cfg.sequence = true;
+                    }
+                    "--pattern" => match it.next() {
+                        Some(p) => cfg.filename = p.to_string(),
+                        None => bad = true,
+                    },
                     _ => bad = true,
                 }
             }
@@ -1692,7 +1701,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     editor.msg = "usage: :exportcfg <stem> [--frames a b] [--tag name] \
                         [--layers all|visible|indices i,j] [--ignore-empty] [--merge] \
                         [--trim] [--scale n] [--padding n] [--no-sheet] [--no-gif] \
-                        [--no-meta]"
+                        [--no-meta] [--sequence] [--per-layer] [--pattern <tpl>]"
                         .into();
                 }
             }

@@ -118,6 +118,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:tileid <n>` / `:tileflip x\|y\|diag\|none` / `:tilemode manual\|auto\|stack\|pixel` | tile brush ID/flips and editing mode |
 | `:exporttileset [out.png]` | export the retained tileset atlas |
 | `:exportcfg <stem> [--frames a b] [--tag name] [--layers ...] [--merge] [--trim] [--padding n]` | configured sheet/GIF/meta export |
+| `:exportcfg <stem> --sequence [--per-layer] [--pattern <tpl>]` | PNG sequence with `{frame}/{layer}/{tag}/{title}/{duration}` |
 | `:celselect <layer> <frame>` / `:celclear` / `:exportcels <dir>` | multi-cel selection and per-cel PNG export |
 | `:celcopy` / `:celcut` / `:celpaste` / `:celdel` / `:celinfo` | whole-cel clipboard, empty cel vs frame, cel status |
 | `vixel --export-tileset in.ase [out.png]` | headless atlas export |

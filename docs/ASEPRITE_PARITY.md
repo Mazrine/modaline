@@ -161,7 +161,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | `.vpx` project JSON | Covered | — |
 | PNG import/export | Covered | — |
 | Sheet PNG + meta import/export | Covered (vixel format) | — |
-| Image sequence export | Missing | P5-40 |
+| Image sequence export | Covered | P5-40 |
+| Filename templates (`{frame}`, `{layer}`, `{tag}`, `{title}`, `{duration}`) | Covered | P5-40 |
 | JPG / BMP / TGA / WebP | Missing | P5-43 |
 | PCX / FLC / FLI | Missing | P5-43 (evaluate) |
 | Crash recovery | Covered | — |

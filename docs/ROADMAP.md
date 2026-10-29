@@ -516,8 +516,14 @@ met; blocked tasks are marked with the reason.
   [--ignore-empty] [--merge] [--trim] [--scale n] [--padding n] [--no-*]` plus
   a side-panel export dialog. 2 new tests (207 total): filter/merge/trim/layer
   derivation and the sheet/GIF/meta bundle. Dialog is manual-check only.
-- [ ] **P5-40 — PNG sequence + filename templates** (M) — deps: P5-39.
-  `{frame}`, `{layer}`, `{tag}`, `{title}`, `{duration}`; per-frame files.
+- [x] **P5-40 — PNG sequence + filename templates** (M) — deps: P5-39.
+  Landed 2026-10-28. `ExportConfig.sequence` writes one PNG per filtered frame
+  (or per layer with `per_layer`/`{layer}`), honoring scale. Templates support
+  `{frame}` (1-based, 3 digits), `{layer}`, `{tag}`, `{title}` and `{duration}`,
+  sanitize unsafe characters, auto-append `.png` and de-duplicate collisions.
+  `:exportcfg ... --sequence [--per-layer] [--pattern <tpl>]` and dialog fields.
+  2 new tests (209 total): token rendering/sanitizing and a 2-frame × 2-layer
+  sequence with scaling.
 - [ ] **P5-41 — Sheet layouts** (L) — deps: P5-39.
   horizontal/vertical/rows/columns/packed, width/height/columns/rows,
   border/shape/inner padding, extrude, trim/crop.

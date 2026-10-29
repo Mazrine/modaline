@@ -390,7 +390,15 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                 ui.checkbox(&mut cfg.sheet, "sheet");
                 ui.checkbox(&mut cfg.gif, "gif");
                 ui.checkbox(&mut cfg.meta, "meta");
+                ui.checkbox(&mut cfg.sequence, "sequence");
             });
+            if cfg.sequence {
+                ui.horizontal(|ui| {
+                    ui.label("pattern");
+                    ui.add(egui::TextEdit::singleline(&mut cfg.filename).desired_width(180.0));
+                    ui.checkbox(&mut cfg.per_layer, "per layer");
+                });
+            }
             ui.horizontal(|ui| {
                 ui.label("scale");
                 ui.add(egui::DragValue::new(&mut cfg.scale).range(1..=16));
@@ -2838,6 +2846,7 @@ const HELP: &[&str] = &[
     "  :celcopy   :celcut   :celpaste   :celdel (empty cel)   :celinfo",
     "  Ctrl/Cmd-click toggles a cel; Shift-click selects a timeline range",
     "  :exportcfg <stem> [--frames a b] [--tag n] [--layers ...] [--merge] [--trim] [--padding n]",
+    "  :exportcfg <stem> --sequence [--per-layer] [--pattern <tpl>]   (PNG sequence)",
     "  t                  toggle filled shapes (rect / ellipse)",
     "  , / .              prev / next color",
     "  < / >              prev / next layer",
