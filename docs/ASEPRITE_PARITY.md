@@ -23,7 +23,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Tags: name, range, color, playback range | Covered | — |
 | Tag direction + repeat | Covered | — |
 | Tag direction 3 (ping-pong reverse) | Covered | P5-08 |
-| Tag editor UI (create/edit/range/color) | Partial | P5-37 |
+| Tag editor UI (create/edit/range/color) | Covered | P5-37 |
 | Loop / ping-pong playback | Covered | — |
 | Onion skin: count, opacity, tints | Covered | — |
 | Timeline thumbnails | Covered | — |
@@ -32,7 +32,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Empty cel vs empty frame | Covered | P5-35 |
 | Linked cels (authoring + write) | Covered | P5-12 |
 | Cel z-index | Covered | P5-11 |
-| Timeline layer×frame grid + per-cel cells | Missing | P5-37 |
+| Timeline layer×frame grid + per-cel cells | Covered | P5-37 |
 | Preview window / fullscreen | Covered | P5-36 |
 
 ## Layers

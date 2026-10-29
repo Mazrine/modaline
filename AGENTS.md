@@ -137,6 +137,8 @@ thin shells:
   overlay coordinates by `zoom` directly, or wide-pixel sprites drift.
 - Preview state is independent (`View::preview_tick`, `preview_frame`,
   `preview_zoom`); keep it out of the editor's active-frame playback.
+- Timeline grid thumbnails are cached in `View::cel_thumbs` and invalidated by
+  `Editor::revision`; rectangle selection uses `select_cel_rect`.
 - Tile preview extents use `Editor::tile_offsets()`/`tile_x`/`tile_y`; the
   canvas extent and hit area must match or seam clicks land outside.
 - Tilesets live in `Sprite.tilesets` keyed by `Tileset.id`; layers reference

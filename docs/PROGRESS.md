@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **202 tests green** (190 lib + 12 bin)
+- `cargo test` → **204 tests green** (191 lib + 13 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-36 preview window** (see batch 73).
+- Last completed batch: **P5-37 timeline UX** (see batch 74).
 
 ## How to resume
 
@@ -399,6 +399,10 @@ Read, in order:
 73. **P5-36 — preview window** — floating preview with independent frame clock,
   play/pause/loop/zoom/scrubber, optional OS viewport and fullscreen. 1 new test
   (202 total): independent playback/loop/stop.
+74. **P5-37 — timeline UX** — layer×frame grid with per-cel thumbnails, drag
+  rectangle selection, compact onion controls, and a tag editor
+  (name/range/colour/create/delete). 2 new tests (204 total): rectangle+tag
+  mutations and thumbnail sizing.
 
 ## Next step (exact)
 
@@ -407,7 +411,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-37** — timeline UX (first open task), then continue down the P5 roadmap
+- **P5-38** — undo history (first open task), then continue down the P5 roadmap
   in dependency order.
 
 ## Known limitations (do not forget)

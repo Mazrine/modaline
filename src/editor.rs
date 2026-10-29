@@ -809,6 +809,18 @@ impl Editor {
         }
     }
 
+    /// Select a rectangle of cels between two layer/frame corners.
+    pub fn select_cel_rect(&mut self, a: (usize, usize), b: (usize, usize)) {
+        self.cel_selection.clear();
+        let (l0, l1) = (a.0.min(b.0), a.0.max(b.0));
+        let (f0, f1) = (a.1.min(b.1), a.1.max(b.1));
+        for layer in l0..=l1 {
+            for frame in f0..=f1 {
+                self.cel_selection.insert((layer, frame));
+            }
+        }
+    }
+
     /// Select the inclusive layer range on one frame.
     pub fn select_layer_range(&mut self, from: usize, to: usize, frame: usize) {
         let (a, b) = (from.min(to), from.max(to));
@@ -2579,6 +2591,37 @@ impl Editor {
         };
         self.active_tag = Some(idx);
         self.msg = format!("tag '{name}': frames {a}-{b}");
+        self.record_structure(before, at);
+    }
+
+    /// Rename/re-range one tag as a structural undo step.
+    pub fn update_tag(&mut self, idx: usize, name: &str, from: usize, to: usize) {
+        if idx >= self.sprite.tags.len() || name.is_empty() {
+            return;
+        }
+        let last = self.sprite.frames.len().saturating_sub(1);
+        let (a, b) = (from.min(to).min(last), from.max(to).min(last));
+        let before = self.sprite.clone();
+        let at = self.edit_point();
+        let tag = &mut self.sprite.tags[idx];
+        tag.name = name.to_string();
+        tag.from = a;
+        tag.to = b;
+        self.msg = format!("tag '{name}': frames {a}-{b}");
+        self.record_structure(before, at);
+    }
+
+    /// Set the active tag's colour as a structural undo step.
+    pub fn set_tag_color(&mut self, color: Rgba) {
+        let Some(idx) = self.active_tag else {
+            return;
+        };
+        if idx >= self.sprite.tags.len() {
+            return;
+        }
+        let before = self.sprite.clone();
+        let at = self.edit_point();
+        self.sprite.tags[idx].color = color;
         self.record_structure(before, at);
     }
 
@@ -5789,6 +5832,25 @@ mod tests {
         assert_eq!(e.export_cels(&dir).unwrap(), 2);
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cel_rect_and_tag_editor_mutations() {
+        let mut e = Editor::new(2, 2);
+        e.sprite.add_frame_after(0);
+        e.sprite.add_frame_after(1);
+        e.select_cel_rect((0, 0), (0, 2));
+        assert_eq!(e.selected_cels(), vec![(0, 0), (0, 1), (0, 2)]);
+
+        e.set_tag("walk", Some(0), Some(1));
+        let i = e.active_tag.unwrap();
+        e.update_tag(i, "run", 0, 2);
+        assert_eq!(e.sprite.tags[i].name, "run");
+        assert_eq!((e.sprite.tags[i].from, e.sprite.tags[i].to), (0, 2));
+        e.set_tag_color(Rgba::rgb(10, 20, 30));
+        assert_eq!(e.sprite.tags[i].color, Rgba::rgb(10, 20, 30));
+        e.del_tag(Some("run"));
+        assert!(e.sprite.tags.is_empty());
     }
 
     #[test]

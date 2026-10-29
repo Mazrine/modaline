@@ -136,6 +136,10 @@ L-shaped corners for the 1 px pencil/eraser.
   transparency checkerboard, cursor + selection + floating-paste previews.
   **Wide pixels** render at the sprite's `pixel_aspect` (checkbox "wide px");
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
+- **timeline**: switchable layer×frame grid with per-cel thumbnails and drag
+  rectangle selection, plus the compact frame strip. Tag chips show playback
+  ranges and the tag editor edits name/range/colour or creates/deletes tags;
+  onion count/opacity are in the header.
 - **preview**: a floating window (or separate OS viewport) with independent
   play/pause, loop, zoom 1-16 and frame scrubber; fullscreen is available on the
   OS viewport.

@@ -94,6 +94,11 @@ pub struct View {
     preview_key: (usize, u64),
     preview_os_tex: Option<TextureHandle>,
     preview_os_key: (usize, u64),
+    /// Layer×frame timeline grid and its per-cel thumbnail cache.
+    pub timeline_grid: bool,
+    cel_thumbs: Vec<Option<TextureHandle>>,
+    cel_thumbs_revision: u64,
+    pub cel_drag_anchor: Option<(usize, usize)>,
 }
 
 impl View {
@@ -135,6 +140,10 @@ impl View {
             preview_key: (usize::MAX, u64::MAX),
             preview_os_tex: None,
             preview_os_key: (usize::MAX, u64::MAX),
+            timeline_grid: true,
+            cel_thumbs: Vec::new(),
+            cel_thumbs_revision: u64::MAX,
+            cel_drag_anchor: None,
         }
     }
 
@@ -615,6 +624,12 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
                 }
             }
         }
+        ui.checkbox(&mut view.timeline_grid, "grid");
+        ui.checkbox(&mut view.onion.enabled, "onion");
+        if view.onion.enabled {
+            ui.add(egui::DragValue::new(&mut view.onion.count).range(1..=3));
+            ui.add(egui::Slider::new(&mut view.onion.opacity, 0..=255).text("op"));
+        }
         ui.separator();
 
         let count = editor.sprite.frames.len();
@@ -634,63 +649,70 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
         let tw = (th * aspect).clamp(10.0, 120.0);
         let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
 
-        for i in 0..count {
-            if view.thumbs[i].is_none() {
-                let comp = frame_composite(editor, i);
-                upload(ui, &mut view.thumbs[i], &format!("thumb{i}"), comp);
-            }
-            let (rect, resp) = ui.allocate_exact_size(Vec2::new(tw, th), Sense::click_and_drag());
-            draw_checker(ui.painter(), rect, 4.0);
-            if let Some(t) = &view.thumbs[i] {
-                ui.painter().image(t.id(), rect, uv, Color32::WHITE);
-            }
-            if view.drag_frame.is_some() && resp.contains_pointer() {
-                ui.painter().rect_stroke(
-                    rect,
-                    1.0,
-                    Stroke::new(2.0, Color32::from_rgb(120, 200, 255)),
-                    StrokeKind::Inside,
-                );
-            }
-            let stroke = if i == selected {
-                Stroke::new(2.0, Color32::WHITE)
-            } else {
-                Stroke::new(1.0, Color32::from_gray(80))
-            };
-            ui.painter()
-                .rect_stroke(rect, 1.0, stroke, StrokeKind::Inside);
-            if resp.clicked() {
-                let mods = ui.input(|inp| inp.modifiers);
-                if mods.command || mods.ctrl {
-                    editor.toggle_cel_selection(editor.active_layer, i);
-                } else if mods.shift {
-                    editor.select_frame_range(editor.active_layer, editor.active_frame, i);
-                } else {
-                    editor.clear_cel_selection();
+        if view.timeline_grid {
+            timeline_grid(ui, editor, view);
+        } else {
+            for i in 0..count {
+                if view.thumbs[i].is_none() {
+                    let comp = frame_composite(editor, i);
+                    upload(ui, &mut view.thumbs[i], &format!("thumb{i}"), comp);
                 }
-                selected = i;
+                let (rect, resp) =
+                    ui.allocate_exact_size(Vec2::new(tw, th), Sense::click_and_drag());
+                draw_checker(ui.painter(), rect, 4.0);
+                if let Some(t) = &view.thumbs[i] {
+                    ui.painter().image(t.id(), rect, uv, Color32::WHITE);
+                }
+                if view.drag_frame.is_some() && resp.contains_pointer() {
+                    ui.painter().rect_stroke(
+                        rect,
+                        1.0,
+                        Stroke::new(2.0, Color32::from_rgb(120, 200, 255)),
+                        StrokeKind::Inside,
+                    );
+                }
+                let stroke = if i == selected {
+                    Stroke::new(2.0, Color32::WHITE)
+                } else {
+                    Stroke::new(1.0, Color32::from_gray(80))
+                };
+                ui.painter()
+                    .rect_stroke(rect, 1.0, stroke, StrokeKind::Inside);
+                if resp.clicked() {
+                    let mods = ui.input(|inp| inp.modifiers);
+                    if mods.command || mods.ctrl {
+                        editor.toggle_cel_selection(editor.active_layer, i);
+                    } else if mods.shift {
+                        editor.select_frame_range(editor.active_layer, editor.active_frame, i);
+                    } else {
+                        editor.clear_cel_selection();
+                    }
+                    selected = i;
+                }
+                if resp.drag_started() {
+                    view.drag_frame = Some(i);
+                }
+                if let Some(from) = view.drag_frame
+                    && from != i
+                    && resp.contains_pointer()
+                    && ui.input(|inp| inp.pointer.any_released())
+                {
+                    editor.move_frame(from, i);
+                    view.drag_frame = None;
+                    selected = i;
+                }
+                if resp.drag_stopped() && view.drag_frame.is_some() {
+                    view.drag_frame = None;
+                }
+                if resp.hovered() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                }
             }
-            if resp.drag_started() {
-                view.drag_frame = Some(i);
-            }
-            if let Some(from) = view.drag_frame
-                && from != i
-                && resp.contains_pointer()
-                && ui.input(|inp| inp.pointer.any_released())
-            {
-                editor.move_frame(from, i);
-                view.drag_frame = None;
-                selected = i;
-            }
-            if resp.drag_stopped() && view.drag_frame.is_some() {
-                view.drag_frame = None;
-            }
-            if resp.hovered() {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-            }
+            editor.active_frame = selected;
         }
-        editor.active_frame = selected;
 
+        ui.separator();
+        tag_editor(ui, editor);
         ui.separator();
         ui.label("ms:");
         let d = &mut editor.sprite.frames[editor.active_frame].duration_ms;
@@ -748,6 +770,167 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
             .clicked()
         {
             editor.delete_cel();
+        }
+    });
+}
+
+fn cel_image(editor: &Editor, layer: usize, frame: usize) -> egui::ColorImage {
+    let mut cel = editor.sprite.cels[layer][frame].clone();
+    let mut hops = 0;
+    while let Some(target) = cel.link {
+        if target >= editor.sprite.frames.len() || hops > editor.sprite.frames.len() {
+            break;
+        }
+        cel = editor.sprite.cels[layer][target].clone();
+        hops += 1;
+    }
+    let (w, h) = (cel.w.max(1), cel.h.max(1));
+    let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+    for i in 0..(w * h) as usize {
+        let c = cel
+            .pixels
+            .get(i)
+            .copied()
+            .unwrap_or(crate::color::Rgba::TRANSPARENT);
+        rgba.extend_from_slice(&[c.0, c.1, c.2, c.3]);
+    }
+    egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba)
+}
+
+fn timeline_grid(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
+    let frames = editor.sprite.frames.len();
+    let layers = editor.sprite.layers.len();
+    if view.cel_thumbs_revision != editor.revision {
+        view.cel_thumbs_revision = editor.revision;
+        view.cel_thumbs.iter_mut().for_each(|t| *t = None);
+    }
+    view.cel_thumbs.resize(layers.max(1) * frames, None);
+    let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
+    egui::ScrollArea::both()
+        .id_salt("timeline_grid")
+        .max_height(150.0)
+        .show(ui, |ui| {
+            for layer in 0..layers {
+                if editor.sprite.layers[layer].group {
+                    continue;
+                }
+                ui.horizontal(|ui| {
+                    let name = editor.sprite.layers[layer].name.clone();
+                    if ui
+                        .selectable_label(editor.active_layer == layer, name)
+                        .clicked()
+                    {
+                        editor.active_layer = layer;
+                    }
+                    for frame in 0..frames {
+                        let (rect, resp) =
+                            ui.allocate_exact_size(Vec2::splat(22.0), Sense::click_and_drag());
+                        ui.painter().rect_filled(rect, 1.0, Color32::from_gray(28));
+                        let idx = layer * frames + frame;
+                        if view.cel_thumbs[idx].is_none() {
+                            let img = cel_image(editor, layer, frame);
+                            upload(
+                                ui,
+                                &mut view.cel_thumbs[idx],
+                                &format!("cel{layer}_{frame}"),
+                                img,
+                            );
+                        }
+                        if let Some(tex) = &view.cel_thumbs[idx] {
+                            ui.painter().image(tex.id(), rect, uv, Color32::WHITE);
+                        }
+                        let stroke = if editor.cel_selected(layer, frame) {
+                            Stroke::new(2.0, Color32::from_rgb(120, 190, 255))
+                        } else if layer == editor.active_layer && frame == editor.active_frame {
+                            Stroke::new(2.0, Color32::WHITE)
+                        } else {
+                            Stroke::new(1.0, Color32::from_gray(70))
+                        };
+                        ui.painter()
+                            .rect_stroke(rect, 1.0, stroke, StrokeKind::Inside);
+
+                        if resp.clicked() {
+                            let mods = ui.input(|inp| inp.modifiers);
+                            if mods.command || mods.ctrl {
+                                editor.toggle_cel_selection(layer, frame);
+                            } else if mods.shift {
+                                editor.select_cel_rect(
+                                    (editor.active_layer, editor.active_frame),
+                                    (layer, frame),
+                                );
+                            } else {
+                                editor.clear_cel_selection();
+                            }
+                            editor.active_layer = layer;
+                            editor.active_frame = frame;
+                        }
+                        if resp.drag_started() {
+                            view.cel_drag_anchor = Some((layer, frame));
+                            editor.select_cel_rect((layer, frame), (layer, frame));
+                        }
+                        if let Some(anchor) = view.cel_drag_anchor
+                            && resp.contains_pointer()
+                            && ui.input(|inp| inp.pointer.primary_down())
+                        {
+                            editor.select_cel_rect(anchor, (layer, frame));
+                            editor.active_layer = layer;
+                            editor.active_frame = frame;
+                        }
+                        if ui.input(|inp| inp.pointer.any_released()) {
+                            view.cel_drag_anchor = None;
+                        }
+                    }
+                });
+            }
+        });
+}
+
+fn tag_editor(ui: &mut egui::Ui, editor: &mut Editor) {
+    ui.horizontal(|ui| {
+        let idx = editor.active_tag.filter(|i| *i < editor.sprite.tags.len());
+        if let Some(i) = idx {
+            let (mut name, mut from, mut to, mut color) = {
+                let t = &editor.sprite.tags[i];
+                (
+                    t.name.clone(),
+                    t.from,
+                    t.to,
+                    Color32::from_rgba_unmultiplied(t.color.0, t.color.1, t.color.2, t.color.3),
+                )
+            };
+            let mut changed = false;
+            ui.label("tag");
+            changed |= ui
+                .add(egui::TextEdit::singleline(&mut name).desired_width(80.0))
+                .changed();
+            changed |= ui
+                .add(egui::DragValue::new(&mut from).range(0..=editor.sprite.frames.len() - 1))
+                .changed();
+            changed |= ui
+                .add(egui::DragValue::new(&mut to).range(0..=editor.sprite.frames.len() - 1))
+                .changed();
+            changed |= ui.color_edit_button_srgba(&mut color).changed();
+            if changed {
+                editor.update_tag(i, &name, from, to);
+                editor.set_tag_color(crate::color::Rgba(
+                    color.r(),
+                    color.g(),
+                    color.b(),
+                    color.a(),
+                ));
+            }
+            if ui.small_button("del tag").clicked() {
+                let name = editor.sprite.tags[i].name.clone();
+                editor.del_tag(Some(&name));
+            }
+        }
+        if ui
+            .small_button("new tag")
+            .on_hover_text("tag the active frame")
+            .clicked()
+        {
+            let f = editor.active_frame;
+            editor.set_tag("Tag", Some(f), Some(f));
         }
     });
 }
@@ -2549,6 +2732,16 @@ const HELP: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cel_thumbnail_uses_the_cel_size() {
+        let mut e = Editor::new(4, 4);
+        e.sprite.cels[0][0].w = 2;
+        e.sprite.cels[0][0].h = 3;
+        e.sprite.cels[0][0].pixels = vec![crate::color::Rgba::TRANSPARENT; 6];
+        let img = cel_image(&e, 0, 0);
+        assert_eq!(img.size, [2, 3]);
+    }
 
     #[test]
     fn preview_playback_is_independent_and_loops() {

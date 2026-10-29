@@ -258,7 +258,7 @@ with **add/subtract/intersect**, **expand/contract/border/feather/invert** and
 copy/cut/paste/move, **sixteen filters** (curves, levels, balance, median, convolve, emboss…), **free rotate/scale/skew + RotSprite + interactive handles/pivot**, **8x8 bitmap
 text** (text tool with live preview/size/alignment), **brush size 1-64 + custom masks/spacing + pressure**, **pixel-perfect freehand**, **crop/trim**,
 **per-tool inks + alpha lock**, **retained tilesets + tilemap refs (r/w `.ase`)**, **design grid + snap**,
-**multi-stop gradients** (presets, alpha, Bayer dither), **wide-pixel preview**, **independent preview window/OS viewport**, **symmetry painting**
+**multi-stop gradients** (presets, alpha, Bayer dither), **wide-pixel preview**, **independent preview window/OS viewport**, **layer×frame timeline grid + tag editor**, **symmetry painting**
 (mirror or radial,
 including bucket fill and paste), flip H/V + rotate 90° (**selection-aware**),
 stroke-grouped undo/redo (**structural layer/frame/tag edits and panel

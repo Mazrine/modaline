@@ -486,9 +486,14 @@ met; blocked tasks are marked with the reason.
   preview context/revision. 1 new test (202 total): independent playback and
   loop/stop behaviour. Both viewport modes are UI-only and were not
   screenshotted (manual check).
-- [ ] **P5-37 — Timeline UX** (M) — deps: P5-34.
-  Layer×frame grid, onion controls, tag editor, drag multi-select, per-cel
-  thumbnails.
+- [x] **P5-37 — Timeline UX** (M) — deps: P5-34.
+  Landed 2026-10-28. Timeline has a "grid" mode with one row per layer and one
+  cell per frame, per-cel thumbnails cached by revision, and a frame strip as
+  the alternative. Drag across cells selects a rectangle (Ctrl toggles, Shift
+  ranges); onion count/opacity sit in the timeline header. A tag editor edits
+  name/range/colour, deletes the active tag and creates "new tag" at the
+  playhead. 2 new tests (204 total): rectangle selection + tag mutations, and
+  cel thumbnail sizing. Grid/tag UI is manual-check only.
 - [ ] **P5-38 — Undo history** (M) — deps: none.
   History panel; evaluate/implement non-linear undo; otherwise document why
   the linear stack is kept.
