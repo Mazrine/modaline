@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **185 tests green** (175 lib + 10 bin)
+- `cargo test` → **186 tests green** (175 lib + 11 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-25 selection extras** (see batch 62).
+- Last completed batch: **P5-26 wide pixels** (see batch 63).
 
 ## How to resume
 
@@ -358,6 +358,9 @@ Read, in order:
     layer-alpha selection, and mask-only rotate/scale/skew/offset (plus "sel
     only" handles). 2 new tests (185 total): selection sources + fill/stroke,
     mask transform/offset.
+63. **P5-26 — wide pixels** — every canvas overlay/hit-test/fit/zoom uses the
+    aspect-aware `View::cell()`; "wide px" toggles preview. 1 new test (186
+    total): 2:1 cell sizing, hit-testing and fit.
 
 ## Next step (exact)
 
@@ -366,7 +369,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-26** — wide-pixel rendering (first open task), then continue down the P5
+- **P5-27** — tiled-mode options (first open task), then continue down the P5
   roadmap in dependency order.
 
 ## Known limitations (do not forget)

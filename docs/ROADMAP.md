@@ -304,8 +304,13 @@ met; blocked tasks are marked with the reason.
   happens with handles when "sel only" is checked. 2 new tests (185 total):
   colour/alpha selection + fill/stroke, and mask transform/offset. "sel only"
   is UI-only and was not screenshotted (manual check).
-- [ ] **P5-26 — Wide pixels rendering** (S) — deps: none.
-  Render the canvas with `pixel_aspect`, plus a preview toggle.
+- [x] **P5-26 — Wide pixels rendering** (S) — deps: none.
+  Landed 2026-10-28. The canvas, checker, pixel/design grids, selection,
+  floating paste, lasso, symmetry guides, cursor and transform handles all use
+  `View::cell()` (zoom × `pixel_aspect`), as do hit-testing, fit and zoom
+  anchoring. A "wide px" checkbox toggles aspect preview. 1 new test (186
+  total): cell sizing, hit-testing and fit with a 2:1 ratio. Toggle is UI-only
+  and was not screenshotted (manual check: set `:aspect 2 1` and toggle).
 - [ ] **P5-27 — Tiled-mode options** (S) — deps: none.
   Configurable X/Y repeats and preview options; seam wrapping stays.
 

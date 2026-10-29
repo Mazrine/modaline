@@ -133,6 +133,8 @@ thin shells:
 - Free transforms read `transform_pivot` (None = bbox centre) and
   `transform_rotsprite`; handle drags in `gui.rs` apply exactly one transform on
   release. Keep new canvas drag modes out of the paint path.
+- Canvas geometry goes through `View::cell()` (zoom × aspect); never multiply
+  overlay coordinates by `zoom` directly, or wide-pixel sprites drift.
 - Selection masks are sprite-sized grids (`selection_grid`/`grid_to_selection`);
   fill/stroke and mask transforms go through the paint/put helpers so clipping
   and undo stay correct. `transform_selection_mask` is mask-only; the pixel

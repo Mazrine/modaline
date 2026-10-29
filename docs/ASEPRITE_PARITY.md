@@ -69,7 +69,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | sRGB/linear working profiles | Covered (vixel) | — |
 | ICC embedding (`.ase` 0x2007) | Covered | P5-09 |
 | Background colour sprite property | Missing | P5-60 |
-| Wide pixels rendering (pixel ratio) | Partial (metadata) | P5-26 |
+| Wide pixels rendering (pixel ratio) | Covered | P5-26 |
 
 ## Drawing and tools
 

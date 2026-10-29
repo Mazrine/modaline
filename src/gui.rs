@@ -43,6 +43,10 @@ pub struct View {
     pub pan: Pos2,
     pub initialized: bool,
     pub show_grid: bool,
+    /// Render sprite pixels at their aspect ratio (Aseprite pixel ratio).
+    pub show_aspect: bool,
+    /// Mirrored from the sprite each frame; (1,1) when aspect preview is off.
+    pub pixel_scale: (u16, u16),
     /// The window's inner size as of the last frame, persisted on exit.
     pub window: (f32, f32),
     /// "dark" or "light"; applied to the whole context when it changes.
@@ -84,6 +88,8 @@ impl View {
             pan: Pos2::ZERO,
             initialized: false,
             show_grid: true,
+            show_aspect: true,
+            pixel_scale: (1, 1),
             window: (1280.0, 800.0),
             theme: "dark".into(),
             snap_grid: 0,
@@ -118,6 +124,24 @@ impl View {
     }
 
     /// Zoom by one step, anchoring the pixel currently under `pos`.
+    /// Screen size of one sprite pixel.
+    pub fn cell(&self) -> Vec2 {
+        let (ax, ay) = if self.show_aspect {
+            self.pixel_scale
+        } else {
+            (1, 1)
+        };
+        Vec2::new(
+            self.zoom as f32 * ax.max(1) as f32,
+            self.zoom as f32 * ay.max(1) as f32,
+        )
+    }
+
+    fn sprite_xy(&self, x: f32, y: f32) -> Pos2 {
+        let cell = self.cell();
+        self.pan + Vec2::new(x * cell.x, y * cell.y)
+    }
+
     pub fn zoom_at(&mut self, pos: Pos2, dir: i32) {
         let new_zoom = if dir >= 0 {
             self.zoom.saturating_add(1)
@@ -128,22 +152,33 @@ impl View {
         if new_zoom == self.zoom {
             return;
         }
-        let f = (pos - self.pan) / self.zoom as f32;
-        self.pan = pos - f * new_zoom as f32;
+        let cell = self.cell();
+        let f = Vec2::new((pos - self.pan).x / cell.x, (pos - self.pan).y / cell.y);
         self.zoom = new_zoom;
+        let cell = self.cell();
+        self.pan = pos - Vec2::new(f.x * cell.x, f.y * cell.y);
     }
 
     fn fit(&mut self, panel: Rect, w: u32, h: u32) {
-        let z = ((panel.width() / w as f32).min(panel.height() / h as f32) * 0.85)
-            .floor()
-            .max(1.0) as u32;
+        let (ax, ay) = if self.show_aspect {
+            self.pixel_scale
+        } else {
+            (1, 1)
+        };
+        let zx = panel.width() / (w.max(1) as f32 * ax.max(1) as f32);
+        let zy = panel.height() / (h.max(1) as f32 * ay.max(1) as f32);
+        let z = (zx.min(zy) * 0.85).floor().max(1.0) as u32;
         self.zoom = z.clamp(1, 64);
-        let size = Vec2::new((w * self.zoom) as f32, (h * self.zoom) as f32);
+        let size = Vec2::new(
+            w as f32 * self.zoom as f32 * ax as f32,
+            h as f32 * self.zoom as f32 * ay as f32,
+        );
         self.pan = panel.center() - size * 0.5;
     }
 
     fn screen_to_pixel(&self, pos: Pos2, w: u32, h: u32) -> Option<(u32, u32)> {
-        let f = (pos - self.pan) / self.zoom as f32;
+        let cell = self.cell();
+        let f = Vec2::new((pos - self.pan).x / cell.x, (pos - self.pan).y / cell.y);
         let (x, y) = (f.x.floor(), f.y.floor());
         if x < 0.0 || y < 0.0 || x >= w as f32 || y >= h as f32 {
             None
@@ -160,7 +195,8 @@ impl View {
     /// Like `screen_to_pixel` but accepts the 3x3 tile preview around the
     /// canvas and folds those clicks back into the sprite.
     fn screen_to_pixel_wrapped(&self, pos: Pos2, w: u32, h: u32) -> Option<(u32, u32)> {
-        let f = (pos - self.pan) / self.zoom as f32;
+        let cell = self.cell();
+        let f = Vec2::new((pos - self.pan).x / cell.x, (pos - self.pan).y / cell.y);
         let (x, y) = (f.x.floor(), f.y.floor());
         let (wf, hf) = (w.max(1) as f32, h.max(1) as f32);
         if x < -wf || y < -hf || x >= 2.0 * wf || y >= 2.0 * hf {
@@ -630,6 +666,8 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     });
     ui.checkbox(&mut view.show_grid, "pixel grid");
+    ui.checkbox(&mut view.show_aspect, "wide px")
+        .on_hover_text("render with the sprite's pixel aspect ratio");
     ui.checkbox(&mut view.onion.enabled, "onion skin");
     if view.onion.enabled {
         ui.horizontal(|ui| {
@@ -1314,6 +1352,7 @@ fn canvas(
 ) {
     let (w, h) = (editor.sprite.width, editor.sprite.height);
     let panel = ui.max_rect();
+    view.pixel_scale = editor.sprite.pixel_aspect;
 
     upload(
         ui,
@@ -1329,16 +1368,17 @@ fn canvas(
     reveal_cursor(editor, view, panel);
 
     let tex = texture.as_ref().unwrap();
-    let size = Vec2::new((w * view.zoom) as f32, (h * view.zoom) as f32);
+    let cell = view.cell();
+    let size = Vec2::new(w as f32 * cell.x, h as f32 * cell.y);
     let rect = Rect::from_min_size(view.pan, size);
     let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
 
     ui.painter().rect_filled(panel, 0.0, Color32::from_gray(18));
-    draw_checker(ui.painter(), rect, view.zoom as f32);
+    draw_checker(ui.painter(), rect, cell.x.min(cell.y).max(4.0));
     if editor.tile_mode {
         // Seamless preview: the sprite repeated 3x3, neighbours dimmed.
         let full = Rect::from_min_size(view.pan - size, size * 3.0);
-        draw_checker(ui.painter(), full, view.zoom as f32);
+        draw_checker(ui.painter(), full, cell.x.min(cell.y).max(4.0));
         for dy in -1..=1 {
             for dx in -1..=1 {
                 if dx == 0 && dy == 0 {
@@ -1391,10 +1431,10 @@ fn canvas(
 
     view.snap_grid = if editor.snap { editor.grid } else { 0 };
     if view.show_grid && view.zoom >= 6 {
-        draw_grid(ui.painter(), rect, view.zoom as f32, w, h);
+        draw_grid(ui.painter(), rect, cell, w, h);
     }
     if editor.grid > 1 && view.zoom * editor.grid >= 4 {
-        draw_design_grid(ui.painter(), rect, view.zoom as f32, w, h, editor.grid);
+        draw_design_grid(ui.painter(), rect, cell, w, h, editor.grid);
     }
     draw_pending(ui.painter(), editor, view);
     draw_selection(ui.painter(), editor, view);
@@ -1466,17 +1506,17 @@ fn draw_checker(painter: &egui::Painter, rect: Rect, zoom: f32) {
     }
 }
 
-fn draw_grid(painter: &egui::Painter, rect: Rect, zoom: f32, w: u32, h: u32) {
+fn draw_grid(painter: &egui::Painter, rect: Rect, cell: Vec2, w: u32, h: u32) {
     let stroke = Stroke::new(1.0, Color32::from_white_alpha(40));
     for x in 0..=w {
-        let sx = rect.min.x + x as f32 * zoom;
+        let sx = rect.min.x + x as f32 * cell.x;
         painter.line_segment(
             [Pos2::new(sx, rect.min.y), Pos2::new(sx, rect.max.y)],
             stroke,
         );
     }
     for y in 0..=h {
-        let sy = rect.min.y + y as f32 * zoom;
+        let sy = rect.min.y + y as f32 * cell.y;
         painter.line_segment(
             [Pos2::new(rect.min.x, sy), Pos2::new(rect.max.x, sy)],
             stroke,
@@ -1485,11 +1525,11 @@ fn draw_grid(painter: &egui::Painter, rect: Rect, zoom: f32, w: u32, h: u32) {
 }
 
 /// The design grid: every `step` sprite pixels, brighter than the pixel grid.
-fn draw_design_grid(painter: &egui::Painter, rect: Rect, zoom: f32, w: u32, h: u32, step: u32) {
+fn draw_design_grid(painter: &egui::Painter, rect: Rect, cell: Vec2, w: u32, h: u32, step: u32) {
     let stroke = Stroke::new(1.0, Color32::from_rgba_unmultiplied(120, 190, 255, 70));
     let mut x = 0;
     while x <= w {
-        let sx = rect.min.x + x as f32 * zoom;
+        let sx = rect.min.x + x as f32 * cell.x;
         painter.line_segment(
             [Pos2::new(sx, rect.min.y), Pos2::new(sx, rect.max.y)],
             stroke,
@@ -1498,7 +1538,7 @@ fn draw_design_grid(painter: &egui::Painter, rect: Rect, zoom: f32, w: u32, h: u
     }
     let mut y = 0;
     while y <= h {
-        let sy = rect.min.y + y as f32 * zoom;
+        let sy = rect.min.y + y as f32 * cell.y;
         painter.line_segment(
             [Pos2::new(rect.min.x, sy), Pos2::new(rect.max.x, sy)],
             stroke,
@@ -1536,11 +1576,14 @@ fn draw_pending(painter: &egui::Painter, editor: &Editor, view: &View) {
                 editor.cursor.1 as i32,
             ),
         };
-        let z = view.zoom as f32;
+        let cell = view.cell();
         let color = Color32::from_rgba_unmultiplied(255, 255, 255, 130);
         for (x, y) in pts {
             painter.rect_filled(
-                Rect::from_min_size(view.pan + Vec2::new(x as f32, y as f32) * z, Vec2::splat(z)),
+                Rect::from_min_size(
+                    view.pan + Vec2::new(x as f32 * cell.x, y as f32 * cell.y),
+                    cell,
+                ),
                 0.0,
                 color,
             );
@@ -1549,7 +1592,7 @@ fn draw_pending(painter: &egui::Painter, editor: &Editor, view: &View) {
 }
 
 fn draw_cursor(painter: &egui::Painter, editor: &Editor, view: &View) {
-    let z = view.zoom as f32;
+    let cell = view.cell();
     let c = editor.cursor;
     let brush = editor.current_brush();
     let ox = c.0 as i32 - brush.w as i32 / 2;
@@ -1561,16 +1604,23 @@ fn draw_cursor(painter: &egui::Painter, editor: &Editor, view: &View) {
                     continue;
                 }
                 let rect = Rect::from_min_size(
-                    view.pan + Vec2::new((ox + bx as i32) as f32, (oy + by as i32) as f32) * z,
-                    Vec2::splat(z),
+                    view.pan
+                        + Vec2::new(
+                            (ox + bx as i32) as f32 * cell.x,
+                            (oy + by as i32) as f32 * cell.y,
+                        ),
+                    cell,
                 );
                 painter.rect_filled(rect, 0.0, Color32::from_white_alpha(45));
             }
         }
     }
     let bounds = Rect::from_min_size(
-        view.pan + Vec2::new(ox as f32, oy as f32) * z,
-        Vec2::new(brush.w.max(1) as f32, brush.h.max(1) as f32) * z,
+        view.pan + Vec2::new(ox as f32 * cell.x, oy as f32 * cell.y),
+        Vec2::new(
+            brush.w.max(1) as f32 * cell.x,
+            brush.h.max(1) as f32 * cell.y,
+        ),
     );
     painter.rect_stroke(
         bounds,
@@ -1584,11 +1634,11 @@ fn draw_lasso(painter: &egui::Painter, editor: &Editor, view: &View) {
     if editor.lasso_points.len() < 2 {
         return;
     }
-    let z = view.zoom as f32;
+    let cell = view.cell();
     let pts: Vec<Pos2> = editor
         .lasso_points
         .iter()
-        .map(|&(x, y)| view.pan + Vec2::new((x as f32 + 0.5) * z, (y as f32 + 0.5) * z))
+        .map(|&(x, y)| view.pan + Vec2::new((x as f32 + 0.5) * cell.x, (y as f32 + 0.5) * cell.y))
         .collect();
     let stroke = Stroke::new(1.5, Color32::WHITE);
     for w in pts.windows(2) {
@@ -1603,10 +1653,9 @@ fn draw_lasso(painter: &egui::Painter, editor: &Editor, view: &View) {
 }
 
 fn draw_symmetry(painter: &egui::Painter, editor: &Editor, view: &View, rect: Rect) {
-    let z = view.zoom as f32;
     let stroke = Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 220, 0, 90));
     let (cx, cy) = editor.symmetry_center();
-    let at = |x: f32, y: f32| view.pan + Vec2::new(x, y) * z;
+    let at = |x: f32, y: f32| view.sprite_xy(x, y);
     if matches!(editor.symmetry, Symmetry::Vertical | Symmetry::Both) {
         let x = at(cx + 0.5, 0.0).x;
         painter.line_segment([Pos2::new(x, rect.min.y), Pos2::new(x, rect.max.y)], stroke);
@@ -1629,15 +1678,19 @@ fn draw_symmetry(painter: &egui::Painter, editor: &Editor, view: &View, rect: Re
 
 fn draw_selection(painter: &egui::Painter, editor: &Editor, view: &View) {
     if let Some(sel) = editor.current_selection() {
-        let z = view.zoom as f32;
+        let cell = view.cell();
         let fill = Color32::from_rgba_unmultiplied(120, 160, 255, 60);
         for yy in 0..sel.h {
             for xx in 0..sel.w {
                 if sel.mask[(yy * sel.w + xx) as usize] {
                     painter.rect_filled(
                         Rect::from_min_size(
-                            view.pan + Vec2::new((sel.x + xx) as f32, (sel.y + yy) as f32) * z,
-                            Vec2::splat(z),
+                            view.pan
+                                + Vec2::new(
+                                    (sel.x + xx) as f32 * cell.x,
+                                    (sel.y + yy) as f32 * cell.y,
+                                ),
+                            cell,
                         ),
                         0.0,
                         fill,
@@ -1646,8 +1699,8 @@ fn draw_selection(painter: &egui::Painter, editor: &Editor, view: &View) {
             }
         }
         let r = Rect::from_min_size(
-            view.pan + Vec2::new(sel.x as f32, sel.y as f32) * z,
-            Vec2::new(sel.w as f32 * z, sel.h as f32 * z),
+            view.pan + Vec2::new(sel.x as f32 * cell.x, sel.y as f32 * cell.y),
+            Vec2::new(sel.w as f32 * cell.x, sel.h as f32 * cell.y),
         );
         painter.rect_stroke(
             r,
@@ -1659,8 +1712,8 @@ fn draw_selection(painter: &egui::Painter, editor: &Editor, view: &View) {
 }
 
 fn sprite_point(view: &View, pos: Pos2) -> (f32, f32) {
-    let f = (pos - view.pan) / view.zoom as f32;
-    (f.x, f.y)
+    let cell = view.cell();
+    ((pos - view.pan).x / cell.x, (pos - view.pan).y / cell.y)
 }
 
 fn near_point(a: (f32, f32), b: (f32, f32), zoom: f32) -> bool {
@@ -1681,10 +1734,9 @@ fn draw_transform_handles(painter: &egui::Painter, editor: &Editor, view: &View)
     let Some(sel) = editor.current_selection() else {
         return;
     };
-    let z = view.zoom as f32;
     let (bx, by) = (sel.x as f32, sel.y as f32);
     let (bw, bh) = (sel.w as f32, sel.h as f32);
-    let at = |x: f32, y: f32| view.pan + Vec2::new(x, y) * z;
+    let at = |x: f32, y: f32| view.sprite_xy(x, y);
     let white = Color32::WHITE;
     let dark = Color32::from_gray(30);
     for (x, y) in [(bx, by), (bx + bw, by), (bx, by + bh), (bx + bw, by + bh)] {
@@ -1741,7 +1793,7 @@ fn transform_input(
     let (px, py) = transform_pivot(editor, &sel);
     let pos = resp.interact_pointer_pos().unwrap_or_default();
     let (mx, my) = sprite_point(view, pos);
-    let zoom = view.zoom as f32;
+    let zoom = view.cell().x.min(view.cell().y);
 
     if resp.drag_started_by(PB::Primary) {
         let corners = [(bx, by), (bx + bw, by), (bx, by + bh), (bx + bw, by + bh)];
@@ -1879,7 +1931,7 @@ fn transform_input(
 
 fn draw_floating_paste(painter: &egui::Painter, editor: &Editor, view: &View) {
     if let (Some(buf), Some(pos)) = (&editor.clipboard, editor.paste_pos) {
-        let z = view.zoom as f32;
+        let cell = view.cell();
         for yy in 0..buf.h {
             for xx in 0..buf.w {
                 let c = buf.pixels[(yy * buf.w + xx) as usize];
@@ -1887,25 +1939,26 @@ fn draw_floating_paste(painter: &egui::Painter, editor: &Editor, view: &View) {
                     continue;
                 }
                 let r = Rect::from_min_size(
-                    view.pan + Vec2::new((pos.0 + xx) as f32, (pos.1 + yy) as f32) * z,
-                    Vec2::splat(z),
+                    view.pan
+                        + Vec2::new((pos.0 + xx) as f32 * cell.x, (pos.1 + yy) as f32 * cell.y),
+                    cell,
                 );
                 painter.rect_filled(r, 0.0, Color32::from_rgba_unmultiplied(c.0, c.1, c.2, 160));
             }
         }
         let r = Rect::from_min_size(
-            view.pan + Vec2::new(pos.0 as f32, pos.1 as f32) * z,
-            Vec2::new(buf.w as f32 * z, buf.h as f32 * z),
+            view.pan + Vec2::new(pos.0 as f32 * cell.x, pos.1 as f32 * cell.y),
+            Vec2::new(buf.w as f32 * cell.x, buf.h as f32 * cell.y),
         );
         painter.rect_stroke(r, 0.0, Stroke::new(1.5, Color32::WHITE), StrokeKind::Inside);
     }
 }
 
 fn reveal_cursor(editor: &Editor, view: &mut View, panel: Rect) {
-    let z = view.zoom as f32;
+    let cell = view.cell();
     let c = editor.cursor;
-    let min = view.pan + Vec2::new(c.0 as f32, c.1 as f32) * z;
-    let max = min + Vec2::splat(z);
+    let min = view.pan + Vec2::new(c.0 as f32 * cell.x, c.1 as f32 * cell.y);
+    let max = min + cell;
     let mut pan = view.pan;
     if max.x > panel.max.x {
         pan.x -= max.x - panel.max.x;
@@ -2153,6 +2206,38 @@ const HELP: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wide_pixels_scale_cells_and_hit_testing() {
+        let mut view = View::new();
+        view.zoom = 8;
+        view.pan = Pos2::new(10.0, 20.0);
+        view.pixel_scale = (2, 1);
+        view.show_aspect = true;
+        assert_eq!(view.cell(), Vec2::new(16.0, 8.0));
+        assert_eq!(
+            view.screen_to_pixel(Pos2::new(27.0, 29.0), 10, 10),
+            Some((1, 1))
+        );
+        assert_eq!(sprite_point(&view, Pos2::new(26.0, 28.0)), (1.0, 1.0));
+
+        view.show_aspect = false;
+        assert_eq!(view.cell(), Vec2::new(8.0, 8.0));
+        assert_eq!(
+            view.screen_to_pixel(Pos2::new(27.0, 29.0), 10, 10),
+            Some((2, 1))
+        );
+
+        let mut fitted = View::new();
+        fitted.pixel_scale = (2, 1);
+        fitted.show_aspect = true;
+        fitted.fit(
+            Rect::from_min_size(Pos2::ZERO, Vec2::new(100.0, 100.0)),
+            10,
+            10,
+        );
+        assert_eq!(fitted.zoom, 4, "fit accounts for the wide cells");
+    }
 
     #[test]
     fn transform_helpers_map_screen_and_hit_handles() {
