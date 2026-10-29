@@ -13,6 +13,7 @@ art editor in Rust (native GUI, not a terminal).
 ## Commands
 
 ```sh
+nix run .                         # build + run the flake package
 nix develop                       # NixOS: LD_LIBRARY_PATH for wayland/xkbcommon
 cargo build
 cargo test

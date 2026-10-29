@@ -1,5 +1,5 @@
 {
-  description = "modaline — a keyboard-first, vim-style pixel art editor";
+  description = "Modaline — a keyboard-first, modal pixel art editor";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
@@ -8,7 +8,7 @@
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
       # winit/glow dlopen these at runtime; keep them on LD_LIBRARY_PATH so
-      # `cargo run` works without steam-run.
+      # both `nix run` and `cargo run` work without steam-run.
       runtimeLibs = with pkgs; [
         wayland
         libxkbcommon
@@ -23,6 +23,35 @@
       ];
       libPath = pkgs.lib.makeLibraryPath runtimeLibs;
     in {
+      packages.${system}.default = pkgs.rustPlatform.buildRustPackage {
+        pname = "modaline";
+        version = "0.1.0";
+        src = self;
+        cargoLock.lockFile = ./Cargo.lock;
+        useFetchCargoVendor = true;
+
+        nativeBuildInputs = with pkgs; [ makeWrapper pkg-config ];
+        buildInputs = runtimeLibs;
+
+        postInstall = ''
+          wrapProgram $out/bin/modaline \
+            --prefix LD_LIBRARY_PATH : "${libPath}"
+        '';
+
+        meta = with pkgs.lib; {
+          description = "A keyboard-first, modal pixel art editor";
+          homepage = "https://github.com/Mazrine/modaline";
+          license = licenses.gpl3Plus;
+          mainProgram = "modaline";
+          platforms = [ "x86_64-linux" ];
+        };
+      };
+
+      apps.${system}.default = {
+        type = "app";
+        program = "${self.packages.${system}.default}/bin/modaline";
+      };
+
       devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [ cargo rustc rustfmt clippy pkg-config ];
         buildInputs = runtimeLibs;

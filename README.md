@@ -128,7 +128,15 @@ API, and the GIF comes from the headless CLI.*
 
 ## Quick start
 
-**NixOS (flake devShell):**
+**Nix (build + run, no local setup):**
+
+```sh
+nix run github:Mazrine/modaline
+nix run github:Mazrine/modaline -- art.ase
+```
+
+The first run compiles the crate and its dependencies; later runs reuse the
+store. For development, use the devShell:
 
 ```sh
 nix develop
