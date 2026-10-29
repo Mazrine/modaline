@@ -161,6 +161,32 @@ mod tests {
     }
 
     #[test]
+    fn every_literal_ui_key_exists_in_both_catalogs() {
+        let en = english();
+        let pt = builtin("pt-BR").unwrap();
+        let mut keys = std::collections::BTreeSet::new();
+        for source in [include_str!("gui.rs"), include_str!("app.rs")] {
+            let mut rest = source;
+            while let Some(pos) = rest.find(".tr(\"") {
+                let tail = &rest[pos + 5..];
+                if let Some(end) = tail.find('"') {
+                    keys.insert(tail[..end].to_string());
+                }
+                rest = tail;
+            }
+        }
+        assert!(keys.contains("help.title"), "the scan found no keys");
+        for key in &keys {
+            assert!(en.strings.contains_key(key), "en.json missing {key}");
+            assert!(pt.strings.contains_key(key), "pt-BR.json missing {key}");
+        }
+        assert!(
+            pt.missing_against(&en).is_empty(),
+            "pt-BR is missing source keys"
+        );
+    }
+
+    #[test]
     fn missing_against_reports_untranslated_source_keys() {
         let en = english();
         let pt = builtin("pt-BR").unwrap();

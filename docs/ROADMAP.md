@@ -748,9 +748,13 @@ Partial or Not supported, so "no unexplained gap" is true again.
   `:scriptroot`, fs write, `Image`+cel write, selection add, absolute-path
   denial all reported in the status line.
 - [ ] **P6-03 — Localization string extraction** (M) — deps: P5-56.
-  Move status, help-overlay, window and command messages to catalog keys;
-  complete `pt-BR`; add a test that the catalog covers every key used by the
-  UI (or an explicit allowlist). Runtime switch must leave no mixed language.
+  Partial landing 2026-10-29: the 96-line help overlay and the files /
+  preferences / export / history / preview window titles are catalog keys,
+  `pt-BR` is complete for every key, and a test scans literal `tr("…")` keys in
+  `gui.rs`/`app.rs` and fails when either catalog lacks one. Still English:
+  preferences/panel labels and the ~400 interpolated status/command messages,
+  which need a message-key schema before they can be translated. The row stays
+  Partial until that second half lands.
 - [x] **P6-04 — Incremental dirty compositing** (L) — deps: P5-58.
   Landed 2026-10-29. `Sprite::composite_rect` composites only a clipped
   rectangle (groups, masks, cel z and blend modes stay per-pixel), and the

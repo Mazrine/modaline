@@ -368,7 +368,7 @@ pub fn draw(
     file_browser_window(ui.ctx(), editor, view);
 
     if editor.mode == Mode::Help {
-        help(ui.ctx());
+        help(ui.ctx(), view);
     }
 }
 
@@ -461,7 +461,7 @@ fn file_browser_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View
         return;
     }
     let mut open = view.browser_open;
-    egui::Window::new("files")
+    egui::Window::new(view.tr("window.files"))
         .open(&mut open)
         .default_size([460.0, 420.0])
         .show(ctx, |ui| {
@@ -592,7 +592,7 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
     }
     let mut open = view.prefs_open;
     let mut close_clicked = false;
-    egui::Window::new("preferences")
+    egui::Window::new(view.tr("window.preferences"))
         .open(&mut open)
         .resizable(true)
         .default_width(430.0)
@@ -771,7 +771,7 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
         return;
     }
     let mut open = view.export_open;
-    egui::Window::new("export")
+    egui::Window::new(view.tr("window.export"))
         .open(&mut open)
         .default_size([320.0, 300.0])
         .show(ctx, |ui| {
@@ -981,7 +981,7 @@ fn history_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
         return;
     }
     let mut open = view.history_open;
-    egui::Window::new("history")
+    egui::Window::new(view.tr("window.history"))
         .open(&mut open)
         .default_size([240.0, 320.0])
         .show(ctx, |ui| {
@@ -1020,7 +1020,7 @@ fn preview_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
         return;
     }
     let mut open = view.preview_open;
-    egui::Window::new("preview")
+    egui::Window::new(view.tr("window.preview"))
         .open(&mut open)
         .resizable(true)
         .default_size([320.0, 240.0])
@@ -3517,13 +3517,13 @@ fn pixel_at(editor: &Editor, view: &View, pos: Pos2, w: u32, h: u32) -> Option<(
 
 // ---- help overlay ----
 
-fn help(ctx: &egui::Context) {
-    egui::Window::new("vixel — vim keys")
+fn help(ctx: &egui::Context, view: &View) {
+    egui::Window::new(view.tr("help.title"))
         .collapsible(false)
         .resizable(false)
         .show(ctx, |ui| {
-            for line in HELP {
-                ui.label(*line);
+            for line in view.i18n.tr("help.text").lines() {
+                ui.label(line);
             }
         });
 }
@@ -3548,105 +3548,6 @@ fn mode_name(m: Mode) -> &'static str {
         Mode::Help => "help",
     }
 }
-
-const HELP: &[&str] = &[
-    "normal mode:",
-    "  hjkl / arrows      move          H J K L   move 8px",
-    "  0 / $ / gg / G     left / right / top / bottom",
-    "  i                  draw mode (paint as you move)",
-    "  x                  erase pixel (vim delete)",
-    "  r / space          paint pixel (fg)",
-    "  b / e / f / c      pencil / eraser / bucket / picker",
-    "  d / R / o          line / rect / ellipse (Enter commits, Esc cancels)",
-    "  z / a / q          gradient / spray / shade",
-    "  n / C              blur / contour outline",
-    "  T                  text tool (click to place; edit in the panel)",
-    "  K                  tile tool (paint tiles; right-click picks)",
-    "  M                  move tool (drag the active cel's content; Esc cancels)",
-    "  v                  visual select (V = all)   then:",
-    "    y                yank (copy)      Y   copy merged",
-    "    x                cut              m   move (cut + float)   p   paste",
-    "  w                  magic wand (select same-color region)",
-    "  L / P              lasso / polygon selection (mouse)",
-    "  s                  cycle symmetry (none / H / V / both)",
-    "  :tile [on|off]|x|y <1-8>|repeats <x> <y>|opacity <0-255>|preview on|off",
-    "  :tileid <n>   :tileflip x|y|diag|none   :tilemode manual|auto|stack|pixel",
-    "  :tilepick   :tileerase   :exporttileset [out.png]   (--export-tileset headless)",
-    "  :celselect <layer> <frame>   :celclear   :exportcels <dir>",
-    "  :celcopy   :celcut   :celpaste   :celdel (empty cel)   :celinfo",
-    "  Ctrl/Cmd-click toggles a cel; Shift-click selects a timeline range",
-    "  Ctrl/Cmd-O opens the files browser; Ctrl/Cmd-Shift-S opens save mode",
-    "  :exportcfg <stem> [--frames a b] [--tag n] [--layers ...] [--merge] [--trim] [--padding n]",
-    "  :exportcfg <stem> --sequence [--per-layer] [--pattern <tpl>]   (PNG sequence)",
-    "  :exportcfg <stem> --layout h|v|rows|columns|packed [--columns n] [--rows n]",
-    "  :exportcfg ... --border n --shape n --inner n --extrude n   (sheet layout)",
-    "  :exportcfg ... --atlas vixel|hash|array --gif-loop n --gif-colors n --gif-dither",
-    "  t                  toggle filled shapes (rect / ellipse)",
-    "  , / .              prev / next color",
-    "  < / >              prev / next layer",
-    "  [ / ]              prev / next frame",
-    "  X                  swap fg / bg",
-    "  u / Ctrl-r         undo / redo",
-    "  + / -              zoom in / out",
-    "  Ctrl-c / x / v     copy / cut / paste (OS clipboard)",
-    "  Ctrl-s / Ctrl-q    save / quit",
-    "  :                  command line",
-    "",
-    "mouse: left=paint fg  right=paint bg  middle=pick  wheel=zoom  middle-drag=pan",
-    "",
-    "commands:",
-    "  :w [file]   :q   :q!   :wq   :new [w h]   :resize w h",
-    "  :newframe / :dupframe / :delframe   (drag a thumbnail to reorder)",
-    "  :tag <name> [from to] / :tagdel [name]   (named frame ranges)",
-    "  :tagdir forward|reverse|pingpong|pingpong-reverse   :tagrepeat <n>   (0 = forever)",
-    "  :framemove <from> <to>   :celz <n>   :link <frame>   :unlink",
-    "  :preferlink on|off   :movelock on|off   :collapse on|off   :layeruuid [new|clear]",
-    "  :newlayer / :dellayer / :layerup / :layerdown / :layername <name>",
-    "  :duplayer   :merge   :flatten   (duplicate / merge down / flatten)",
-    "  :newgroup / :indent / :outdent / :lock / :unlock   (layer groups)",
-    "  :background on|off   :reference on|off   (layer kinds)",
-    "  :mask add|apply|del   (alpha mask: selection if any, else full)",
-    "  :fliph   :flipv   :rot90   :sym none|horizontal|vertical|both",
-    "  :wand <0-255>   :wandall on|off   :contig on|off (wand + bucket)",
-    "  :sel expand|contract|border|feather <n>   :sel invert|none|all",
-    "  :sel color [#hex] [tol]|alpha [all]|rotate|skew <deg>|scale <sx> [sy]|offset <dx> <dy>",
-    "  :fill [#hex]   :stroke [width] [inside|outside] [#hex]   (selection paint)",
-    "  :filter invert|brightness|contrast|hue|saturation|desaturate|posterize|outline|",
-    "          blur|sharpen|median|emboss [amount]   :filter curves|levels|balance|convolve ...",
-    "  :filter cancel   (stop a large-canvas filter; Esc also cancels)",
-    "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   :rotsprite on|off",
-    "  :pivot <x> <y>|clear   (free transform about a point)",
-    "  :brush <1-64>|square|circle <n>|spacing <pct>|load <png>|save|use|list",
-    "  :pressure <0-100>|auto   :spray <dots> [r]   :shade <pct>   :blur <r>",
-    "  :contour [1-64] [inside|outside]   (tool depth)",
-    "  :grad linear|radial|dither <mode>|preset <name>|stop <pct> [#hex]|stops|clear",
-    "  :perfect on|off   :grid <px>   :snap on|off   (brush, grid)",
-    "  :crop [x y w h]   :trim   (crop to a rect/selection, or to content)",
-    "  :ink simple|lockalpha|replace|shading|erase   :alphalock on|off",
-    "  :mode auto|rgba|grayscale|indexed   :dither none|bayer2|bayer4|bayer8|floyd",
-    "  :aspect <x> <y>   :sgrid [x y] <w> <h>",
-    "  :pal preset <name>|insert <i> [#hex]|delete <i>|sort [rgb|luma|hue]|name <i> <name>",
-    "  :profile [srgb|linear|icc <file>|gamma <g>|clear]   (working space / .ase profile)",
-    "  :renderer glow|wgpu    (wgpu also needs a build with --features wgpu)",
-    "  :theme [dark|light|midnight|paper|file.json]   :theme save <file>",
-    "  :uifont <font.ttf|default> [8-32]   (UI font and size, saved in config)",
-    "  :layout [default|drawing|animation|compact|file.json]   :layout reset|save <file>",
-    "  :bind <action> <chord|wheel-up|wheel-down|none>   :bind list|reset",
-    "  :lang [en|pt-BR|file.json]   :lang check|save <file>   (runtime language)",
-    "  :prefs   (editor, grid, export, appearance, keys, workspace)",
-    "  :bgcolor [#rrggbb|clear]   (sprite-properties background colour)",
-    "  :script <file.lua>   :lua <code>   (sandboxed Lua, Aseprite-style app API)",
-    "  :ext install|list|remove|run|themes|theme   (.aseprite-extension packages)",
-    "  :slices [<dir> [cols rows|named]]   (list, grid export, or named slices)",
-    "  :grad linear|radial   :contour   :textobj <text>   (editable text object)",
-    "  :textfont vixel   :textsize <8-64>   :textalign left|center|right",
-    "  :export out.png|.jpg|.bmp|.tga|.webp|.ase|stem [scale 1-16]   :import in.png",
-    "  :importsheet sheet.png [cols rows]   (frames from a sheet + its .json)",
-    "  :importatlas sheet.png [meta.json|xml]   :importseq <dir>   (atlas/sequence)",
-    "  :recent [n]   (last 10 files; drop a file on the window to open it)",
-    "  :closed   :reopen   (list/restore cleanly closed documents)",
-    "  :scriptroot <dir>|clear   (app.fs root; default is the open file's folder)",
-];
 
 #[cfg(test)]
 mod tests {

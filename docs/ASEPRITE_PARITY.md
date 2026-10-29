@@ -219,7 +219,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Keyboard shortcut customization | Covered (actions, rebinding, conflicts, persisted) | P5-55 |
 | Mouse-wheel customization | Covered (wheel-up/down actions) | P5-55 |
 | Workspace layouts | Covered (4 built-ins, JSON layouts, reset, drag sizes) | P5-54 |
-| Localization | Partial (JSON catalogs, runtime switch, English fallback; core labels localized, status/help strings remain English) | P5-56, P6-03 |
+| Localization | Partial (JSON catalogs, runtime switch, English fallback; help overlay and window titles localized; panel labels and status/command messages remain English) | P5-56, P6-03 |
 
 ## Editors, workspace, undo, performance
 

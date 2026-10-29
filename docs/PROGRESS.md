@@ -520,6 +520,13 @@ Read, in order:
   to a legacy extension is refused. 4 tests (278 total) + checked-in fixtures
   (`sample.pcx`, `sample.flc`). CLI `-b sample.flc --save-as` round-trips to
   2 frames at 120 ms.
+105. **P6-03 (partial) — localization extraction** — the help overlay (96 lines,
+  now `help.text`), help title and the files/preferences/export/history/preview
+  window titles are catalog keys; `pt-BR` covers every key; a new test scans
+  literal `tr("…")` keys in `gui.rs`/`app.rs` and fails if either catalog is
+  missing one (1 test, 279 total). Xvfb: `:lang pt-BR` + `?` showed the full
+  Portuguese help and `preferências`. Remaining for P6-03: preferences/panel
+  labels and the interpolated status/command messages.
 
 ## Next step (exact)
 
