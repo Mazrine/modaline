@@ -2742,6 +2742,179 @@ impl Editor {
         self.msg = format!("selection: border {n}");
     }
 
+    /// Fill the current selection (or the whole cel when there is none) with
+    /// one colour, as a single undo step.
+    pub fn fill_selection(&mut self, color: Rgba) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let sel = self.current_selection();
+        self.begin_stroke();
+        for y in 0..h {
+            for x in 0..w {
+                if let Some(s) = &sel
+                    && !s.contains(x, y)
+                {
+                    continue;
+                }
+                self.paint_pixel(x, y, color);
+            }
+        }
+        self.end_stroke();
+        self.msg = "selection: fill".into();
+    }
+
+    /// Paint `width` pixels along the selection edge, inside or outside it.
+    pub fn stroke_selection(&mut self, width: u32, inside: bool, color: Rgba) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        if self.current_selection().is_none() {
+            self.msg = "stroke: no selection".into();
+            return;
+        }
+        let n = width.clamp(1, 64);
+        let mut ring = self.selection_grid();
+        if inside {
+            let mut inner = ring.clone();
+            for _ in 0..n {
+                inner = erode(&inner, w, h);
+            }
+            for i in 0..ring.len() {
+                ring[i] = ring[i] && !inner[i];
+            }
+        } else {
+            let mut outer = ring.clone();
+            for _ in 0..n {
+                outer = dilate(&outer, w, h);
+            }
+            for i in 0..ring.len() {
+                ring[i] = outer[i] && !ring[i];
+            }
+        }
+        self.begin_stroke();
+        for y in 0..h {
+            for x in 0..w {
+                if ring[(y * w + x) as usize] {
+                    self.put_pixel_unclipped(x, y, color);
+                }
+            }
+        }
+        self.end_stroke();
+        self.msg = format!(
+            "selection: stroke {n} {}",
+            if inside { "inside" } else { "outside" }
+        );
+    }
+
+    /// Select every pixel close to `color`, on the active layer or the
+    /// flattened frame.
+    pub fn selection_from_color(&mut self, color: Rgba, tolerance: u8, all_layers: bool) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let (l, f) = (self.active_layer, self.active_frame);
+        let comp = all_layers.then(|| self.sprite.composite(f));
+        let mut g = vec![false; (w * h) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let p = match &comp {
+                    Some(c) => c[(y * w + x) as usize],
+                    None => self.sprite.get(l, f, x, y),
+                };
+                g[(y * w + x) as usize] = if color.3 == 0 {
+                    p.3 == 0
+                } else {
+                    p.3 > 0 && color_close(p, color, tolerance)
+                };
+            }
+        }
+        self.grid_to_selection(&g);
+        self.msg = format!("selection: colour (tolerance {tolerance})");
+    }
+
+    /// Select the opaque pixels of the active layer (or the flattened frame).
+    pub fn selection_from_alpha(&mut self, all_layers: bool) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let (l, f) = (self.active_layer, self.active_frame);
+        let comp = all_layers.then(|| self.sprite.composite(f));
+        let mut g = vec![false; (w * h) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let p = match &comp {
+                    Some(c) => c[(y * w + x) as usize],
+                    None => self.sprite.get(l, f, x, y),
+                };
+                g[(y * w + x) as usize] = p.3 > 0;
+            }
+        }
+        self.grid_to_selection(&g);
+        self.msg = "selection: layer alpha".into();
+    }
+
+    /// Rotate/scale/skew the selection mask itself, without touching pixels.
+    pub fn transform_selection_mask(&mut self, angle_deg: f32, sx: f32, sy: f32, skew_deg: f32) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let src = self.selection_grid();
+        let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0, 0);
+        for y in 0..h {
+            for x in 0..w {
+                if src[(y * w + x) as usize] {
+                    x0 = x0.min(x);
+                    y0 = y0.min(y);
+                    x1 = x1.max(x);
+                    y1 = y1.max(y);
+                }
+            }
+        }
+        if x0 == u32::MAX {
+            self.msg = "selection: none".into();
+            return;
+        }
+        let centre = (
+            x0 as f32 + (x1 - x0 + 1) as f32 / 2.0,
+            y0 as f32 + (y1 - y0 + 1) as f32 / 2.0,
+        );
+        let (px, py) = self.transform_pivot.unwrap_or(centre);
+        let (sx, sy) = (sx.abs().max(0.01), sy.abs().max(0.01));
+        let (sin, cos) = (-angle_deg).to_radians().sin_cos();
+        let tan = (-skew_deg).to_radians().tan();
+        let mut out = vec![false; src.len()];
+        for y in 0..h {
+            for x in 0..w {
+                let mut dx = x as f32 + 0.5 - px;
+                let mut dy = y as f32 + 0.5 - py;
+                dx -= tan * dy;
+                dx /= sx;
+                dy /= sy;
+                let (sxf, syf) = (dx * cos - dy * sin, dx * sin + dy * cos);
+                let (spx, spy) = ((px + sxf).floor(), (py + syf).floor());
+                if spx < 0.0 || spy < 0.0 || spx >= w as f32 || spy >= h as f32 {
+                    continue;
+                }
+                if src[(spy as u32 * w + spx as u32) as usize] {
+                    out[(y * w + x) as usize] = true;
+                }
+            }
+        }
+        self.grid_to_selection(&out);
+        self.msg =
+            format!("selection transform: {angle_deg:.0} deg, {sx:.2}x{sy:.2}, skew {skew_deg:.0}");
+    }
+
+    /// Move the selection mask without moving pixels.
+    pub fn offset_selection(&mut self, dx: i32, dy: i32) {
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let src = self.selection_grid();
+        let mut out = vec![false; src.len()];
+        for y in 0..h as i32 {
+            for x in 0..w as i32 {
+                if !src[(y as u32 * w + x as u32) as usize] {
+                    continue;
+                }
+                let (nx, ny) = (x + dx, y + dy);
+                if nx >= 0 && ny >= 0 && nx < w as i32 && ny < h as i32 {
+                    out[(ny as u32 * w + nx as u32) as usize] = true;
+                }
+            }
+        }
+        self.grid_to_selection(&out);
+    }
+
     /// Soften the edge. A selection mask is one bit per pixel, so the ramp is a
     /// dither: a pixel `d` steps inside the edge survives with probability
     /// `d / n`. Deterministic, so undoing and redoing lands on the same pixels.
@@ -5018,6 +5191,91 @@ mod tests {
             e.sprite.get(l, f, 2, 0),
             Rgba::rgb(10, 10, 10),
             "outside is untouched"
+        );
+    }
+
+    #[test]
+    fn selection_from_colour_alpha_and_fill_stroke() {
+        let mut e = Editor::new(4, 3);
+        let (l, f) = (e.active_layer, e.active_frame);
+        e.sprite.set(l, f, 0, 0, Rgba::rgb(200, 0, 0));
+        e.sprite.set(l, f, 1, 0, Rgba::rgb(0, 0, 200));
+        e.selection_from_alpha(false);
+        let sel = e.selection.clone().unwrap();
+        assert_eq!(sel.mask.iter().filter(|m| **m).count(), 2);
+
+        e.selection_from_color(Rgba::rgb(200, 0, 0), 0, false);
+        let sel = e.selection.clone().unwrap();
+        assert_eq!(sel.mask.iter().filter(|m| **m).count(), 1);
+        assert!(sel.contains(0, 0));
+
+        e.fill_selection(Rgba::rgb(0, 200, 0));
+        assert_eq!(e.sprite.get(l, f, 0, 0), Rgba::rgb(0, 200, 0));
+        assert_eq!(e.sprite.get(l, f, 1, 0), Rgba::rgb(0, 0, 200));
+        e.undo();
+        assert_eq!(e.sprite.get(l, f, 0, 0), Rgba::rgb(200, 0, 0));
+
+        let mut e = Editor::new(6, 6);
+        e.selection = Some(Selection::rect(1, 1, 4, 4));
+        e.stroke_selection(1, true, Rgba::rgb(255, 0, 0));
+        assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::rgb(255, 0, 0));
+        assert_eq!(
+            e.sprite.get(0, 0, 2, 2),
+            Rgba::TRANSPARENT,
+            "interior clear"
+        );
+        assert_eq!(e.sprite.get(0, 0, 0, 1), Rgba::TRANSPARENT);
+
+        let mut e = Editor::new(6, 6);
+        e.selection = Some(Selection::rect(1, 1, 2, 2));
+        e.stroke_selection(1, false, Rgba::rgb(255, 0, 0));
+        assert_eq!(
+            e.sprite.get(0, 0, 0, 1),
+            Rgba::rgb(255, 0, 0),
+            "outside ring"
+        );
+        assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn selection_mask_transforms_and_offsets_without_pixels() {
+        let mut e = Editor::new(8, 8);
+        let (l, f) = (e.active_layer, e.active_frame);
+        e.sprite.set(l, f, 1, 1, Rgba::rgb(9, 9, 9));
+        e.selection = Some(Selection::rect(1, 1, 2, 2));
+
+        e.offset_selection(2, 3);
+        let sel = e.selection.clone().unwrap();
+        assert!(sel.contains(3, 4));
+        assert!(!sel.contains(1, 1));
+        assert_eq!(
+            e.sprite.get(l, f, 1, 1),
+            Rgba::rgb(9, 9, 9),
+            "offset leaves pixels"
+        );
+
+        let before = e
+            .selection
+            .as_ref()
+            .unwrap()
+            .mask
+            .iter()
+            .filter(|m| **m)
+            .count();
+        e.transform_selection_mask(0.0, 2.0, 2.0, 0.0);
+        let after = e
+            .selection
+            .as_ref()
+            .unwrap()
+            .mask
+            .iter()
+            .filter(|m| **m)
+            .count();
+        assert!(after > before, "scale grows the mask: {before} -> {after}");
+        assert_eq!(
+            e.sprite.get(l, f, 1, 1),
+            Rgba::rgb(9, 9, 9),
+            "mask transform leaves pixels"
         );
     }
 

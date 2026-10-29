@@ -56,9 +56,12 @@ L-shaped corners for the 1 px pencil/eraser.
 - **Selection ops** (`:selop` or the toolbar): replace / add / subtract / intersect
   with the existing selection.
 - **Shape ops** (`:sel`, or the toolbar chips): `expand` / `contract` /
-  `border` / `feather <n>`, `invert`, `none`, `all`. They work on a sprite-sized
-  grid, so they can grow past the selection's own bbox; feather is a
-  deterministic dither ramp (a mask is one bit per pixel).
+  `border` / `feather <n>`, `invert`, `none`, `all`, plus `color [#hex] [tol]`,
+  `alpha [all]`, and mask-only `rotate`/`scale`/`skew`/`offset`. They work on a
+  sprite-sized grid, so they can grow past the selection's own bbox; feather is
+  a deterministic dither ramp (a mask is one bit per pixel).
+- **Fill / stroke** (`:fill [#hex]`, `:stroke [width] [inside|outside] [#hex]`)
+  paint the selection interior or its edge as one undo step.
 - **Mask-based**: selection is a bounding box + per-pixel mask, so copy/cut/
   move/paste preserve arbitrary shapes.
 - **Paint clip**: every paint tool — pencil, brush, eraser, shapes, text,

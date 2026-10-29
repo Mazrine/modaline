@@ -83,9 +83,10 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Pixel-perfect freehand | Covered | — |
 | Symmetry (H/V/both/radial, movable centre) | Covered | — |
 | **Selection clips every paint tool** | Covered | P5-02 |
-| Selection stroke / fill commands | Missing | P5-25 |
-| Colour-range selection | Missing | P5-25 |
-| Selection from layer alpha | Missing | P5-25 |
+| Selection stroke / fill commands | Covered | P5-25 |
+| Colour-range selection | Covered | P5-25 |
+| Selection from layer alpha | Covered | P5-25 |
+| Selection transform handles | Covered | P5-25 |
 | Custom brushes (images, spacing, library) | Covered | P5-19 |
 | Brush cursor preview | Covered | P5-19 |
 | Ink modes (simple, lock-alpha, replace, shading, erase) | Covered | P5-18 |

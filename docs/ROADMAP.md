@@ -295,9 +295,15 @@ met; blocked tasks are marked with the reason.
   on release. 2 new tests (183 total: 173 lib + 10 bin): RotSprite vs nearest
   and pivot rotation; handle hit-testing/pivot mapping. Handles are UI-only
   and were not screenshotted (manual check: enable handles and drag a corner).
-- [ ] **P5-25 — Selection extras** (M) — deps: none.
-  Stroke/fill selection, colour-range, selection from layer alpha, selection
-  transform handles.
+- [x] **P5-25 — Selection extras** (M) — deps: none.
+  Landed 2026-10-28. `:fill [#hex]` fills the selection (or cel) and `:stroke
+  [width] [inside|outside] [#hex]` paints its edge, both one undo step.
+  `:sel color [#hex] [tol]` selects matching pixels and `:sel alpha [all]`
+  selects opaque pixels. `:sel rotate|skew <deg>`, `:sel scale <sx> [sy]` and
+  `:sel offset <dx> <dy>` transform/move the mask without pixels; the same
+  happens with handles when "sel only" is checked. 2 new tests (185 total):
+  colour/alpha selection + fill/stroke, and mask transform/offset. "sel only"
+  is UI-only and was not screenshotted (manual check).
 - [ ] **P5-26 — Wide pixels rendering** (S) — deps: none.
   Render the canvas with `pixel_aspect`, plus a preview toggle.
 - [ ] **P5-27 — Tiled-mode options** (S) — deps: none.

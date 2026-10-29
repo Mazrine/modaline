@@ -121,6 +121,9 @@ keyboard-first, but the mouse is fully wired.)
 | `:contig on\|off` | wand and bucket: contiguous region or every matching pixel |
 | `:selop replace\|add\|subtract\|intersect` | how new selections combine |
 | `:sel expand\|contract\|border\|feather <n>` / `:sel invert\|none\|all` | selection shape ops |
+| `:sel color [#hex] [tol]` / `:sel alpha [all]` | colour-range or opaque-pixel selection |
+| `:sel rotate\|skew <deg>` / `:sel scale <sx> [sy]` / `:sel offset <dx> <dy>` | transform the selection mask only |
+| `:fill [#hex]` / `:stroke [width] [inside\|outside] [#hex]` | fill the selection or paint its edge |
 | `:grad linear\|radial` | gradient mode |
 | `:filter <name> [args]` | invert, brightness, contrast, hue, saturation, desaturate, curves, levels, balance, posterize, outline, blur, sharpen, median, convolve, emboss |
 | `:rotate <deg>` / `:scale <sx> [sy]` / `:skew <deg>` | free-transform the selection (or the cel) |

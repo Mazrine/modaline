@@ -957,6 +957,28 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             Some(deg) => editor.free_transform(0.0, 1.0, 1.0, deg),
             None => editor.msg = "usage: :skew <degrees>".into(),
         },
+        "fill" => {
+            let color = arg.and_then(crate::color::parse_hex).unwrap_or(editor.fg);
+            editor.fill_selection(color);
+        }
+        "stroke" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            let width = it.next().and_then(|v| v.parse::<u32>().ok()).unwrap_or(1);
+            let mut inside = true;
+            let mut color = editor.fg;
+            for tok in it {
+                match tok {
+                    "outside" | "out" => inside = false,
+                    "inside" | "in" => inside = true,
+                    _ => {
+                        if let Some(c) = crate::color::parse_hex(tok) {
+                            color = c;
+                        }
+                    }
+                }
+            }
+            editor.stroke_selection(width, inside, color);
+        }
         "rotsprite" => match arg {
             Some("on") | Some("1") => {
                 editor.transform_rotsprite = true;
@@ -1022,7 +1044,8 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "sel" => {
             let mut it = arg.unwrap_or("").split_whitespace();
             let op = it.next().unwrap_or("");
-            let n: u32 = it.next().and_then(|v| v.parse().ok()).unwrap_or(1);
+            let rest: Vec<&str> = it.collect();
+            let n: u32 = rest.first().and_then(|v| v.parse().ok()).unwrap_or(1);
             match op {
                 "expand" | "grow" => editor.selection_expand(n),
                 "contract" | "shrink" => editor.selection_contract(n),
@@ -1031,9 +1054,48 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 "invert" | "inv" => editor.selection_invert(),
                 "none" | "off" => editor.selection_none(),
                 "all" => editor.select_all(),
+                "color" | "colour" | "range" => {
+                    let mut color = editor.fg;
+                    let mut tolerance = editor.wand_tolerance;
+                    for tok in &rest {
+                        if let Some(c) = crate::color::parse_hex(tok) {
+                            color = c;
+                        } else if let Ok(t) = tok.parse::<u8>() {
+                            tolerance = t;
+                        }
+                    }
+                    editor.selection_from_color(color, tolerance, false);
+                }
+                "alpha" => editor.selection_from_alpha(rest.first() == Some(&"all")),
+                "rotate" => match rest.first().and_then(|v| v.parse::<f32>().ok()) {
+                    Some(deg) => editor.transform_selection_mask(deg, 1.0, 1.0, 0.0),
+                    None => editor.msg = "usage: :sel rotate <deg>".into(),
+                },
+                "scale" => {
+                    let sx = rest.first().and_then(|v| v.parse::<f32>().ok());
+                    let sy = rest.get(1).and_then(|v| v.parse::<f32>().ok());
+                    match sx {
+                        Some(sx) => editor.transform_selection_mask(0.0, sx, sy.unwrap_or(sx), 0.0),
+                        None => editor.msg = "usage: :sel scale <sx> [sy]".into(),
+                    }
+                }
+                "skew" => match rest.first().and_then(|v| v.parse::<f32>().ok()) {
+                    Some(deg) => editor.transform_selection_mask(0.0, 1.0, 1.0, deg),
+                    None => editor.msg = "usage: :sel skew <deg>".into(),
+                },
+                "offset" => {
+                    let dx = rest.first().and_then(|v| v.parse::<i32>().ok());
+                    let dy = rest.get(1).and_then(|v| v.parse::<i32>().ok());
+                    match (dx, dy) {
+                        (Some(dx), Some(dy)) => editor.offset_selection(dx, dy),
+                        _ => editor.msg = "usage: :sel offset <dx> <dy>".into(),
+                    }
+                }
                 _ => {
                     editor.msg =
-                        "usage: :sel expand|contract|border|feather <n> | invert | none | all"
+                        "usage: :sel expand|contract|border|feather <n> | invert | none | all | \
+                         color [#hex] [tol] | alpha [all] | rotate|skew <deg> | scale <sx> [sy] | \
+                         offset <dx> <dy>"
                             .into()
                 }
             }

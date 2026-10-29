@@ -72,6 +72,8 @@ pub struct View {
     layer_prop_drag: Option<(usize, LayerProps)>,
     /// Show the transform handles and route canvas drags to them.
     pub transform_mode: bool,
+    /// Transform the selection mask instead of pixels when handles are on.
+    pub transform_selection_only: bool,
     transform_drag: Option<TransformDrag>,
 }
 
@@ -98,6 +100,7 @@ impl View {
             skew: 0.0,
             layer_prop_drag: None,
             transform_mode: false,
+            transform_selection_only: false,
             transform_drag: None,
         }
     }
@@ -1132,6 +1135,8 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             .on_hover_text("supersampled rotation instead of nearest-neighbour");
         ui.checkbox(&mut view.transform_mode, "handles")
             .on_hover_text("drag corner/edge/rotate handles on the canvas");
+        ui.checkbox(&mut view.transform_selection_only, "sel only")
+            .on_hover_text("handles transform the selection mask, not pixels");
     });
     if ui
         .button("apply transform")
@@ -1791,13 +1796,19 @@ fn transform_input(
                 (my.floor().max(0.0) as u32).min(h.saturating_sub(1)),
             );
             if !*started && now != *last {
-                editor.start_move();
+                if !view.transform_selection_only {
+                    editor.start_move();
+                }
                 *started = true;
             }
             if *started {
                 let (dx, dy) = (now.0 as i32 - last.0 as i32, now.1 as i32 - last.1 as i32);
                 if dx != 0 || dy != 0 {
-                    editor.move_paste(dx, dy);
+                    if view.transform_selection_only {
+                        editor.offset_selection(dx, dy);
+                    } else {
+                        editor.move_paste(dx, dy);
+                    }
                 }
             }
             *last = now;
@@ -1806,7 +1817,7 @@ fn transform_input(
             view.transform_drag = None;
             match drag {
                 TransformDrag::Move { started, .. } => {
-                    if started {
+                    if started && !view.transform_selection_only {
                         editor.commit_paste();
                     }
                 }
@@ -1824,7 +1835,11 @@ fn transform_input(
                         ((my - py) / den_y).abs().clamp(0.05, 8.0)
                     };
                     if (sx - 1.0).abs() > 0.001 || (sy - 1.0).abs() > 0.001 {
-                        editor.free_transform(0.0, sx, sy, 0.0);
+                        if view.transform_selection_only {
+                            editor.transform_selection_mask(0.0, sx, sy, 0.0);
+                        } else {
+                            editor.free_transform(0.0, sx, sy, 0.0);
+                        }
                     }
                 }
                 TransformDrag::Rotate { start_angle } => {
@@ -1836,13 +1851,21 @@ fn transform_input(
                         deg += 360.0;
                     }
                     if deg.abs() > 0.01 {
-                        editor.free_transform(deg, 1.0, 1.0, 0.0);
+                        if view.transform_selection_only {
+                            editor.transform_selection_mask(deg, 1.0, 1.0, 0.0);
+                        } else {
+                            editor.free_transform(deg, 1.0, 1.0, 0.0);
+                        }
                     }
                 }
                 TransformDrag::Skew { start } => {
                     let deg = ((mx - start.0) / bw.max(1.0) * 45.0).clamp(-80.0, 80.0);
                     if deg.abs() > 0.01 {
-                        editor.free_transform(0.0, 1.0, 1.0, deg);
+                        if view.transform_selection_only {
+                            editor.transform_selection_mask(0.0, 1.0, 1.0, deg);
+                        } else {
+                            editor.free_transform(0.0, 1.0, 1.0, deg);
+                        }
                     }
                 }
             }
@@ -2102,6 +2125,8 @@ const HELP: &[&str] = &[
     "  :fliph   :flipv   :rot90   :sym none|horizontal|vertical|both",
     "  :wand <0-255>   :wandall on|off   :contig on|off (wand + bucket)",
     "  :sel expand|contract|border|feather <n>   :sel invert|none|all",
+    "  :sel color [#hex] [tol]|alpha [all]|rotate|skew <deg>|scale <sx> [sy]|offset <dx> <dy>",
+    "  :fill [#hex]   :stroke [width] [inside|outside] [#hex]   (selection paint)",
     "  :filter invert|brightness|contrast|hue|saturation|desaturate|posterize|outline|",
     "          blur|sharpen|median|emboss [amount]   :filter curves|levels|balance|convolve ...",
     "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   :rotsprite on|off",

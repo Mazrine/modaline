@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **183 tests green** (173 lib + 10 bin)
+- `cargo test` → **185 tests green** (175 lib + 10 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-24 transform depth** (see batch 61).
+- Last completed batch: **P5-25 selection extras** (see batch 62).
 
 ## How to resume
 
@@ -354,6 +354,10 @@ Read, in order:
     corner/edge/rotate handles with inside-drag move, applied on release.
     `:rotsprite`/`:pivot`; "handles" panel toggle. 2 new tests (183 total):
     RotSprite vs nearest + pivot rotation, handle hit-testing/pivot mapping.
+62. **P5-25 — selection extras** — fill/stroke commands, colour-range and
+    layer-alpha selection, and mask-only rotate/scale/skew/offset (plus "sel
+    only" handles). 2 new tests (185 total): selection sources + fill/stroke,
+    mask transform/offset.
 
 ## Next step (exact)
 
@@ -362,7 +366,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-25** — selection extras (first open task), then continue down the P5
+- **P5-26** — wide-pixel rendering (first open task), then continue down the P5
   roadmap in dependency order.
 
 ## Known limitations (do not forget)
