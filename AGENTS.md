@@ -119,6 +119,9 @@ thin shells:
 - Brush paths go through `apply_ink`; operations that own their pixels (cut,
   transform, paste, contour, filters) must use the exact put path so the active
   ink cannot alter them. Inks are stored per tool in `tool_inks`.
+- Brush masks are `u8` coverage (0-255). Every stamp path calls
+  `stamp_brush_symmetric`, which modulates the paint alpha by coverage; keep
+  freehand, shapes and the cursor preview on `current_brush()`.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not

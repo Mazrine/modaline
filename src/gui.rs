@@ -1,5 +1,6 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, Vec2};
 
+use crate::brush::BrushKind;
 use crate::color::Rgba;
 use crate::editor::{Editor, Ink, LayerProps, Mode, SelectionOp, Shape, Symmetry, Tool};
 use crate::sprite::{BlendMode, ellipse_points, line_points, rect_points};
@@ -491,9 +492,25 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     });
     ui.horizontal(|ui| {
         ui.label("brush");
-        ui.add(egui::Slider::new(&mut editor.brush_size, 1..=16));
+        ui.add(egui::Slider::new(&mut editor.brush_size, 1..=64));
+        egui::ComboBox::from_id_salt("brush_kind")
+            .selected_text(editor.brush_kind.name())
+            .show_ui(ui, |ui| {
+                for kind in [BrushKind::Square, BrushKind::Circle, BrushKind::Custom] {
+                    if ui
+                        .selectable_label(editor.brush_kind == kind, kind.name())
+                        .clicked()
+                    {
+                        editor.set_brush_kind(kind);
+                    }
+                }
+            });
         ui.checkbox(&mut editor.pixel_perfect, "perfect")
             .on_hover_text("drop L-shaped corner pixels while drawing");
+    });
+    ui.horizontal(|ui| {
+        ui.label("spacing");
+        ui.add(egui::Slider::new(&mut editor.brush_spacing, 1..=200).suffix("%"));
     });
     ui.horizontal(|ui| {
         ui.label("ink");
@@ -1439,12 +1456,29 @@ fn draw_pending(painter: &egui::Painter, editor: &Editor, view: &View) {
 fn draw_cursor(painter: &egui::Painter, editor: &Editor, view: &View) {
     let z = view.zoom as f32;
     let c = editor.cursor;
-    let rect = Rect::from_min_size(
-        view.pan + Vec2::new(c.0 as f32, c.1 as f32) * z,
-        Vec2::splat(z),
+    let brush = editor.current_brush();
+    let ox = c.0 as i32 - brush.w as i32 / 2;
+    let oy = c.1 as i32 - brush.h as i32 / 2;
+    if brush.w * brush.h <= 4096 {
+        for by in 0..brush.h {
+            for bx in 0..brush.w {
+                if brush.coverage(bx as i32, by as i32) == 0 {
+                    continue;
+                }
+                let rect = Rect::from_min_size(
+                    view.pan + Vec2::new((ox + bx as i32) as f32, (oy + by as i32) as f32) * z,
+                    Vec2::splat(z),
+                );
+                painter.rect_filled(rect, 0.0, Color32::from_white_alpha(45));
+            }
+        }
+    }
+    let bounds = Rect::from_min_size(
+        view.pan + Vec2::new(ox as f32, oy as f32) * z,
+        Vec2::new(brush.w.max(1) as f32, brush.h.max(1) as f32) * z,
     );
     painter.rect_stroke(
-        rect,
+        bounds,
         0.0,
         Stroke::new(1.5, Color32::WHITE),
         StrokeKind::Inside,
@@ -1775,7 +1809,8 @@ const HELP: &[&str] = &[
     "  :sel expand|contract|border|feather <n>   :sel invert|none|all",
     "  :filter invert|brightness|contrast|hue|saturation|outline|blur|sharpen [amount]",
     "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   (free transform)",
-    "  :brush <1-64>   :perfect on|off   :grid <px>   :snap on|off   (brush, grid)",
+    "  :brush <1-64>|square|circle <n>|spacing <pct>|load <png>|save|use|list",
+    "  :perfect on|off   :grid <px>   :snap on|off   (brush, grid)",
     "  :crop [x y w h]   :trim   (crop to a rect/selection, or to content)",
     "  :ink simple|lockalpha|replace|shading|erase   :alphalock on|off",
     "  :mode auto|rgba|grayscale|indexed   :dither none|bayer2|bayer4|bayer8|floyd",

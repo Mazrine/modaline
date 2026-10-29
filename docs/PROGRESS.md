@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **165 tests green** (156 lib + 9 bin)
+- `cargo test` → **169 tests green** (160 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-18 ink engine** (see batch 55).
+- Last completed batch: **P5-19 custom brushes** (see batch 56).
 
 ## How to resume
 
@@ -327,6 +327,11 @@ Read, in order:
     path. Indexed dabs still snap via `Sprite::set`. 2 new tests (165 total):
     ink math and per-tool/alpha-lock behaviour. `:ink`/`:alphalock` and a panel
     selector.
+56. **P5-19 — custom brushes** — `Brush` coverage masks with square/circle
+    built-ins and PNG customs; percentage spacing; the `vixel/brushes` library
+    (`:brush load|save|use|list`); freehand, shapes and symmetry stamp the
+    mask; cursor previews its coverage. 4 new tests (169 total): builtins, PNG
+    round trip, custom-mask limits, circle/shape/spacing.
 
 ## Next step (exact)
 
@@ -335,7 +340,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-19** — custom brushes (first open task), then continue down the P5
+- **P5-20** — pressure/tablet (first open task), then continue down the P5
   roadmap in dependency order.
 
 ## Known limitations (do not forget)

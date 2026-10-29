@@ -638,13 +638,83 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             }
             _ => editor.msg = "usage: :perfect on|off".into(),
         },
-        "brush" => match arg.and_then(|v| v.parse::<u32>().ok()) {
-            Some(n) => {
-                editor.brush_size = n.clamp(1, 64);
-                editor.msg = format!("brush: {} px", editor.brush_size);
+        "brush" => {
+            let rest = arg.unwrap_or("").trim();
+            let mut it = rest.split_whitespace();
+            match it.next() {
+                Some("square") | Some("circle") => {
+                    let kind = if rest.starts_with("square") {
+                        crate::brush::BrushKind::Square
+                    } else {
+                        crate::brush::BrushKind::Circle
+                    };
+                    match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                        Some(n) => {
+                            editor.brush_size = n.clamp(1, 64);
+                            editor.set_brush_kind(kind);
+                            editor.msg = format!("brush: {} {} px", kind.name(), editor.brush_size);
+                        }
+                        None => editor.msg = "usage: :brush square|circle <1-64>".into(),
+                    }
+                }
+                Some("custom") => {
+                    if editor.custom_brush.is_some() {
+                        editor.set_brush_kind(crate::brush::BrushKind::Custom);
+                    } else {
+                        editor.msg = "no custom brush; use :brush load <file.png>".into();
+                    }
+                }
+                Some("spacing") => match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                    Some(pct) => editor.set_brush_spacing(pct),
+                    None => editor.msg = "usage: :brush spacing <1-200>".into(),
+                },
+                Some("load") => {
+                    let path = it.collect::<Vec<_>>().join(" ");
+                    if path.is_empty() {
+                        editor.msg = "usage: :brush load <file.png>".into();
+                    } else {
+                        if let Err(e) = editor.load_brush(std::path::Path::new(&path)) {
+                            editor.msg = format!("brush load failed: {e}");
+                        }
+                    }
+                }
+                Some("save") => {
+                    let name = it.next().unwrap_or("brush");
+                    if let Err(e) = editor.save_brush(name) {
+                        editor.msg = format!("brush save failed: {e}");
+                    }
+                }
+                Some("use") => match it.next() {
+                    Some(name) => {
+                        if let Err(e) = editor.use_brush(name) {
+                            editor.msg = format!("brush: {e}");
+                        }
+                    }
+                    None => editor.msg = "usage: :brush use <name>".into(),
+                },
+                Some("list") => {
+                    let names = crate::brush::list();
+                    editor.msg = if names.is_empty() {
+                        "brush library: empty".into()
+                    } else {
+                        format!("brushes: {}", names.join(", "))
+                    };
+                }
+                Some(n) => match n.parse::<u32>() {
+                    Ok(n) => {
+                        editor.brush_size = n.clamp(1, 64);
+                        editor.set_brush_kind(crate::brush::BrushKind::Square);
+                        editor.msg = format!("brush: {} px", editor.brush_size);
+                    }
+                    Err(_) => {
+                        editor.msg = "usage: :brush <1-64> | square|circle <n> | \
+                                      spacing <pct> | load <png> | save <name> | use <name> | list"
+                            .into();
+                    }
+                },
+                None => editor.msg = "usage: :brush <1-64>".into(),
             }
-            None => editor.msg = "usage: :brush <1-64>".into(),
-        },
+        }
         "grid" => match arg.and_then(|v| v.parse::<u32>().ok()) {
             Some(n) => {
                 editor.grid = n.max(1);

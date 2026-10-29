@@ -127,7 +127,8 @@ keyboard-first, but the mouse is fully wired.)
 | `:text <string>` | stamp 8x8 bitmap text at the cursor |
 | `:textobj <string>` | create/edit an editable text object (stored in cel user data) |
 | `:grid <px>` / `:snap [on\|off]` | design grid and snapping |
-| `:brush <1-64>` | pencil/eraser brush width (also a panel slider) |
+| `:brush <1-64>` / `:brush square\|circle <n>` / `:brush spacing <pct>` | brush size, built-in shape, stamp spacing |
+| `:brush load\|save\|use\|list [name]` | custom PNG brush and the `vixel/brushes` library |
 | `:ink simple\|lockalpha\|replace\|shading\|erase` / `:alphalock on\|off` | per-tool ink and alpha-locked painting |
 | `:perfect on\|off` | pixel-perfect freehand: drop L-shaped corner pixels |
 | `:mode auto\|rgba\|grayscale\|indexed` / `:aspect <x> <y>` / `:sgrid [x y] <w> <h>` | sprite colour mode, pixel ratio, grid size + origin |
@@ -238,7 +239,7 @@ picker, pencil/eraser/bucket/picker/line/rect/ellipse with **filled shapes**,
 polygon selection**
 with **add/subtract/intersect**, **expand/contract/border/feather/invert** and
 copy/cut/paste/move, **eight filters**, **free rotate/scale/skew**, **8x8 bitmap
-text**, **brush size 1-64**, **pixel-perfect freehand**, **crop/trim**,
+text**, **brush size 1-64 + custom masks/spacing**, **pixel-perfect freehand**, **crop/trim**,
 **per-tool inks + alpha lock**, **design grid + snap**,
 **symmetry painting**
 (mirror or radial,

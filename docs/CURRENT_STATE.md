@@ -32,7 +32,9 @@ ellipse (outline or **filled**), **gradient (linear/radial)**, **spray**,
 all with live preview where applicable — plus **symmetry painting** (mirror or
 radial, including bucket fill and paste). Pencil and eraser share a square
 brush, 1-64 px (`:brush` or the panel slider), clipped at the canvas edges.
-Each tool remembers its own **ink** (`simple`, `lock-alpha`, `replace`,
+Brushes come as **square**, **circle** or a **custom PNG mask** (`:brush
+load|save|use|list`), with percentage **spacing**; the mask previews under the
+cursor and is stamped by freehand, shapes and symmetry. Each tool remembers its own **ink** (`simple`, `lock-alpha`, `replace`,
 `shading`, `erase`; `:ink` or the panel selector), and **alpha lock**
 (`:alphalock`) restricts painting to pixels that are already opaque.
 **Pixel-perfect** freehand (`:perfect on|off`) joins pointer steps and drops

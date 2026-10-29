@@ -245,9 +245,14 @@ met; blocked tasks are marked with the reason.
   resolve through `Sprite::set`. `:ink`, `:alphalock` and a panel selector expose
   it. 2 new tests (165 total): every ink mode's math and per-tool ink/alpha-lock
   behaviour. UI selector not screenshotted (manual check: switch ink and paint).
-- [ ] **P5-19 — Custom brushes** (L) — deps: P5-18.
-  Brush image masks, square/circle built-ins, spacing, library save/load,
-  cursor preview, `for_each_stamp` for pencil/eraser/shapes.
+- [x] **P5-19 — Custom brushes** (L) — deps: P5-18.
+  Landed 2026-10-28. `Brush` coverage masks: square/circle built-ins and PNG
+  custom brushes loaded through `:brush load`, saved to/loaded from the
+  `vixel/brushes` library, with percentage spacing. Freehand interpolation,
+  shapes and symmetry all stamp the mask; the canvas cursor previews its
+  coverage. 4 new tests (169 total): built-in coverage, PNG round trip, custom
+  mask limits, and circle/shape/spacing. UI preview not screenshotted (manual
+  check: load a brush and hover the canvas).
 - [ ] **P5-20 — Pressure/tablet** (M) — deps: P5-19.
   Spike `egui::Event::Touch.force`/eframe mapping; thread `pressure` through
   `paint_at`/`paint_with_tool`; if the backend cannot deliver it, ship a manual

@@ -85,7 +85,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Selection stroke / fill commands | Missing | P5-25 |
 | Colour-range selection | Missing | P5-25 |
 | Selection from layer alpha | Missing | P5-25 |
-| Custom brushes (images, spacing, library) | Missing | P5-19 |
+| Custom brushes (images, spacing, library) | Covered | P5-19 |
+| Brush cursor preview | Covered | P5-19 |
 | Ink modes (simple, lock-alpha, replace, shading, erase) | Covered | P5-18 |
 | Alpha-lock painting flag | Covered | P5-18 |
 | Pressure/tablet sensitivity | Missing | P5-20 |

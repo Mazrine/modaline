@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::brush::{self, Brush, BrushKind};
 use crate::color::Rgba;
 use crate::sprite::{
     AseProfile, Cel, DitherMode, FillOptions, Sprite, TextObject, color_close, ellipse_points,
@@ -295,8 +296,12 @@ pub struct Editor {
     pub tool_inks: [Ink; TOOL_COUNT],
     /// Restrict every ink to pixels that are already opaque.
     pub alpha_lock: bool,
-    /// Pencil/eraser brush width in pixels (a square, clipped at the edges).
+    /// Pencil/eraser brush width in pixels for the built-in shapes.
     pub brush_size: u32,
+    pub brush_kind: BrushKind,
+    pub custom_brush: Option<Brush>,
+    /// Stamp spacing as a percentage of the brush's largest dimension.
+    pub brush_spacing: u32,
     /// Drop L-shaped corner pixels while freehand drawing.
     pub pixel_perfect: bool,
     /// Last points of the current freehand stroke, for the corner filter.
@@ -397,6 +402,9 @@ impl Editor {
             },
             alpha_lock: false,
             brush_size: 1,
+            brush_kind: BrushKind::Square,
+            custom_brush: None,
+            brush_spacing: 100,
             pixel_perfect: false,
             pp: Vec::new(),
             fg,
@@ -899,10 +907,23 @@ impl Editor {
     /// the plain 1 px, no-symmetry path gets the filter; brushes and symmetry
     /// fall back to a single stamp.
     pub fn paint_freehand(&mut self, x: u32, y: u32, color: Rgba) {
-        let plain = self.brush_size == 1 && self.symmetry == Symmetry::None;
+        let plain = self.brush_kind == BrushKind::Square
+            && self.brush_size == 1
+            && self.symmetry == Symmetry::None;
         if !self.pixel_perfect || !plain {
+            let start = self.pp.last().copied().unwrap_or((x, y));
+            let spacing = self.stamp_spacing();
+            let brush = self.current_brush();
+            for (i, (px, py)) in line_points(start.0 as i32, start.1 as i32, x as i32, y as i32)
+                .into_iter()
+                .enumerate()
+            {
+                if i % spacing == 0 {
+                    self.stamp_brush_symmetric(&brush, px, py, color);
+                }
+            }
             self.pp.clear();
-            self.paint_brush_symmetric(x, y, color);
+            self.pp.push((x, y));
             return;
         }
         let start = self.pp.last().copied().unwrap_or((x, y));
@@ -945,21 +966,91 @@ impl Editor {
         }
     }
 
-    /// Paint a square brush of `brush_size` pixels centred on the cursor,
-    /// mirrored by the active symmetry and clipped at the canvas edges.
-    pub fn paint_brush_symmetric(&mut self, x: u32, y: u32, color: Rgba) {
-        let n = self.brush_size.max(1) as i32;
-        let lo = -(n / 2);
-        let hi = n - n / 2;
-        let (w, h) = (self.sprite.width as i32, self.sprite.height as i32);
-        for dy in lo..hi {
-            for dx in lo..hi {
-                let (px, py) = (x as i32 + dx, y as i32 + dy);
-                if (0..w).contains(&px) && (0..h).contains(&py) {
-                    self.paint_symmetric(px as u32, py as u32, color);
+    pub fn current_brush(&self) -> Brush {
+        match self.brush_kind {
+            BrushKind::Square => brush::square(self.brush_size),
+            BrushKind::Circle => brush::circle(self.brush_size),
+            BrushKind::Custom => self
+                .custom_brush
+                .clone()
+                .unwrap_or_else(|| brush::square(self.brush_size)),
+        }
+    }
+
+    pub fn set_brush_kind(&mut self, kind: BrushKind) {
+        self.brush_kind = kind;
+        self.msg = format!("brush: {}", kind.name());
+    }
+
+    pub fn set_brush_spacing(&mut self, percent: u32) {
+        self.brush_spacing = percent.clamp(1, 200);
+        self.msg = format!("brush spacing: {}%", self.brush_spacing);
+    }
+
+    pub fn load_brush(&mut self, path: &std::path::Path) -> anyhow::Result<()> {
+        let brush = brush::load(path)?;
+        self.custom_brush = Some(brush.clone());
+        self.brush_kind = BrushKind::Custom;
+        self.msg = format!("brush: {} ({}x{})", brush.name, brush.w, brush.h);
+        Ok(())
+    }
+
+    pub fn save_brush(&mut self, name: &str) -> anyhow::Result<std::path::PathBuf> {
+        let brush = self.current_brush();
+        let path = brush::save_named(&brush, name)?;
+        self.msg = format!("brush saved: {}", path.display());
+        Ok(path)
+    }
+
+    pub fn use_brush(&mut self, name: &str) -> anyhow::Result<()> {
+        let brush = brush::load_named(name)?;
+        self.custom_brush = Some(brush.clone());
+        self.brush_kind = BrushKind::Custom;
+        self.msg = format!("brush: {} ({}x{})", brush.name, brush.w, brush.h);
+        Ok(())
+    }
+
+    fn stamp_spacing(&self) -> usize {
+        let size = self.current_brush().max_dim() as usize;
+        (size * self.brush_spacing.clamp(1, 200) as usize / 100).max(1)
+    }
+
+    fn stamp_brush_symmetric(&mut self, brush: &Brush, x: u32, y: u32, color: Rgba) {
+        let ox = -(brush.w as i32 / 2);
+        let oy = -(brush.h as i32 / 2);
+        let erase = self.ink() == Ink::Erase;
+        for by in 0..brush.h {
+            for bx in 0..brush.w {
+                let coverage = brush.coverage(bx as i32, by as i32);
+                if coverage == 0 {
+                    continue;
+                }
+                let a = if color.3 == 0 {
+                    if erase { coverage } else { 0 }
+                } else {
+                    (u32::from(color.3) * u32::from(coverage) / 255) as u8
+                };
+                if a == 0 {
+                    continue;
+                }
+                let px = x as i32 + ox + bx as i32;
+                let py = y as i32 + oy + by as i32;
+                if px >= 0
+                    && py >= 0
+                    && (px as u32) < self.sprite.width
+                    && (py as u32) < self.sprite.height
+                {
+                    self.paint_symmetric(px as u32, py as u32, Rgba(color.0, color.1, color.2, a));
                 }
             }
         }
+    }
+
+    /// Paint the active brush mask centred on the cursor, mirrored by the
+    /// active symmetry and clipped at the canvas edges.
+    pub fn paint_brush_symmetric(&mut self, x: u32, y: u32, color: Rgba) {
+        let brush = self.current_brush();
+        self.stamp_brush_symmetric(&brush, x, y, color);
     }
 
     /// Create or edit the active cel's text object and re-rasterise it.
@@ -1270,13 +1361,14 @@ impl Editor {
             Shape::Gradient => unreachable!(),
         };
         self.begin_stroke();
+        let brush = self.current_brush();
         for (x, y) in pts {
             let (x, y) = if self.tile_mode {
                 self.wrap_point(x as i32, y as i32)
             } else {
                 (x, y)
             };
-            self.paint_symmetric(x, y, color);
+            self.stamp_brush_symmetric(&brush, x, y, color);
         }
         self.end_stroke();
     }
@@ -5189,6 +5281,62 @@ mod tests {
         assert_eq!((e.sprite.width, e.sprite.height), (3, 3));
         assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::rgb(9, 9, 9), "2,3 -> 1,1");
         assert_eq!(e.sprite.layers[0].mask.as_ref().unwrap().pixels.len(), 9);
+    }
+
+    #[test]
+    fn custom_brush_mask_limits_which_pixels_paint() {
+        let mut e = Editor::new(5, 5);
+        e.custom_brush = Some(Brush::new("dot", 3, 3, vec![0, 0, 0, 0, 255, 0, 0, 0, 0]));
+        e.brush_kind = BrushKind::Custom;
+        e.fg = Rgba(10, 20, 30, 255);
+        e.begin_stroke();
+        e.paint_with_tool(2, 2);
+        e.end_stroke();
+        assert_eq!(e.sprite.get(0, 0, 2, 2), e.fg);
+        for (x, y) in [(1, 1), (3, 3), (1, 2), (3, 2)] {
+            assert_eq!(
+                e.sprite.get(0, 0, x, y),
+                Rgba::TRANSPARENT,
+                "mask leaves ({x},{y}) alone"
+            );
+        }
+    }
+
+    #[test]
+    fn circle_brush_shapes_and_spacing_use_the_mask() {
+        let mut e = Editor::new(6, 6);
+        e.brush_size = 3;
+        e.brush_kind = BrushKind::Circle;
+        e.fg = Rgba(9, 8, 7, 255);
+        e.begin_stroke();
+        e.paint_with_tool(2, 2);
+        e.end_stroke();
+        assert_eq!(e.sprite.get(0, 0, 2, 2), e.fg);
+        assert_eq!(e.sprite.get(0, 0, 1, 2), e.fg, "edge is inside");
+        assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::TRANSPARENT, "corner is out");
+
+        // Shapes use the brush mask too: a 2 px brush thickens a line.
+        e.brush_kind = BrushKind::Square;
+        e.brush_size = 2;
+        e.pending = Some(Pending {
+            shape: Shape::Line,
+            start: (0, 1),
+        });
+        e.cursor = (4, 1);
+        e.commit_shape(e.fg);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), e.fg, "brush thickens upwards");
+        assert_eq!(e.sprite.get(0, 0, 0, 1), e.fg);
+        assert_eq!(e.sprite.get(0, 0, 4, 1), e.fg);
+
+        e.brush_size = 4;
+        e.brush_spacing = 100;
+        assert_eq!(e.stamp_spacing(), 4);
+        e.brush_spacing = 50;
+        assert_eq!(e.stamp_spacing(), 2);
+        e.brush_spacing = 100;
+        e.custom_brush = Some(Brush::new("tall", 2, 5, vec![255; 10]));
+        e.brush_kind = BrushKind::Custom;
+        assert_eq!(e.stamp_spacing(), 5);
     }
 
     #[test]

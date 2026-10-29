@@ -6,6 +6,7 @@
 //! The shell — `app`, `gui`, `input` — stays in the binary.
 
 pub mod ase;
+pub mod brush;
 pub mod color;
 pub mod editor;
 pub mod io;
