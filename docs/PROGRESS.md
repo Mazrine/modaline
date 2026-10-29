@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **217 tests green** (204 lib + 13 bin)
+- `cargo test` → **219 tests green** (205 lib + 14 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-44 import parity** (see batch 81).
+- Last completed batch: **P5-45 file browser** (see batch 82).
 
 ## How to resume
 
@@ -425,6 +425,10 @@ Read, in order:
 81. **P5-44 — import parity** — JSON hash/array + XML atlas import with
   durations/tags/slices, auto-detected by `:importsheet`; natural-order image
   sequence import; `:importatlas`/`:importseq`. 3 new tests (217 total).
+82. **P5-45 — file browser** — in-app files window with filtering, navigation,
+  recents and persistent favourites; Ctrl/Cmd+O and Ctrl/Cmd+Shift+S; save
+  dispatch via `save_path`. 2 new tests (219 total): listing/filter and save
+  formats.
 
 ## Next step (exact)
 
@@ -433,7 +437,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-45** — in-app file browser (first open task), then continue down the P5
+- **P5-46** — CLI batch core (first open task), then continue down the P5
   roadmap in dependency order.
 
 ## Known limitations (do not forget)

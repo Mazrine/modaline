@@ -167,7 +167,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | PCX / FLC / FLI | Not supported (documented gap: no image-crate codec) | P5-43 |
 | Crash recovery | Covered | — |
 | Reopen closed files | Partial (recent list) | P5-52 |
-| File browser dialog | Missing | P5-45 |
+| File browser dialog | Covered (in-app, no native dep) | P5-45 |
 | Drag-and-drop open | Covered | — |
 | Recent files | Covered | — |
 

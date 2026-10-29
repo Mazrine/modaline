@@ -559,8 +559,14 @@ met; blocked tasks are marked with the reason.
   metadata are merged into one pixel layer (metadata cannot un-composite them).
   Commands: `:importatlas`, `:importseq`. 3 new tests (217 total): hash
   round-trip, XML atlas, natural-order sequence.
-- [ ] **P5-45 — In-app file browser** (M) — deps: none.
-  Keyboard open/save browser with recents/favourites; no native dialog dep.
+- [x] **P5-45 — In-app file browser** (M) — deps: none.
+  Landed 2026-10-28. A `files` window lists directories/files with filtering,
+  parent/home navigation, recent files and persistent favourites; Ctrl/Cmd+O
+  opens it, Ctrl/Cmd+Shift+S opens save mode. Dirty open is guarded unless
+  "force" is ticked. Save dispatches by extension via `Editor::save_path`
+  (`.ase`, image formats, else `.vpx`), defaulting to `.vpx`. Favourites persist
+  in `config.json`. 2 new tests (219 total): directory listing/filtering and
+  save-path format dispatch. Browser UI is manual-check only (not screenshotted).
 
 ### Epic 9 — CLI and automation
 

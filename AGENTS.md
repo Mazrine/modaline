@@ -148,7 +148,8 @@ thin shells:
   extrusion distinct, and record them in `Sheet`/meta. Static formats dispatch
   through `is_image`/`export_image_scaled`; add new codecs to Cargo features.
   Atlas/sequence imports live in `import_atlas`/`import_sequence_dir`; keep
-  metadata-only layers documented as merged on import.
+  metadata-only layers documented as merged on import. Save dispatch is
+  `Editor::save_path`; browser favourites persist in Config.
 - Tile preview extents use `Editor::tile_offsets()`/`tile_x`/`tile_y`; the
   canvas extent and hit area must match or seam clicks land outside.
 - Tilesets live in `Sprite.tilesets` keyed by `Tileset.id`; layers reference

@@ -31,6 +31,8 @@ pub struct Config {
     pub renderer: String,
     /// Recently opened files, newest first (`:recent`).
     pub recent: Vec<String>,
+    /// Favourite directories in the in-app file browser.
+    pub favourites: Vec<String>,
     /// Free-form entries a future build can read; round-tripped, never guessed.
     pub extra: BTreeMap<String, String>,
 }
@@ -98,6 +100,7 @@ impl Default for Config {
             theme: "dark".into(),
             renderer: "glow".into(),
             recent: Vec::new(),
+            favourites: Vec::new(),
             extra: BTreeMap::new(),
         }
     }

@@ -52,6 +52,11 @@ impl VixelApp {
         view.show_grid = config.show_grid;
         view.onion = config.onion.into();
         view.theme = config.theme.clone();
+        view.browser_favourites = config
+            .favourites
+            .iter()
+            .map(std::path::PathBuf::from)
+            .collect();
         if let Some(path) = path
             && let Err(e) = editor.open_path(&path)
         {
@@ -110,6 +115,12 @@ impl VixelApp {
         self.config.recent = self
             .editor
             .recent
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        self.config.favourites = self
+            .view
+            .browser_favourites
             .iter()
             .map(|p| p.to_string_lossy().into_owned())
             .collect();

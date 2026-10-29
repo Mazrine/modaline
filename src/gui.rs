@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, Vec2};
@@ -28,6 +29,12 @@ impl Default for Onion {
             next: [90, 210, 90],
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BrowserMode {
+    Open,
+    Save,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -102,6 +109,13 @@ pub struct View {
     pub history_open: bool,
     pub export_open: bool,
     pub export_path: String,
+    pub browser_open: bool,
+    pub browser_mode: BrowserMode,
+    pub browser_dir: PathBuf,
+    pub browser_query: String,
+    pub browser_name: String,
+    pub browser_force: bool,
+    pub browser_favourites: Vec<PathBuf>,
 }
 
 impl View {
@@ -150,6 +164,13 @@ impl View {
             history_open: false,
             export_open: false,
             export_path: String::new(),
+            browser_open: false,
+            browser_mode: BrowserMode::Open,
+            browser_dir: std::env::current_dir().unwrap_or_default(),
+            browser_query: String::new(),
+            browser_name: String::new(),
+            browser_force: false,
+            browser_favourites: Vec::new(),
         }
     }
 
@@ -272,6 +293,7 @@ pub fn draw(
     preview_viewport(ui.ctx(), editor, view);
     history_window(ui.ctx(), editor, view);
     export_window(ui.ctx(), editor, view);
+    file_browser_window(ui.ctx(), editor, view);
 
     if editor.mode == Mode::Help {
         help(ui.ctx());
@@ -306,6 +328,190 @@ impl View {
             _ => {}
         }
     }
+}
+
+fn browser_entries(dir: &std::path::Path, query: &str) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let q = query.to_ascii_lowercase();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return (Vec::new(), Vec::new());
+    };
+    let mut dirs = Vec::new();
+    let mut files = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if name.starts_with('.') || (!q.is_empty() && !name.to_ascii_lowercase().contains(&q)) {
+            continue;
+        }
+        if path.is_dir() {
+            dirs.push(path);
+        } else {
+            files.push(path);
+        }
+    }
+    dirs.sort();
+    files.sort();
+    (dirs, files)
+}
+
+fn browser_activate(editor: &mut Editor, view: &mut View, path: PathBuf) {
+    match view.browser_mode {
+        BrowserMode::Open => {
+            if editor.dirty && !view.browser_force {
+                editor.msg = "unsaved changes (tick force, or :w first)".into();
+                return;
+            }
+            match editor.open_path(&path) {
+                Ok(()) => {
+                    view.browser_open = false;
+                }
+                Err(e) => editor.msg = format!("open failed: {e:#}"),
+            }
+        }
+        BrowserMode::Save => {
+            let mut path = path;
+            if path.extension().is_none() {
+                path.set_extension("vpx");
+            }
+            match editor.save_path(&path) {
+                Ok(()) => view.browser_open = false,
+                Err(e) => editor.msg = format!("save failed: {e:#}"),
+            }
+        }
+    }
+}
+
+fn file_browser_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
+    if !view.browser_open {
+        return;
+    }
+    let mut open = view.browser_open;
+    egui::Window::new("files")
+        .open(&mut open)
+        .default_size([460.0, 420.0])
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                if ui.small_button("↑").clicked()
+                    && let Some(parent) = view.browser_dir.parent()
+                {
+                    view.browser_dir = parent.to_path_buf();
+                }
+                ui.label(view.browser_dir.display().to_string());
+                if ui.small_button("☆ add").clicked() {
+                    let dir = view.browser_dir.clone();
+                    if !view.browser_favourites.contains(&dir) {
+                        view.browser_favourites.push(dir);
+                    }
+                }
+                if ui.small_button("home").clicked()
+                    && let Some(home) = std::env::var_os("HOME")
+                {
+                    view.browser_dir = PathBuf::from(home);
+                }
+            });
+            if !view.browser_favourites.is_empty() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("favourites");
+                    for dir in view.browser_favourites.clone() {
+                        let name = dir
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| dir.display().to_string());
+                        if ui
+                            .small_button(name)
+                            .on_hover_text(dir.display().to_string())
+                            .clicked()
+                        {
+                            view.browser_dir = dir;
+                        }
+                    }
+                });
+            }
+            if !editor.recent.is_empty() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("recent");
+                    for path in editor.recent.iter().take(5) {
+                        let name = path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default();
+                        if ui
+                            .small_button(name)
+                            .on_hover_text(path.display().to_string())
+                            .clicked()
+                        {
+                            if let Some(parent) = path.parent() {
+                                view.browser_dir = parent.to_path_buf();
+                            }
+                            view.browser_name = path
+                                .file_name()
+                                .map(|n| n.to_string_lossy().into_owned())
+                                .unwrap_or_default();
+                        }
+                    }
+                });
+            }
+            ui.horizontal(|ui| {
+                ui.label("filter");
+                ui.add(egui::TextEdit::singleline(&mut view.browser_query).desired_width(200.0));
+            });
+            let (dirs, files) = browser_entries(&view.browser_dir, &view.browser_query);
+            egui::ScrollArea::vertical()
+                .id_salt("file_browser")
+                .max_height(240.0)
+                .show(ui, |ui| {
+                    for dir in dirs {
+                        let name = format!(
+                            "▸ {}",
+                            dir.file_name().unwrap_or_default().to_string_lossy()
+                        );
+                        if ui.selectable_label(false, name).clicked() {
+                            view.browser_dir = dir;
+                        }
+                    }
+                    for file in files {
+                        let name = file
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default();
+                        let selected = view.browser_name == name;
+                        let resp = ui.selectable_label(selected, name);
+                        if resp.clicked() {
+                            view.browser_name = file
+                                .file_name()
+                                .map(|n| n.to_string_lossy().into_owned())
+                                .unwrap_or_default();
+                        }
+                        if resp.double_clicked() {
+                            browser_activate(editor, view, file.clone());
+                        }
+                    }
+                });
+            if view.browser_mode == BrowserMode::Save {
+                ui.horizontal(|ui| {
+                    ui.label("name");
+                    ui.add(egui::TextEdit::singleline(&mut view.browser_name).desired_width(260.0));
+                });
+            }
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut view.browser_force, "force");
+                let label = match view.browser_mode {
+                    BrowserMode::Open => "open",
+                    BrowserMode::Save => "save",
+                };
+                if ui.button(label).clicked() && !view.browser_name.is_empty() {
+                    let path = view.browser_dir.join(&view.browser_name);
+                    browser_activate(editor, view, path);
+                }
+                if ui.button("cancel").clicked() {
+                    view.browser_open = false;
+                }
+            });
+        });
+    view.browser_open = open;
 }
 
 fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
@@ -1313,6 +1519,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         .on_hover_text("preview in a separate OS viewport");
     ui.checkbox(&mut view.history_open, "history");
     ui.checkbox(&mut view.export_open, "export");
+    ui.checkbox(&mut view.browser_open, "files");
     ui.checkbox(&mut view.onion.enabled, "onion skin");
     if view.onion.enabled {
         ui.horizontal(|ui| {
@@ -2934,6 +3141,7 @@ const HELP: &[&str] = &[
     "  :celselect <layer> <frame>   :celclear   :exportcels <dir>",
     "  :celcopy   :celcut   :celpaste   :celdel (empty cel)   :celinfo",
     "  Ctrl/Cmd-click toggles a cel; Shift-click selects a timeline range",
+    "  Ctrl/Cmd-O opens the files browser; Ctrl/Cmd-Shift-S opens save mode",
     "  :exportcfg <stem> [--frames a b] [--tag n] [--layers ...] [--merge] [--trim] [--padding n]",
     "  :exportcfg <stem> --sequence [--per-layer] [--pattern <tpl>]   (PNG sequence)",
     "  :exportcfg <stem> --layout h|v|rows|columns|packed [--columns n] [--rows n]",
@@ -2997,6 +3205,24 @@ const HELP: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_entries_sort_dirs_first_and_filter() {
+        let dir = std::env::temp_dir().join(format!("vixel-browser-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("zdir")).unwrap();
+        std::fs::write(dir.join("alpha.txt"), b"x").unwrap();
+        std::fs::write(dir.join("beta.png"), b"x").unwrap();
+        let (dirs, files) = browser_entries(&dir, "");
+        assert_eq!(dirs.len(), 1);
+        assert!(dirs[0].ends_with("zdir"));
+        assert_eq!(files.len(), 2);
+        assert!(files[0].ends_with("alpha.txt"));
+        let (_, files) = browser_entries(&dir, "alp");
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("alpha.txt"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn cel_thumbnail_uses_the_cel_size() {

@@ -4581,6 +4581,23 @@ impl Editor {
         Ok(())
     }
 
+    /// Save the sprite to a path chosen by the caller, dispatching on the
+    /// extension (`.ase`/`.aseprite`, image formats, otherwise `.vpx` JSON).
+    pub fn save_path(&mut self, path: &std::path::Path) -> anyhow::Result<()> {
+        if crate::io::is_ase(path) {
+            crate::ase::save(&self.sprite, path)?;
+        } else if crate::io::is_image(path) {
+            crate::io::export_png_scaled(&self.sprite, self.active_frame, path, 1)?;
+        } else {
+            crate::io::save_project(&self.sprite, path)?;
+        }
+        self.note_recent(path.to_path_buf());
+        self.path = Some(path.to_path_buf());
+        self.dirty = false;
+        self.msg = self.saved_note();
+        Ok(())
+    }
+
     /// Remember a file as recently opened, newest first and capped at 10.
     pub fn note_recent(&mut self, path: PathBuf) {
         self.recent.retain(|p| p != &path);
@@ -6310,6 +6327,31 @@ mod tests {
         assert_eq!(e.sprite.get(0, 0, 2, 0), Rgba(1, 2, 3, 255));
         let sel = e.selection.as_ref().unwrap();
         assert_eq!((sel.w, sel.h), (3, 2));
+    }
+
+    #[test]
+    fn save_path_dispatches_project_ase_and_image() {
+        let mut e = Editor::new(2, 2);
+        e.paint_pixel(0, 0, Rgba::rgb(1, 2, 3));
+        let dir = std::env::temp_dir().join(format!("vixel-savepath-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let vpx = dir.join("x.vpx");
+        e.save_path(&vpx).unwrap();
+        assert_eq!(
+            crate::io::load_project(&vpx).unwrap().get(0, 0, 0, 0),
+            Rgba::rgb(1, 2, 3)
+        );
+        let png = dir.join("x.png");
+        e.save_path(&png).unwrap();
+        assert!(png.exists());
+        let ase = dir.join("x.ase");
+        e.save_path(&ase).unwrap();
+        assert_eq!(
+            crate::ase::load(&ase).unwrap().get(0, 0, 0, 0),
+            Rgba::rgb(1, 2, 3)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

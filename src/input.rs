@@ -150,6 +150,20 @@ fn handle_key(editor: &mut Editor, view: &mut View, key: Key, mods: Modifiers) {
         match key {
             R => editor.redo(),
             Z => editor.undo(),
+            S if mods.shift => {
+                view.browser_mode = crate::gui::BrowserMode::Save;
+                view.browser_open = true;
+                if let Some(dir) = editor.path.as_ref().and_then(|p| p.parent()) {
+                    view.browser_dir = dir.to_path_buf();
+                }
+            }
+            O => {
+                view.browser_mode = crate::gui::BrowserMode::Open;
+                view.browser_open = true;
+                if let Some(dir) = editor.path.as_ref().and_then(|p| p.parent()) {
+                    view.browser_dir = dir.to_path_buf();
+                }
+            }
             S => save(editor),
             Q => editor.should_quit = true,
             _ => {}
@@ -1931,19 +1945,8 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
 /// Aseprite, else the `.vpx` JSON project). Returns whether it was written;
 /// `:wq` only quits on success. Shared so `:w` and `:wq` cannot drift.
 fn save_to(editor: &mut Editor, path: PathBuf) -> bool {
-    let res = if io::is_ase(&path) {
-        ase::save(&editor.sprite, &path)
-    } else {
-        io::save_project(&editor.sprite, &path)
-    };
-    match res {
-        Ok(()) => {
-            editor.note_recent(path.clone());
-            editor.path = Some(path);
-            editor.dirty = false;
-            editor.msg = editor.saved_note();
-            true
-        }
+    match editor.save_path(&path) {
+        Ok(()) => true,
         Err(err) => {
             editor.msg = format!("save failed: {err}");
             false
