@@ -491,7 +491,7 @@ Read, in order:
 
 ## Next step (exact)
 
-**P5 is open.** Read `docs/ASEPRITE_PARITY.md` and `docs/ROADMAP.md` P5; the
+**P6 is open.** Read `docs/ASEPRITE_PARITY.md` and `docs/ROADMAP.md` P6; the
 loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P6)
