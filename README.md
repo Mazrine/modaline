@@ -269,13 +269,25 @@ text** (text tool with live preview/size/alignment), **brush size 1-64 + custom 
 including bucket fill and paste), flip H/V + rotate 90° (**selection-aware**),
 stroke-grouped undo/redo with a clickable **history window** (**structural layer/frame/tag edits and panel
 properties undo too**),
-**in-app file browser with recents/favourites**, **`.ase`/`.aseprite` + PNG/JPEG/BMP/TGA/WebP + `.vpx` import/export**, **sheet + GIF + meta JSON
+**headless CLI batch export**, **in-app file browser with recents/favourites**, **`.ase`/`.aseprite` + PNG/JPEG/BMP/TGA/WebP + `.vpx` import/export**, **sheet + GIF + meta JSON
 export**, **sprite properties** (colour mode, pixel ratio, grid size + origin) and
 **layer flags** (movement lock, collapsed groups, UUIDs),
 **sRGB/linear colour profiles**, **custom palettes** (`.gpl`/`.hex`/`.pal`),
 **OS clipboard**, **tile mode** (3x3 seamless preview + wrapping cursor),
 **frame tags + drag reorder**, full vim keymap (normal/draw/visual/paste/command
 modes).
+
+## Headless CLI
+
+```sh
+vixel -b in.ase --sheet out.png --data out.json --scale 2 --frame-range 1 8
+vixel -b in.vpx --gif out.gif --gif-loop 0 --gif-dither --gif-colors 64
+vixel -b in.vpx --color-mode indexed --dither bayer4 --save-as out.ase
+vixel -b in.vpx --list-tags --list-layers
+```
+
+`-b/--batch` never opens a window. Run `vixel -b --help` for all options
+(save-as/sheet/data/gif, filters, trim/crop, layouts, atlas metadata, lists).
 
 Aseprite-parity programme in progress: `docs/ASEPRITE_PARITY.md` tracks every
 Aseprite capability against the task that closes it, and `docs/ROADMAP.md` P5

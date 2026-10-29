@@ -1,4 +1,5 @@
 mod app;
+mod cli;
 mod config;
 mod gui;
 mod input;
@@ -31,6 +32,13 @@ fn pick_renderer(want_wgpu: bool) -> eframe::Renderer {
 fn main() -> eframe::Result {
     // Headless tileset export: `vixel --export-tileset in.ase [out.png]`.
     let argv: Vec<String> = std::env::args().collect();
+    if argv.iter().any(|a| a == "-b" || a == "--batch") {
+        if let Err(e) = cli::run(&argv) {
+            eprintln!("vixel: {e:#}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     if let Some(pos) = argv.iter().position(|a| a == "--export-tileset") {
         let Some(input) = argv.get(pos + 1).map(PathBuf::from) else {
             eprintln!("usage: vixel --export-tileset <file.ase|.vpx> [out.png]");

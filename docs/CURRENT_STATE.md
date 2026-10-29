@@ -136,6 +136,9 @@ L-shaped corners for the 1 px pencil/eraser.
   transparency checkerboard, cursor + selection + floating-paste previews.
   **Wide pixels** render at the sprite's `pixel_aspect` (checkbox "wide px");
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
+- **CLI batch** (`vixel -b`): headless save-as/sheet/data/GIF export with
+  scale, colour mode/dither, frame/tag/layer filters, trim/crop, layout and
+  atlas/GIF options; `--list-*` prints structure.
 - **file browser**: in-app `files` window (Ctrl/Cmd+O, Ctrl/Cmd+Shift+S) with
   filtering, parent/home navigation, recents and persistent favourites; save
   dispatches `.ase`/image/`.vpx` by extension.

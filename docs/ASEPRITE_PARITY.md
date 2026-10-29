@@ -191,10 +191,11 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 
 | Capability | Status | Task |
 |---|---|---|
-| Headless batch mode (`-b`) | Missing | P5-46 |
-| `--save-as`, `--sheet`, `--data`, `--scale` | Missing | P5-46 |
-| Colour mode/dithering options | Missing | P5-46 |
-| Frame/tag/layer filters | Missing | P5-46 |
+| Headless batch mode (`-b`) | Covered | P5-46 |
+| `--save-as`, `--sheet`, `--data`, `--scale` | Covered | P5-46 |
+| Colour mode/dithering options | Covered | P5-46 |
+| Frame/tag/layer filters | Covered | P5-46 |
+| `--list-*` (layers/tags/frames/slices/tilesets/palette) | Covered | P5-46 |
 | Split layers/tags/slices/grid, filename templates | Missing | P5-47 |
 | `--export-tileset`, `--palette`, `--list-*` | Missing | P5-47 |
 

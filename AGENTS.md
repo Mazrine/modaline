@@ -150,6 +150,8 @@ thin shells:
   Atlas/sequence imports live in `import_atlas`/`import_sequence_dir`; keep
   metadata-only layers documented as merged on import. Save dispatch is
   `Editor::save_path`; browser favourites persist in Config.
+- Headless CLI lives in `src/cli.rs` (`-b`), parsed before any eframe setup;
+  keep new batch flags there and cover them in `tests/cli.rs`.
 - Tile preview extents use `Editor::tile_offsets()`/`tile_x`/`tile_y`; the
   canvas extent and hit area must match or seam clicks land outside.
 - Tilesets live in `Sprite.tilesets` keyed by `Tileset.id`; layers reference

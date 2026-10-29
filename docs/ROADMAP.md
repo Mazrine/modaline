@@ -570,10 +570,13 @@ met; blocked tasks are marked with the reason.
 
 ### Epic 9 — CLI and automation
 
-- [ ] **P5-46 — CLI batch core** (L) — deps: P5-39, P5-40, P5-41, P5-42, P5-03,
-  P5-04.
-  `-b`, save-as/sheet/data, scale, colour-mode, dithering, frame range/tag/
-  layer filters, trim/crop, list-*; headless tests.
+- [x] **P5-46 — CLI batch core** (L) — deps: P5-39, P5-40, P5-41, P5-42, P5-03, P5-04.
+  Landed 2026-10-28. `vixel -b input [options]` runs fully headless:
+  `--save-as`, `--sheet`, `--data`, `--gif`, `--scale`, colour-mode/dither,
+  frame/tag/layer filters, trim/crop, sheet layout/padding/extrude, atlas and GIF
+  options, and `--list-layers/tags/frames/slices/tilesets/palette`. Output paths
+  are explicit; `--data` references `--sheet`. 3 integration tests (222 total):
+  filtered/trimmed sheet+atlas, list output, and indexed conversion save.
 - [ ] **P5-47 — CLI batch advanced** (L) — deps: P5-46, P5-15, P5-33.
   split-layers/tags/slices/grid, filename templates, padding/extrude/
   ignore-empty/merge, export-tileset, palette.

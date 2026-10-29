@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **219 tests green** (205 lib + 14 bin)
+- `cargo test` → **222 tests green** (205 lib + 14 bin + 3 CLI)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-45 file browser** (see batch 82).
+- Last completed batch: **P5-46 CLI batch core** (see batch 83).
 
 ## How to resume
 
@@ -429,6 +429,9 @@ Read, in order:
   recents and persistent favourites; Ctrl/Cmd+O and Ctrl/Cmd+Shift+S; save
   dispatch via `save_path`. 2 new tests (219 total): listing/filter and save
   formats.
+83. **P5-46 — CLI batch core** — headless `-b` with save-as/sheet/data/gif,
+  scale, colour mode/dither, frame/tag/layer filters, trim/crop, layout/atlas/GIF
+  options and list-* output. 3 integration tests (222 total).
 
 ## Next step (exact)
 
@@ -437,7 +440,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-46** — CLI batch core (first open task), then continue down the P5
+- **P5-47** — CLI batch advanced (first open task), then continue down the P5
   roadmap in dependency order.
 
 ## Known limitations (do not forget)
