@@ -2230,7 +2230,8 @@ mod tests {
             ],
             ..Default::default()
         });
-        let path = std::env::temp_dir().join(format!("modaline-ts-export-{}.png", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("modaline-ts-export-{}.png", std::process::id()));
         export_tileset(&s, Some(9), &path).unwrap();
         let img = image::open(&path).unwrap().to_rgba8();
         let _ = std::fs::remove_file(&path);
@@ -2270,7 +2271,8 @@ mod tests {
                 ..Default::default()
             }],
         ));
-        let path = std::env::temp_dir().join(format!("modaline-tileset-{}.vpx", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("modaline-tileset-{}.vpx", std::process::id()));
         save_project(&s, &path).unwrap();
         let back = load_project(&path).unwrap();
         let _ = std::fs::remove_file(&path);

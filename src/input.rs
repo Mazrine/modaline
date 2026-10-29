@@ -791,8 +791,9 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
                 }
             }
             other => {
-                editor.msg =
-                    modaline::status!("usage: :ext list|install|remove|run|themes|theme (got {other})")
+                editor.msg = modaline::status!(
+                    "usage: :ext list|install|remove|run|themes|theme (got {other})"
+                )
             }
         }
         return;
@@ -885,7 +886,8 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
                 }
                 Some("wheel-up") | Some("wheel-down") => {
                     view.keymap.set_wheel(action, target == Some("wheel-up"));
-                    editor.msg = modaline::status!("{}: {} (scroll)", action.name(), target.unwrap());
+                    editor.msg =
+                        modaline::status!("{}: {} (scroll)", action.name(), target.unwrap());
                 }
                 Some(chord) => match crate::keymap::Chord::parse(chord) {
                     None => {
@@ -1380,7 +1382,8 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "text font: modaline (bitmap 8x8)".into();
             }
             Some(other) => {
-                editor.msg = modaline::status!("text font: {other} unsupported (bitmap 'modaline' only)");
+                editor.msg =
+                    modaline::status!("text font: {other} unsupported (bitmap 'modaline' only)");
             }
             None => editor.msg = "usage: :textfont modaline".into(),
         },
@@ -1489,8 +1492,11 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         Some(n) => {
                             editor.brush_size = n.clamp(1, 64);
                             editor.set_brush_kind(kind);
-                            editor.msg =
-                                modaline::status!("brush: {} {} px", kind.name(), editor.brush_size);
+                            editor.msg = modaline::status!(
+                                "brush: {} {} px",
+                                kind.name(),
+                                editor.brush_size
+                            );
                         }
                         None => editor.msg = "usage: :brush square|circle <1-64>".into(),
                     }
@@ -1598,7 +1604,8 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             let on = matches!(arg, Some("on" | "true" | "1" | "all"));
             if arg.is_some() {
                 editor.wand_all_layers = on;
-                editor.msg = modaline::status!("wand all layers: {}", if on { "on" } else { "off" });
+                editor.msg =
+                    modaline::status!("wand all layers: {}", if on { "on" } else { "off" });
             } else {
                 editor.msg = "usage: :wandall on|off".into();
             }
@@ -1640,7 +1647,9 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                             gamma: 0.0,
                             icc: bytes,
                         })),
-                        Err(e) => editor.msg = modaline::status!("profile: cannot read {path}: {e}"),
+                        Err(e) => {
+                            editor.msg = modaline::status!("profile: cannot read {path}: {e}")
+                        }
                     },
                     None => editor.msg = "usage: :profile icc <file>".into(),
                 },
@@ -2038,7 +2047,8 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             Some(spec) => match crate::color::parse_hex(spec) {
                 Some(c) => {
                     editor.set_background_color(Some(c));
-                    editor.msg = modaline::status!("background: #{:02x}{:02x}{:02x}", c.0, c.1, c.2);
+                    editor.msg =
+                        modaline::status!("background: #{:02x}{:02x}{:02x}", c.0, c.1, c.2);
                 }
                 None => editor.msg = "usage: :bgcolor #rrggbb|clear".into(),
             },
@@ -2496,8 +2506,10 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             match crate::io::import_sequence_dir(std::path::Path::new(dir)) {
                 Ok(sprite) => {
                     editor.replace_sprite(sprite);
-                    editor.msg =
-                        modaline::status!("sequence imported: {} frames", editor.sprite.frames.len());
+                    editor.msg = modaline::status!(
+                        "sequence imported: {} frames",
+                        editor.sprite.frames.len()
+                    );
                 }
                 Err(e) => editor.msg = modaline::status!("sequence import failed: {e:#}"),
             }

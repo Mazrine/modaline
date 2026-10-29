@@ -1,330 +1,246 @@
 # Modaline
 
-A keyboard-first, **vim-style pixel art editor** with Aseprite-grade rendering —
-a native GUI window (not a terminal) in Rust.
+**A keyboard-first pixel art editor.** Modal like vim, native in Rust, with
+layers, animation and Aseprite-compatible files. The mouse and a drawing tablet
+work everywhere, but the keyboard is the fast path.
 
-Vim muscle memory: modal editing (normal / draw / command / help), `hjkl`
-movement, `i` to paint, `x` to erase, `u`/`Ctrl-r` undo, `:` commands. Full
-24-bit color, real alpha transparency, zoom, pixel grid, onion skinning,
-layers, and animation frames.
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
+[![Rust: edition 2024](https://img.shields.io/badge/rust-edition%202024-orange.svg)](Cargo.toml)
+[![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey.svg)](#requirements)
 
-## Run
+![The editor with the demo project](assets/screenshots/editor.png)
+
+*The demo project (`examples/demo.vpx`): timeline grid, layers, animation tag,
+pixel-perfect zoom and a contextual hint on the status line.*
+
+## Why modal?
+
+Pixel editors usually make you travel to a toolbar for every action. Modaline
+treats the canvas like text: a small set of modes, one key per operation, and
+the same keys everywhere.
+
+| Mode | What it is for | Enter |
+|---|---|---|
+| **Normal** | navigate, pick tools, run commands | start here |
+| **Draw** | paint while moving the cursor | `i` |
+| **Visual** | grow a selection before acting on it | `v` |
+| **Paste** | position a floating clipboard | `p` |
+| **Command** | everything not worth a key | `:` |
+| **Help** | the full key list | `?` |
+
+Select first, then act: `v` + `hjkl`, then `y` copy, `x` cut, `p` paste,
+`m` cut-and-float. The status line always tells you what the current state
+accepts, so you do not have to memorise the whole map on day one.
+
+![Selection with contextual hints](assets/screenshots/selection.png)
+
+*Selection-first editing: the marquee, the mode, and the next actions
+(`y` copy · `x` cut · `p` paste · `Esc` clear) in the status line.*
+
+**Ten keys to start:** `hjkl` move · `i` draw · `b` pencil · `f` bucket ·
+`v` select · `y`/`x`/`p` copy/cut/paste · `u` undo · `:` command · `?` help.
+
+The complete map is in [`docs/COMMANDS.md`](docs/COMMANDS.md), and `:tips`
+opens a short cheat sheet with the keyboard, mouse and pen workflows.
+
+![Tips window](assets/screenshots/tips.png)
+
+*`:tips` — the built-in cheat sheet. `Esc` closes windows; nothing needs the
+mouse.*
+
+## Features
+
+**Canvas & rendering**
+- True 24-bit colour, real alpha, checkerboard transparency, nearest-neighbour
+  zoom, pixel grid and a design grid with snapping.
+- Onion skinning (previous/next frame), tiled 3×3 seamless preview with edge
+  wrapping, wide-pixel aspect preview, independent preview window/OS viewport.
+- CPU compositing (blend modes, groups, masks, cel z-order) drawn through egui;
+  a `wgpu` build exists behind a feature flag with no render-code changes.
+
+**Tools**
+- Pencil, eraser, bucket, eyedropper, line, rectangle, ellipse, gradient
+  (linear/radial, multi-stop, dithered), spray, shade, blur, contour and an
+  8×8 bitmap text tool.
+- Brush sizes 1–64, square/circle/custom masks, spacing, pressure, pixel-perfect
+  freehand, per-tool inks and alpha lock.
+- Horizontal, vertical and N-fold radial symmetry (including bucket and paste).
+- Selection masks with marquee, magic wand (tolerance, contiguous/global,
+  all layers), lasso and polygon; expand/contract/border/feather/invert and
+  add/subtract/intersect.
+- Free rotate/scale/skew with interactive handles, custom pivot and a RotSprite
+  mode; flip/rotate 90° respects the selection.
+- Sixteen filters: invert, brightness, contrast, hue, saturation, desaturate,
+  curves, levels, balance, posterize, outline, blur, sharpen, median, convolve
+  and emboss — all clipped to the selection and one undo step.
+
+**Layers & animation**
+- Layer groups, blend modes, opacity, visibility, movement lock, reference and
+  background layers, alpha masks and linked cels.
+- Frame timeline with a layer×frame grid, thumbnails, drag reorder, per-frame
+  duration, tags with direction and repeat, onion skin and playback.
+- Multi-cel edits, whole-cel clipboard and per-cel export.
+
+**Colour & files**
+- Sweetie 16 default palette, presets, `.gpl`/`.hex`/`.pal` import/export,
+  palette names, sorting and palette lock; indexed mode with dithering.
+- sRGB/linear working spaces and embedded `.ase` profiles.
+- Read/write `.ase`/`.aseprite` (RGBA, grayscale, indexed, linked and tilemap
+  cels, user data, slices, groups, profiles), `.vpx` JSON projects, PNG, JPEG,
+  BMP, TGA, WebP; import PCX and FLC/FLI animations.
+- Sheet, GIF, PNG sequence, atlas metadata and slices; atlas/sheet/sequence
+  import.
+
+**Made for the keyboard**
+- Panel controls have `:` equivalents where a keyboard path matters, so the
+  mouse is never required.
+- `Ctrl-hjkl` pans, `{`/`}` change brush size, `[`/`]` change frames,
+  `<`/`>` change layers; all pan and action keys are rebindable.
+- Command-specific messages and contextual hints in English **and** Portuguese,
+  switchable at runtime with `:lang`.
+- `:bind` for custom chords, four workspace layouts, JSON themes and fonts.
+- Sandboxed Lua 5.4 scripting with an Aseprite-style `app` API, plus
+  `.aseprite-extension` packages.
+- Headless `-b` CLI for batch export.
+
+## Pen and tablet
+
+Wacom Intuos Pro and **OpenTabletDriver** tablets are supported on Linux: tip
+pressure is read from evdev while position and clicks continue through the OS
+pointer, so every action works with the pen. `:pen` shows the device and
+pressure; `:pen off` disables it; the setting persists.
 
 ```sh
-cargo run --release
+:pen          # device + live pressure
+:pen off      # ignore the tablet
 ```
 
-On NixOS, enter the flake devShell (it puts wayland/xkbcommon/libGL on
-`LD_LIBRARY_PATH`):
+Setup (udev/input group, NixOS, OTD) and troubleshooting are in
+[`docs/PEN.md`](docs/PEN.md).
+
+## Animation
+
+![Three-frame demo animation](assets/demo.gif)
+
+*A three-frame demo exported by Modaline itself. The project is
+`examples/demo.vpx`; `examples/build_demo.lua` generates it with the scripting
+API, and the GIF comes from the headless CLI.*
+
+## Quick start
+
+**NixOS (flake devShell):**
 
 ```sh
 nix develop
 cargo run --release
 ```
 
-`steam-run ./target/release/modaline` still works as a fallback.
-
-## Keymap
-
-Modal, like vim. Start in **normal** mode.
-
-### Normal mode
-
-| Key | Action |
-|-----|--------|
-| `h` `j` `k` `l` / arrows | move cursor |
-| `H` `J` `K` `L` | move 8px |
-| `0` `$` `gg` `G` | left / right / top / bottom edge |
-| `i` | **draw** mode — paint as you move |
-| `x` | erase pixel (vim's delete-char) |
-| `r` / `space` | paint one pixel with fg |
-| `b` / `e` | pencil / eraser tool |
-| `f` | bucket fill |
-| `c` | color picker (eyedropper) |
-| `d` / `R` / `o` | line / rectangle / ellipse — move, then `Enter` commits, `Esc` cancels |
-| `z` / `a` / `q` | gradient / spray (airbrush) / shade (darken; right-click lightens) |
-| `n` / `C` | blur / contour (outline the selection or region under the cursor) |
-| `v` | **visual select** (marquee) — `V` selects the whole canvas |
-| `w` | **magic wand** — select the same-color region under the cursor |
-| `L` / `P` | **lasso** (freehand) / **polygon** (click vertices) selection |
-| `y` / `Y` / `x` / `m` / `p` | copy (layer) / copy merged / cut / move · `p` pastes the clipboard |
-| `s` | cycle symmetry (none / horizontal / vertical / both / radial) |
-| `t` | toggle filled shapes (rect / ellipse) |
-| `,` / `.` | previous / next color |
-| `<` / `>` | previous / next layer |
-| `[` / `]` | previous / next frame |
-| `X` | swap fg / bg |
-| `u` / `Ctrl-r` | undo / redo |
-| `+` / `-` | zoom in / out |
-| `:` | command line |
-| `?` | help |
-| `Ctrl-c` / `Ctrl-x` / `Ctrl-v` | copy / cut / paste (OS clipboard; no selection copies the whole cel) |
-| `Ctrl-z` | undo (alias of `u`) |
-| `Ctrl-s` / `Ctrl-q` | save / quit |
-| `Ctrl-Tab` / `Ctrl-Shift-Tab` | next / previous document tab |
-| `Ctrl-t` / `Ctrl-w` | new / close document tab |
-
-### Draw mode (`i`)
-
-`hjkl`/arrows move **and** paint with the active tool (pencil = fg, eraser =
-transparent). `Esc` or `q` returns to normal. A whole drag is one undo step.
-
-### Visual mode (`v`), magic wand (`w`) & paste
-
-`v` starts a marquee selection; `hjkl` extends it. `w` selects the contiguous
-same-color region around the cursor (active layer). Then `y` copies the active
-layer, `Y` copies the flattened selection (all visible layers), `x` cuts and
-`m` cuts-and-floats (move). `p` floats the clipboard for pasting — `hjkl`
-repositions it, `Enter` commits, `Esc` cancels. Cut and move act on the active
-layer's cel; `:copy merged` is the same as `Y`. Every paint tool is clipped to
-the selection; paste replaces it, and contour draws its ring just outside it.
-`Esc` in normal mode clears the selection.
-
-### Mouse
-
-Left-drag paint fg · right-drag paint bg · middle-click pick · scroll zoom ·
-middle-drag pan · drop a file on the window to open it. (The editor is
-keyboard-first, but the mouse is fully wired.)
-
-## Commands (`:`)
-
-| Command | Effect |
-|---------|--------|
-| `:w [file]` / `:save` | save project (JSON `.vpx`) |
-| `:q` / `:q!` / `:wq` | quit / force quit / save + quit |
-| `:new[!] [w h]` | new sprite (default 32×32); `!` drops unsaved work |
-| `:resize w h` | resize canvas (keeps overlap) |
-| `:crop [x y w h]` | crop to a rectangle (no args: the selection) |
-| `:trim` | crop to the non-transparent content |
-| `:newframe` / `:delframe` | add / remove animation frame |
-| `:dupframe` | duplicate the current frame (cels + duration) |
-| `:framemove <from> <to>` | move a frame (or drag a timeline thumbnail) |
-| `:celz <n>` | active cel z-index (+ moves towards the front) |
-| `:link <frame>` / `:unlink` / `:preferlink on\|off` | linked cels in the active layer |
-| `:movelock on\|off` / `:collapse on\|off` / `:layeruuid [new\|clear]` | layer movement lock, group collapse, UUID |
-| `:tag <name> [from to]` | create/update a named frame tag |
-| `:tagdel [name]` | delete a frame tag (default: the active one) |
-| `:tagdir forward\|reverse\|pingpong\|pingpong-reverse` | play direction of the active tag |
-| `:tagrepeat <n>` | repeat count of the active tag (0 = forever) |
-| `:newlayer` / `:dellayer` | add / remove layer |
-| `:duplayer` | duplicate the active layer (with its cels) |
-| `:merge` | merge the active layer into the one below |
-| `:flatten` | flatten every visible layer into one |
-| `:layerup` / `:layerdown` | move the active layer up / down |
-| `:layername <name>` | rename the active layer |
-| `:newgroup` | add a layer group |
-| `:indent` / `:outdent` | nest the active layer into the group above / un-nest |
-| `:lock` / `:unlock` | lock / unlock the active layer (blocks painting) |
-| `:reference on\|off` | tracing layer: drawn, never painted or exported |
-| `:background on\|off` | the opaque bottom layer |
-| `:mask add\|apply\|del` | alpha mask from the selection (or full) / bake / remove |
-| `:tile [on\|off]` / `:tile x\|y <1-8>` / `:tile repeats <x> <y>` | seamless tiled preview with configurable repeats; cursor and shapes wrap |
-| `:tile opacity <0-255>` / `:tile preview on\|off` | dim or hide neighbour copies |
-| `:tileid <n>` / `:tileflip x\|y\|diag\|none` / `:tilemode manual\|auto\|stack\|pixel` | tile brush ID/flips and editing mode |
-| `:exporttileset [out.png]` | export the retained tileset atlas |
-| `:exportcfg <stem> [--frames a b] [--tag name] [--layers ...] [--merge] [--trim] [--padding n]` | configured sheet/GIF/meta export |
-| `:exportcfg <stem> --sequence [--per-layer] [--pattern <tpl>]` | PNG sequence with `{frame}/{layer}/{tag}/{title}/{duration}` |
-| `:exportcfg <stem> --layout h\|v\|rows\|columns\|packed [--columns n] [--rows n] [--border n] [--shape n] [--inner n] [--extrude n]` | sheet layout, padding and extrusion |
-| `:exportcfg <stem> --atlas modaline\|hash\|array [--gif-loop n] [--gif-colors n] [--gif-dither]` | atlas metadata and GIF options |
-| `:celselect <layer> <frame>` / `:celclear` / `:exportcels <dir>` | multi-cel selection and per-cel PNG export |
-| `:celcopy` / `:celcut` / `:celpaste` / `:celdel` / `:celinfo` | whole-cel clipboard, empty cel vs frame, cel status |
-| `modaline --export-tileset in.ase [out.png]` | headless atlas export |
-| `:tilepick` / `:tileerase` | pick the tile under the cursor / place the empty tile |
-| `:fliph` / `:flipv` / `:rot90` | mirror H / V / rotate 90° (selection if any, else whole sprite) |
-| `:sym none\|h\|v\|both\|radial [axes]` | set symmetry (mirror painting) |
-| `:symcenter cursor\|reset\|<x> <y>` | radial symmetry centre |
-| `:wand <0-255>` / `:wandall on\|off` | wand + bucket tolerance / match all layers |
-| `:contig on\|off` | wand and bucket: contiguous region or every matching pixel |
-| `:selop replace\|add\|subtract\|intersect` | how new selections combine |
-| `:sel expand\|contract\|border\|feather <n>` / `:sel invert\|none\|all` | selection shape ops |
-| `:sel color [#hex] [tol]` / `:sel alpha [all]` | colour-range or opaque-pixel selection |
-| `:sel rotate\|skew <deg>` / `:sel scale <sx> [sy]` / `:sel offset <dx> <dy>` | transform the selection mask only |
-| `:fill [#hex]` / `:stroke [width] [inside\|outside] [#hex]` | fill the selection or paint its edge |
-| `:grad linear\|radial` | gradient mode |
-| `:filter <name> [args]` | invert, brightness, contrast, hue, saturation, desaturate, curves, levels, balance, posterize, outline, blur, sharpen, median, convolve, emboss |
-| `:rotate <deg>` / `:scale <sx> [sy]` / `:skew <deg>` | free-transform the selection (or the cel) |
-| `:rotsprite on\|off` / `:pivot <x> <y>\|clear` | supersampled rotation and a custom transform pivot |
-| `:text <string>` | stamp 8x8 bitmap text at the cursor |
-| `:textobj <string>` | create/edit an editable text object (stored in cel user data) |
-| `:textfont modaline` / `:textsize <8-64>` / `:textalign left\|center\|right` | text tool font, size and alignment |
-| `:grid <px>` / `:snap [on\|off]` | design grid and snapping |
-| `:brush <1-64>` / `:brush square\|circle <n>` / `:brush spacing <pct>` | brush size, built-in shape, stamp spacing |
-| `:brush load\|save\|use\|list [name]` | custom PNG brush and the `modaline/brushes` library |
-| `:pressure <0-100>` / `:pressure auto` | manual pressure override; `auto` follows pen force |
-| `:spray <dots> [radius]` / `:shade <pct>` / `:blur <radius>` | airbrush, shade, and blur-tool depth |
-| `:contour [width] [inside\|outside]` | contour the cursor region with the chosen ring |
-| `:grad preset <name>` / `:grad stop <pct> [#hex]` / `:grad stops` / `:grad clear` | multi-stop gradient presets and stops |
-| `:grad dither none\|bayer2\|bayer4\|bayer8` | ordered dithering while painting a gradient |
-| `:ink simple\|lockalpha\|replace\|shading\|erase` / `:alphalock on\|off` | per-tool ink and alpha-locked painting |
-| `:perfect on\|off` | pixel-perfect freehand: drop L-shaped corner pixels |
-| `:mode auto\|rgba\|grayscale\|indexed` / `:aspect <x> <y>` / `:sgrid [x y] <w> <h>` | sprite colour mode, pixel ratio, grid size + origin |
-| `:dither none\|bayer2\|bayer4\|bayer8\|floyd` | dithering for indexed conversion |
-| `:profile srgb\|linear` / `:profile icc <file>` / `:profile gamma <g>` / `:profile clear` | working space / embedded `.ase` colour profile |
-| `:renderer glow\|wgpu` | renderer (applied on next launch) |
-| `:theme [dark\|light\|midnight\|paper\|file.json]` / `:theme save <file>` | apply/list/save a JSON theme |
-| `:uifont <font.ttf\|default> [8-32]` | UI font and size (saved in the config) |
-| `:layout [default\|drawing\|animation\|compact\|file.json]` / `:layout reset\|save <file>` | workspace panels and sizes |
-| `:bind <action> <chord\|wheel-up\|wheel-down\|none>` / `:bind list\|reset` | customise action keys and wheel |
-| `:lang [en\|pt-BR\|file.json]` / `:lang list\|check\|save <file>` | runtime language and JSON catalogs |
-| `:prefs` | preferences window (editor, grid, export, appearance, keys, workspace) |
-| `:bgcolor [#rrggbb\|clear]` | sprite-properties background colour (user data) |
-| `:script <file.lua>` / `:lua <code>` | run sandboxed Lua with the `app` API |
-| `:ext install\|list\|remove\|run\|themes\|theme` | `.aseprite-extension` packages, scripts and themes |
-| `:fg #rrggbb` / `:bg #rrggbb` | set fg / bg exactly |
-| `:pal load\|save <file>` / `:pal move <from> <to>` / `:pal from-sprite` / `:pal lock on\|off` | palette I/O, reorder, derive from the frame, lock |
-| `:pal preset <name>` / `:pal insert <i> [#hex]` / `:pal delete <i>` / `:pal sort [rgb\|luma\|hue]` / `:pal name <i> <name>` | presets, index edits, sort, names |
-| `:slices [<dir> [cols rows\|named]]` | list slices, export a grid, or one PNG per named slice + `.slices.json` |
-| `:ops <file.json>` | replay a JSON op list as one undo step |
-| `:export out.png\|out.ase\|<stem> [scale]` | PNG frame · `.ase` sprite · bare stem = sheet + GIF + meta JSON; `[scale 1-16]` upscales rasters |
-| `:import[!] in.png` | import a PNG as a new sprite; `!` drops unsaved work |
-| `:importsheet[!] sheet.png [cols rows]` | rebuild frames from a sheet + its `.json` sidecar |
-| `:importatlas sheet.png [meta.json\|xml]` | Aseprite/TexturePacker JSON or XML atlas |
-| `:importseq <dir>` | image folder as frames in natural order |
-| `:open[!] proj.vpx\|proj.ase\|in.png` | load a project / `.ase` / PNG (by extension); `!` drops unsaved work |
-| `:recover [file]` | load the autosave snapshot (`recovery.vpx`) as unsaved work |
-| `:recent [n]` | list the last 10 opened/saved files, or open the nth |
-
-## UI
-
-- **Center** — the canvas: checkerboard transparency, real alpha, onion skin
-  (prev frame tinted red, next green), optional pixel grid, and a 3x3
-  seamless-tile preview with wrapping cursor.
-- **Right** — layer list (visibility, opacity, blend mode, reorder, rename,
-  add/remove, groups + indent/outdent, lock flag, alpha mask) + palette swatches
-  + full RGB picker for fg/bg.
-- **Bottom** — frame timeline (numbered cells, add/duplicate/remove),
-  play/pause, per-frame duration, drag-to-reorder, and tag chips that restrict
-  playback to a named range.
-- **Top** — mode, tool strip, fg/bg swatches, zoom, cursor/status, and the `:`
-  command line.
-
-## Rendering & the glow → wgpu plan
-
-The canvas is a single RGBA8 texture (`egui::TextureHandle`, nearest-neighbor at
-integer zoom). Compositing, blend modes, and onion skin all happen on the CPU,
-producing plain pixels. `egui`'s texture API is identical on the `glow` (OpenGL)
-and `wgpu` backends, so switching renderers later is:
-
-1. flip `eframe` features from `glow` → `wgpu` in `Cargo.toml`, and
-2. set `renderer: eframe::Renderer::Wgpu` in `main.rs`.
-
-No render-code changes. (Custom GPU shaders would be the one thing needing
-per-backend code — deliberately avoided for now.)
-
-## Data model
-
-A sprite is a grid of **cels** indexed `[layer][frame]`, the same shape Aseprite
-uses: `layers[0]` is the topmost layer, each cel is a row-major `Vec<Rgba>`
-with its own `x/y/w/h` bounds, z-index and optional link to another frame.
-Editing writes to the active layer's cel on the active frame; the canvas shows
-the flattened composite of all visible layers, with cel z-index reordering them.
-Linked cels share pixels and painting one copies them first.
-Offset cels from `.ase` keep their bounds; painting outside grows a cel, while
-crop/resize canonicalize to the canvas.
-
-## File formats
-
-- **`.ase` / `.aseprite`** — the native Aseprite format (read + write): raw,
-  zlib, linked (read + write) and compressed-tilemap cels; RGBA, grayscale and indexed pixels;
-  layer groups, cel opacity and frame durations. Export picks the smallest
-  lossless depth (gray, indexed, or 32-bit RGBA). Indexed sprites carry a
-  document palette and transparent index (header byte 28), and paint snaps to
-  palette entries. Embedded sRGB/ICC/gamma profiles are read and written;
-  user data (text/colour/properties) round-trips on layers, cels, tags, slices
-  and the sprite; slices (name, bounds, 9-patch, pivot) round-trip and export
-  by name; external-file entries round-trip and deprecated chunks are preserved
-  raw; unknown chunks are preserved on save.
-- **`.vpx`** — project file: JSON with size, layers, frames, and every cel.
-- **PNG** — single-frame import/export with full alpha.
-- **PCX** — import only (24-bit and paletted, expanded to opaque RGBA).
-- **FLC / FLI** — import only (all frames plus the file's playback speed).
-
-`:` commands pick the format by file extension (`.ase` → Aseprite, `.png` →
-PNG, otherwise `.vpx`).
-
-## Layout
-
-```
-src/
-  color.rs    Rgba color + default palette
-  sprite.rs   Sprite/Layer/Frame/Cel, composite, fill/line/rect, resize
-  editor.rs   Editor state: modes, tools, undo, navigation (GUI-agnostic)
-  input.rs    vim keymap + command line (egui events)
-  gui.rs      View (zoom/pan), canvas, panels, help overlay
-  app.rs      eframe App: event loop, playback, texture management
-  io.rs       PNG + `.vpx` + sheet/GIF/meta save/load
-  ase.rs      `.ase` / `.aseprite` import + export
-  palette.rs  `.gpl` / `.hex` / `.pal` palette I/O
-  ops.rs      an `Op` list replayed through `Editor::apply`
-  config.rs   `$XDG_CONFIG_HOME/modaline/config.json`
-  lib.rs      the model half as a library (no GUI dependency)
-  main.rs     window + run_native
-```
-
-The model (`sprite.rs`, `editor.rs`, `io.rs`, `ase.rs`, `color.rs`,
-`palette.rs`, `ops.rs`) is independent of any GUI library — the view and input
-layers are thin shells over it.
-
-## Implemented vs. full Aseprite
-
-Implemented: truecolor canvas with real alpha + checkerboard, zoom + pixel grid,
-onion skinning, animation playback with timeline thumbnails, layers
-(visibility/opacity/**blend modes**/reorder/rename/add/remove, **nested
-groups**, **lock flag**, **alpha masks**, **reference/background layers**),
-palette + RGB
-picker, pencil/eraser/bucket/picker/line/rect/ellipse with **filled shapes**,
-**gradient (linear/radial), spray, shade, blur, contour**,
-**marquee + magic-wand (tolerance, contiguous/global, all-layers) + lasso +
-polygon selection**
-with **add/subtract/intersect**, **expand/contract/border/feather/invert** and
-copy/cut/paste/move, **sixteen filters** (curves, levels, balance, median, convolve, emboss…), **free rotate/scale/skew + RotSprite + interactive handles/pivot**, **8x8 bitmap
-text** (text tool with live preview/size/alignment), **brush size 1-64 + custom masks/spacing + pressure**, **Wacom/OpenTabletDriver pen pressure (Linux evdev)**, **pixel-perfect freehand**, **crop/trim**,
-**per-tool inks + alpha lock**, **retained tilesets + tilemap refs (r/w `.ase`)**, **design grid + snap**,
-**multi-stop gradients** (presets, alpha, Bayer dither), **wide-pixel preview**, **independent preview window/OS viewport**, **layer×frame timeline grid + tag editor**, **symmetry painting**
-(mirror or radial,
-including bucket fill and paste), flip H/V + rotate 90° (**selection-aware**),
-stroke-grouped undo/redo with a clickable **history window** (**structural layer/frame/tag edits and panel
-properties undo too**),
-**headless CLI batch export**, **in-app file browser with recents/favourites**, **`.ase`/`.aseprite` + PNG/JPEG/BMP/TGA/WebP + `.vpx` import/export and PCX/FLC/FLI import**, **sheet + GIF + meta JSON
-export**, **sprite properties** (colour mode, pixel ratio, grid size + origin) and
-**layer flags** (movement lock, collapsed groups, UUIDs),
-**sRGB/linear colour profiles**, **custom palettes** (`.gpl`/`.hex`/`.pal`),
-**OS clipboard**, **tile mode** (3x3 seamless preview + wrapping cursor),
-**frame tags + drag reorder**, full vim keymap (normal/draw/visual/paste/command
-modes), **keyboard pan/brush-size**, **contextual status hints + `:tips`**, and
-**Helix keymap preset planned** (`docs/KEYMAPS.md`).
-
-## Headless CLI
+**Plain Rust** (needs the usual winit/X11/Wayland build libraries):
 
 ```sh
-modaline -b in.ase --sheet out.png --data out.json --scale 2 --frame-range 1 8
-modaline -b in.vpx --gif out.gif --gif-loop 0 --gif-dither --gif-colors 64
-modaline -b in.vpx --color-mode indexed --dither bayer4 --save-as out.ase
-modaline -b in.vpx --list-tags --list-layers
-modaline -b in.ase --split-layers out/ --split-tags tags/ --palette pal.gpl
-modaline -b in.ase --split-grid grid/ --columns 4 --rows 2 --export-tileset tiles.png
+cargo build --release
+./target/release/modaline
 ```
 
-`-b/--batch` never opens a window. Run `modaline -b --help` for all options
-(save-as/sheet/data/gif, filters, trim/crop, layouts, atlas metadata, lists).
+On NixOS without the devShell, `steam-run ./target/release/modaline` is the
+fallback. Open a file directly with `modaline art.ase`, `modaline art.vpx` or
+`modaline art.png`.
 
-Aseprite scripting (Lua 5.4 via `mlua`) and `.aseprite-extension` packages are
-documented in `docs/SCRIPTING.md`; JSON `Op` replay remains available.
+**First five minutes:** `?` (help) · `:tips` (workflow cheat sheet) ·
+`:prefs` (settings) · `:layout animation` (hide the side panel) · `:lang pt-BR`
+(Portuguese UI).
 
-Aseprite-parity programme: `docs/ASEPRITE_PARITY.md` tracks every capability
-against the task that closes it. P5 and P6 are complete; `docs/ROADMAP.md` P7
-is the open input/UX backlog. Out-of-scope by product choice: Web/Wasm and
-custom GPU shaders.
+## Requirements
+
+- Linux with X11 or Wayland (developed and tested here).
+- Rust 1.85+ (edition 2024), or the Nix flake.
+- A pen needs permission to read `/dev/input/event*` (see `docs/PEN.md`).
+
+## Keyboard quick reference
+
+| Keys | Action |
+|---|---|
+| `hjkl` / arrows | move the cursor |
+| `H` `J` `K` `L` | move 8 px |
+| `0` `$` `gg` `G` | left / right / top / bottom |
+| `i` | draw mode: paint while moving |
+| `b` / `e` / `f` / `c` | pencil / eraser / bucket / picker |
+| `d` / `R` / `o` | line / rect / ellipse (`Enter` commits, `Esc` cancels) |
+| `v` / `V` | marquee selection / select all |
+| `w` / `L` / `P` | magic wand / lasso / polygon |
+| `y` / `Y` / `x` / `m` / `p` | copy / copy merged / cut / move / paste |
+| `u` / `Ctrl-r` | undo / redo |
+| `Ctrl-hjkl` | pan the canvas |
+| `{` / `}` | smaller / bigger brush |
+| `[` / `]` | previous / next frame |
+| `<` / `>` | previous / next layer |
+| `+` / `-` | zoom in / out |
+| `:` / `?` | command line / help |
+| `Ctrl-s` / `Ctrl-q` | save / quit |
+
+Full keymap, modes and every `:` command: [`docs/COMMANDS.md`](docs/COMMANDS.md).
+
+## Examples
+
+**Batch export** — no window:
+
+```sh
+modaline -b demo.vpx --sheet out.png --data out.json --gif out.gif
+modaline -b demo.vpx --split-layers layers/ --split-tags tags/
+modaline -b demo.vpx --color-mode indexed --dither bayer4 --save-as out.ase
+modaline -b demo.vpx --list-tags --list-layers
+```
+
+**Scripting** — draw into a cel and add a frame:
+
+```lua
+local s = app.activeSprite
+s:resize(32, 32)
+local img = Image(32, 32)
+for x = 0, 31 do
+  img:setPixel(x, x, { r = 255, g = 205, b = 117, a = 255 })
+end
+s:setCelImage(1, 1, img)
+s:newFrame()
+s:setFrameDuration(2, 120)
+```
+
+The full API and sandbox rules are in [`docs/SCRIPTING.md`](docs/SCRIPTING.md);
+`examples/build_demo.lua` builds the scene above.
+
+## Project
+
+The model is a GUI-free Rust library: sprites, cels, layers, frames,
+compositing, undo, selections, `.ase`/`.vpx` I/O. The binary is a thin shell
+over it (`input`, `gui`, `app`). Another tool can read or write a project
+without opening a window.
+
+```sh
+cargo test                    # 292 tests
+cargo clippy --all-targets    # clean
+nix develop -c cargo run --release
+```
+
+- [`docs/COMMANDS.md`](docs/COMMANDS.md) — full keymap and commands
+- [`docs/SCRIPTING.md`](docs/SCRIPTING.md) — Lua API and sandbox
+- [`docs/PEN.md`](docs/PEN.md) — Wacom / OpenTabletDriver
+- [`docs/KEYMAPS.md`](docs/KEYMAPS.md) — vim now, Helix preset plan
+- [`docs/UX_AUDIT.md`](docs/UX_AUDIT.md) — what works and what is next
+- [`docs/ASEPRITE_PARITY.md`](docs/ASEPRITE_PARITY.md) — capability matrix
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — P7 input/UX backlog
+
+Status: pre-1.0. The feature surface is stable enough to use daily; the open
+work is pen tilt/ExpressKeys, a Helix keymap preset and the UX follow-ups in
+the audit.
 
 ## License
 
-Modaline is free software under the **GNU General Public License v3.0 or later**
-(`GPL-3.0-or-later`). See [`LICENSE`](LICENSE) for the full text. There is no
-warranty; use at your own risk.
+Modaline is free software under the **GNU General Public License v3.0 or
+later** (`GPL-3.0-or-later`). See [`LICENSE`](LICENSE). No warranty; use at your
+own risk.
 
-- Test fixtures in `tests/fixtures/ase/` are MIT-licensed third-party data;
-  see [`tests/fixtures/README.md`](tests/fixtures/README.md).
-- Palettes, fonts and dependency notices are listed in
-  [`THIRD_PARTY.md`](THIRD_PARTY.md).
-- Aseprite is a trademark of Igara Studio S.A.; Modaline is an independent
+- Test fixtures in `tests/fixtures/ase/` are MIT-licensed third-party data:
+  [`tests/fixtures/README.md`](tests/fixtures/README.md).
+- Palette, font and dependency notices: [`THIRD_PARTY.md`](THIRD_PARTY.md).
+- Aseprite is a trademark of Igara Studio S.A. Modaline is an independent
   project, not affiliated with or endorsed by Aseprite.
