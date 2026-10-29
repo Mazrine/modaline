@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **115 tests green** (107 lib + 8 bin)
+- `cargo test` → **120 tests green** (112 lib + 8 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-03 real indexed colour** (see batch 42).
+- Last completed batch: **P5-04 dithering engine** (see batch 43).
 
 ## How to resume
 
@@ -242,6 +242,13 @@ Read, in order:
     opening an indexed file syncs the picker. 6 new tests (115 total), including
     a fixture edit→save→open that asserts the exact cel index bytes and
     transparency.
+43. **P5-04 — dithering engine** — `DitherMode` (none, Bayer 2/4/8,
+    Floyd–Steinberg), `Sprite::dither_to_palette` and `:dither`; `:mode indexed`
+    applies the current mode. Bayer matrices are recursive; FS diffuses
+    7/16/3/16/5/16/1/16. 5 new tests (120 total): exact 2×2 Bayer pattern, an
+    FS `B B W W` ramp, determinism across all four modes, editor conversion +
+    undo/palette sync, and dithered `.ase` indices surviving save→load.
+    Gradients reuse the same engine in P5-22.
 
 ## Next step (exact)
 
@@ -250,8 +257,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-04** — dithering engine (first open task), then continue down the P5
-  roadmap in dependency order.
+- **P5-06** — palette editor/picker depth (first open task), then continue
+  down the P5 roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

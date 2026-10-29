@@ -305,6 +305,49 @@ pub enum ColorMode {
     Indexed,
 }
 
+/// How RGB pixels are reduced to palette entries when converting to indexed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DitherMode {
+    #[default]
+    None,
+    Bayer2,
+    Bayer4,
+    Bayer8,
+    FloydSteinberg,
+}
+
+impl DitherMode {
+    pub fn name(self) -> &'static str {
+        match self {
+            DitherMode::None => "none",
+            DitherMode::Bayer2 => "bayer2",
+            DitherMode::Bayer4 => "bayer4",
+            DitherMode::Bayer8 => "bayer8",
+            DitherMode::FloydSteinberg => "floyd",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<DitherMode> {
+        Some(match s.to_lowercase().replace(['_', '-'], "").as_str() {
+            "none" | "off" | "0" => DitherMode::None,
+            "bayer2" | "2" => DitherMode::Bayer2,
+            "bayer4" | "4" => DitherMode::Bayer4,
+            "bayer8" | "8" => DitherMode::Bayer8,
+            "floyd" | "fs" | "floydsteinberg" => DitherMode::FloydSteinberg,
+            _ => return None,
+        })
+    }
+
+    fn bayer_size(self) -> Option<usize> {
+        match self {
+            DitherMode::Bayer2 => Some(2),
+            DitherMode::Bayer4 => Some(4),
+            DitherMode::Bayer8 => Some(8),
+            _ => None,
+        }
+    }
+}
+
 impl ColorMode {
     pub fn name(self) -> &'static str {
         match self {
@@ -392,10 +435,10 @@ impl Sprite {
         self.palette[idx as usize]
     }
 
-    /// Build a palette from the sprite's pixels and snap every cel to it.
-    /// Up to 255 opaque colours are kept exactly; more go through median cut.
-    /// The transparent slot is index 0.
-    pub fn quantize_to_palette(&mut self) {
+    /// Build a palette from the sprite's pixels without touching them. Up to
+    /// 255 opaque colours are kept exactly; more go through median cut. The
+    /// transparent slot is index 0.
+    pub fn build_palette(&mut self) {
         let mut seen = std::collections::HashSet::new();
         let mut colors = Vec::new();
         for cel in self.cels.iter().flatten() {
@@ -419,8 +462,38 @@ impl Sprite {
         self.palette.push(Rgba::TRANSPARENT);
         self.palette.extend(chosen);
         self.transparent_index = 0;
+    }
+
+    /// Build a palette from the sprite's pixels and snap every cel to it.
+    pub fn quantize_to_palette(&mut self) {
+        self.build_palette();
         self.color_mode = ColorMode::Indexed;
         self.remap_to_palette();
+    }
+
+    /// Reduce every cel to the current palette. `None` snaps to the nearest
+    /// entry; ordered modes add a Bayer threshold before the lookup; Floyd-
+    /// Steinberg diffuses the quantization error.
+    pub fn dither_to_palette(&mut self, mode: DitherMode) {
+        if self.palette.is_empty() {
+            return;
+        }
+        self.color_mode = ColorMode::Indexed;
+        if mode == DitherMode::None {
+            self.remap_to_palette();
+            return;
+        }
+        let palette = self.palette.clone();
+        let ti = self.transparent_slot();
+        let w = self.width as usize;
+        let matrix = mode.bayer_size().map(bayer_matrix);
+        for cel in self.cels.iter_mut().flatten() {
+            if let (Some(size), Some(matrix)) = (mode.bayer_size(), matrix.as_ref()) {
+                dither_ordered(&mut cel.pixels, w, &palette, ti, matrix, size);
+            } else {
+                dither_floyd(&mut cel.pixels, w, self.height as usize, &palette, ti);
+            }
+        }
     }
 
     /// Snap every cel pixel to the current palette (transparent pixels become
@@ -1150,6 +1223,125 @@ pub(crate) fn nearest_palette_index(palette: &[Rgba], transparent: u8, c: Rgba) 
     }
 }
 
+/// Recursive Bayer threshold matrix. 1 -> [[0]], then each half-size value is
+/// multiplied by four and the quadrant offsets 0,2,3,1 are added.
+fn bayer_matrix(n: usize) -> Vec<u8> {
+    if n <= 1 {
+        return vec![0];
+    }
+    let half = n / 2;
+    let prev = bayer_matrix(half);
+    let mut m = vec![0u8; n * n];
+    for y in 0..n {
+        for x in 0..n {
+            let base = prev[(y % half) * half + (x % half)] * 4;
+            let add = match (y / half, x / half) {
+                (0, 0) => 0,
+                (0, 1) => 2,
+                (1, 0) => 3,
+                _ => 1,
+            };
+            m[y * n + x] = base + add;
+        }
+    }
+    m
+}
+
+fn dither_ordered(
+    pixels: &mut [Rgba],
+    w: usize,
+    palette: &[Rgba],
+    transparent: u8,
+    matrix: &[u8],
+    n: usize,
+) {
+    let denom = (n * n) as f32;
+    for (i, p) in pixels.iter_mut().enumerate() {
+        if p.3 == 0 {
+            *p = Rgba::TRANSPARENT;
+            continue;
+        }
+        let x = i % w;
+        let y = i / w;
+        let t = (matrix[(y % n) * n + x % n] as f32 + 0.5) / denom - 0.5;
+        let off = t * 64.0;
+        let probe = Rgba(
+            (p.0 as f32 + off).clamp(0.0, 255.0) as u8,
+            (p.1 as f32 + off).clamp(0.0, 255.0) as u8,
+            (p.2 as f32 + off).clamp(0.0, 255.0) as u8,
+            p.3,
+        );
+        let idx = nearest_palette_index(palette, transparent, probe);
+        let q = palette[idx as usize];
+        *p = if q.3 == 0 { Rgba::TRANSPARENT } else { q };
+    }
+}
+
+fn nearest_palette_rgb(palette: &[Rgba], transparent: u8, r: f32, g: f32, b: f32) -> u8 {
+    let mut best = transparent;
+    let mut best_d = f32::MAX;
+    for (i, p) in palette.iter().enumerate() {
+        if i == transparent as usize || p.3 == 0 {
+            continue;
+        }
+        let dr = p.0 as f32 - r;
+        let dg = p.1 as f32 - g;
+        let db = p.2 as f32 - b;
+        let d = dr * dr + dg * dg + db * db;
+        if d == 0.0 {
+            return i as u8;
+        }
+        if d < best_d {
+            best_d = d;
+            best = i as u8;
+        }
+    }
+    if best_d == f32::MAX && !palette.is_empty() {
+        (palette.len() - 1) as u8
+    } else {
+        best
+    }
+}
+
+fn dither_floyd(pixels: &mut [Rgba], w: usize, h: usize, palette: &[Rgba], transparent: u8) {
+    let src = pixels.to_vec();
+    let mut buf: Vec<[f32; 3]> = src
+        .iter()
+        .map(|p| [p.0 as f32, p.1 as f32, p.2 as f32])
+        .collect();
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            if src[i].3 == 0 {
+                pixels[i] = Rgba::TRANSPARENT;
+                continue;
+            }
+            let c = buf[i];
+            let idx = nearest_palette_rgb(palette, transparent, c[0], c[1], c[2]);
+            let q = palette[idx as usize];
+            pixels[i] = if q.3 == 0 { Rgba::TRANSPARENT } else { q };
+            let err = [c[0] - q.0 as f32, c[1] - q.1 as f32, c[2] - q.2 as f32];
+            for (dx, dy, f) in [
+                (1isize, 0isize, 7.0 / 16.0),
+                (-1, 1, 3.0 / 16.0),
+                (0, 1, 5.0 / 16.0),
+                (1, 1, 1.0 / 16.0),
+            ] {
+                let nx = x as isize + dx;
+                let ny = y as isize + dy;
+                if nx >= 0 && ny >= 0 && (nx as usize) < w && (ny as usize) < h {
+                    let ni = ny as usize * w + nx as usize;
+                    if src[ni].3 > 0 {
+                        for ch in 0..3 {
+                            buf[ni][ch] += err[ch] * f;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Median-cut quantizer: split the widest box until there are `max` boxes,
 /// then average each one. Colours are pre-sorted so the result is stable.
 fn median_cut(colors: Vec<Rgba>, max: usize) -> Vec<Rgba> {
@@ -1613,6 +1805,92 @@ mod tests {
         a.quantize_to_palette();
         b.quantize_to_palette();
         assert_eq!(a.palette, b.palette, "independent runs agree");
+    }
+
+    #[test]
+    fn bayer_dither_follows_the_matrix() {
+        let mut s = Sprite::new(4, 4);
+        for y in 0..4 {
+            for x in 0..4 {
+                s.set(0, 0, x, y, Rgba(128, 128, 128, 255));
+            }
+        }
+        s.palette = vec![
+            Rgba::TRANSPARENT,
+            Rgba(0, 0, 0, 255),
+            Rgba(255, 255, 255, 255),
+        ];
+        s.transparent_index = 0;
+        s.color_mode = ColorMode::Indexed;
+        s.dither_to_palette(DitherMode::Bayer2);
+
+        let black = Rgba(0, 0, 0, 255);
+        let pattern = [[0, 1], [1, 0]];
+        for y in 0..4 {
+            for x in 0..4 {
+                let got = usize::from(s.get(0, 0, x, y) != black);
+                assert_eq!(
+                    got,
+                    pattern[(y % 2) as usize][(x % 2) as usize],
+                    "pixel ({x}, {y})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn floyd_steinberg_diffuses_error() {
+        let mut s = Sprite::new(4, 1);
+        for (x, v) in [0u8, 85, 170, 255].into_iter().enumerate() {
+            s.set(0, 0, x as u32, 0, Rgba(v, v, v, 255));
+        }
+        s.palette = vec![
+            Rgba::TRANSPARENT,
+            Rgba(0, 0, 0, 255),
+            Rgba(255, 255, 255, 255),
+        ];
+        s.transparent_index = 0;
+        s.color_mode = ColorMode::Indexed;
+        s.dither_to_palette(DitherMode::FloydSteinberg);
+
+        let black = Rgba(0, 0, 0, 255);
+        let got: Vec<u8> = (0..4)
+            .map(|x| u8::from(s.get(0, 0, x, 0) != black))
+            .collect();
+        assert_eq!(got, [0, 0, 1, 1], "error carries rightwards");
+    }
+
+    #[test]
+    fn dithering_is_deterministic() {
+        let mut a = Sprite::new(8, 8);
+        for y in 0..8 {
+            for x in 0..8 {
+                let v = (x * 32 + y * 4) as u8;
+                a.set(0, 0, x, y, Rgba(v, v, v, 255));
+            }
+        }
+        a.palette = vec![
+            Rgba::TRANSPARENT,
+            Rgba(0, 0, 0, 255),
+            Rgba(85, 85, 85, 255),
+            Rgba(170, 170, 170, 255),
+            Rgba(255, 255, 255, 255),
+        ];
+        a.transparent_index = 0;
+        a.color_mode = ColorMode::Indexed;
+        for mode in [
+            DitherMode::Bayer2,
+            DitherMode::Bayer4,
+            DitherMode::Bayer8,
+            DitherMode::FloydSteinberg,
+        ] {
+            let mut b = a.clone();
+            a.dither_to_palette(mode);
+            b.dither_to_palette(mode);
+            assert_eq!(a.cels[0][0].pixels, b.cels[0][0].pixels, "{mode:?}");
+            // Reset the pixels for the next mode, keeping the palette.
+            a = b;
+        }
     }
 
     #[test]

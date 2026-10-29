@@ -126,6 +126,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:brush <1-64>` | pencil/eraser brush width (also a panel slider) |
 | `:perfect on\|off` | pixel-perfect freehand: drop L-shaped corner pixels |
 | `:mode auto\|rgba\|grayscale\|indexed` / `:aspect <x> <y>` / `:sgrid <w> <h>` | sprite colour mode, pixel ratio, grid |
+| `:dither none\|bayer2\|bayer4\|bayer8\|floyd` | dithering for indexed conversion |
 | `:profile srgb\|linear` / `:renderer glow\|wgpu` | colour profile / renderer (applied on next launch) |
 | `:fg #rrggbb` / `:bg #rrggbb` | set fg / bg exactly |
 | `:pal load\|save <file>` / `:pal move <from> <to>` / `:pal from-sprite` / `:pal lock on\|off` | palette I/O, reorder, derive from the frame, lock |

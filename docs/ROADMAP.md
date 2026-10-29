@@ -207,9 +207,14 @@ met; blocked tasks are marked with the reason.
   mode/undo/palette sync, opening an indexed fixture syncs the picker, `.vpx`
   palette round trip, and fixture edit→save→open checking header byte 28 and
   exact cel indices. Dithering stays P5-04; palette editing/names stay P5-06.
-- [ ] **P5-04 — Dithering engine** (M) — deps: P5-03.
-  Bayer 2/4/8 ordered + Floyd–Steinberg; RGB→indexed and gradients; `:dither`.
-  Gate: deterministic matrix tests; indexed export honours the mode.
+- [x] **P5-04 — Dithering engine** (M) — deps: P5-03.
+  Landed 2026-10-28. `DitherMode` (none, Bayer 2/4/8, Floyd–Steinberg),
+  `Sprite::dither_to_palette` and `:dither`; `:mode indexed` applies the current
+  choice. Bayer matrices are generated recursively; Floyd–Steinberg carries
+  7/16, 3/16, 5/16 and 1/16 of the error. 5 new tests (120 total): the exact
+  2×2 Bayer pattern, an FS `B B W W` ramp, determinism across all four modes,
+  editor conversion + undo/palette sync, and dithered `.ase` indices surviving
+  save→load. P5-22 gradients can reuse `dither_to_palette`.
 - [ ] **P5-06 — Palette editor and picker depth** (M) — deps: P5-03.
   Presets/defaults, insert/delete at index, sort, names round-trip, picker
   wheel + recent colours.

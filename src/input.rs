@@ -685,6 +685,15 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             Some(m) => editor.set_color_mode(m),
             None => editor.msg = "usage: :mode auto|rgba|grayscale|indexed".into(),
         },
+        "dither" => match arg {
+            None => editor.msg = format!("dither: {}", editor.dither.name()),
+            Some(a) => match crate::sprite::DitherMode::parse(a) {
+                Some(m) => editor.set_dither(m),
+                None => {
+                    editor.msg = "usage: :dither none|bayer2|bayer4|bayer8|floyd".into();
+                }
+            },
+        },
         "aspect" | "ratio" => {
             let mut it = arg.unwrap_or("").split_whitespace();
             let x = it.next().and_then(|v| v.parse::<u16>().ok());

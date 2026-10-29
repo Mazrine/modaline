@@ -136,6 +136,9 @@ L-shaped corners for the 1 px pencil/eraser.
   (exact up to 255 opaque colours, median cut above that), keeps a transparent
   slot, and snaps painting/fills to palette entries. The palette and
   transparent index survive `.vpx` and `.ase`; entries may carry alpha.
+- **dithering**: `:dither none|bayer2|bayer4|bayer8|floyd` converts to the
+  document palette with an ordered Bayer matrix or Floyd–Steinberg error
+  diffusion; `:mode indexed` uses the last choice. Gradients reuse the engine.
 - **colour profile**: sRGB or linear light. Converting rewrites every pixel and
   the palette together with the real transfer function (`:profile`).
 
@@ -226,7 +229,8 @@ middle-drag = pan.
 `text <string>` · `grid <px>` · `snap [on|off]` · `brush <1-64>` ·
 `perfect on|off` · `sym radial [axes]` ·
 `symcenter cursor|reset|<x> <y>` · `fg|bg #rrggbb` · `pal move <from> <to>` ·
-`mode auto|rgba|grayscale|indexed` · `aspect <x> <y>` · `sgrid <w> <h>` ·
+`mode auto|rgba|grayscale|indexed` · `dither none|bayer2|bayer4|bayer8|floyd` ·
+`aspect <x> <y>` · `sgrid <w> <h>` ·
 `slices <dir> [cols rows]` · `export <file> [scale]` · `profile srgb|linear` ·
 `renderer glow|wgpu` ·
 `ops <file.json>` · `recover [file]` · `help`.

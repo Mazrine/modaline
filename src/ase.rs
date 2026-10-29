@@ -1585,6 +1585,35 @@ mod tests {
     }
 
     #[test]
+    fn dithered_pattern_survives_ase() {
+        use crate::sprite::DitherMode;
+        let mut s = Sprite::new(4, 4);
+        for y in 0..4 {
+            for x in 0..4 {
+                s.set(0, 0, x, y, Rgba(128, 128, 128, 255));
+            }
+        }
+        s.palette = vec![
+            Rgba::TRANSPARENT,
+            Rgba(0, 0, 0, 255),
+            Rgba(255, 255, 255, 255),
+        ];
+        s.transparent_index = 0;
+        s.color_mode = crate::sprite::ColorMode::Indexed;
+        s.dither_to_palette(DitherMode::Bayer2);
+        let composite = s.composite(0);
+
+        let path = tmp("vixel_ase_dither.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        assert_eq!(u16_at(&data, 32) as usize, s.palette.len());
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.palette[..s.palette.len()], s.palette);
+        assert_eq!(back.composite(0), composite, "indices keep the pattern");
+    }
+
+    #[test]
     fn loads_real_aseprite_files() {
         for name in [
             "prop.ase",

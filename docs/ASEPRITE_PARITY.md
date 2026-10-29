@@ -61,7 +61,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Grayscale mode + conversion | Covered | — |
 | Indexed mode (real indices, conversion) | Covered | P5-03 |
 | Transparent palette index | Covered | P5-03 |
-| RGB→indexed dithering | Missing | P5-04 |
+| RGB→indexed dithering | Covered | P5-04 |
 | Palette import/export (`.gpl`, `.hex`, `.pal`) | Covered | — |
 | Palette editor: insert/delete/sort/presets/names | Partial | P5-06 |
 | Colour picker wheel + recent colours | Missing | P5-06 |

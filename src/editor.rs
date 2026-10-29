@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::color::Rgba;
 use crate::sprite::{
-    FillOptions, Sprite, color_close, ellipse_points, flood_fill_tol, line_points,
+    DitherMode, FillOptions, Sprite, color_close, ellipse_points, flood_fill_tol, line_points,
     rect_filled_points, rect_points,
 };
 
@@ -297,6 +297,8 @@ pub struct Editor {
     /// Refuse to paint a colour that is not in the palette. Off by default: a
     /// plain sprite has no ramp to protect.
     pub palette_lock: bool,
+    /// Dithering used when converting to indexed (`:dither`, `:mode indexed`).
+    pub dither: DitherMode,
     /// The renderer the user asked for. Applied at startup, so changing it here
     /// only takes effect on the next launch.
     pub renderer: String,
@@ -362,6 +364,7 @@ impl Editor {
             recent: Vec::new(),
             bundle_stage: None,
             palette_lock: false,
+            dither: DitherMode::None,
             renderer: "glow".into(),
         }
     }
@@ -1132,10 +1135,13 @@ impl Editor {
                 colors.insert(0, Rgba::TRANSPARENT);
             }
             colors.truncate(256);
+            let remap = colors != self.sprite.palette;
             self.sprite.palette = colors.clone();
             let ti = self.sprite.transparent_slot();
             self.sprite.transparent_index = ti;
-            self.sprite.remap_to_palette();
+            if remap {
+                self.sprite.remap_to_palette();
+            }
             self.dirty = true;
             self.touch();
         }
@@ -1643,7 +1649,10 @@ impl Editor {
             }
             ColorMode::Indexed => {
                 let before = self.sprite.clone();
-                self.sprite.quantize_to_palette();
+                if self.sprite.palette.is_empty() {
+                    self.sprite.build_palette();
+                }
+                self.sprite.dither_to_palette(self.dither);
                 let after = self.sprite.clone();
                 self.undo.push(UndoStep::Snapshot {
                     before: Box::new(before),
@@ -1657,6 +1666,31 @@ impl Editor {
         self.dirty = true;
         self.touch();
         self.msg = format!("mode: {}", mode.name());
+    }
+
+    /// Choose the dithering used for indexed conversion. A non-`None` mode
+    /// converts the sprite immediately (one undo step); `None` only sets the
+    /// preference for the next `:mode indexed`.
+    pub fn set_dither(&mut self, mode: DitherMode) {
+        self.dither = mode;
+        if mode != DitherMode::None {
+            let before = self.sprite.clone();
+            if self.sprite.palette.is_empty() {
+                self.sprite.build_palette();
+            }
+            self.sprite.dither_to_palette(mode);
+            let after = self.sprite.clone();
+            self.undo.push(UndoStep::Snapshot {
+                before: Box::new(before),
+                after: Box::new(after),
+            });
+            self.redo.clear();
+            self.palette_lock = false;
+            self.load_palette(self.sprite.palette.clone());
+            self.dirty = true;
+            self.touch();
+        }
+        self.msg = format!("dither: {}", mode.name());
     }
 
     pub fn set_pixel_aspect(&mut self, x: u16, y: u16) {
@@ -3298,6 +3332,30 @@ mod tests {
         assert_eq!(e.sprite.color_mode, ColorMode::Auto);
         assert_eq!(e.sprite.get(l, f, 0, 0), Rgba(255, 0, 0, 255));
         assert_eq!(e.sprite.get(l, f, 1, 0), Rgba(0, 0, 255, 255));
+    }
+
+    #[test]
+    fn dither_converts_to_indexed_and_undoes() {
+        use crate::sprite::{ColorMode, DitherMode};
+        let mut e = Editor::new(4, 1);
+        for (x, v) in [0u8, 85, 170, 255].into_iter().enumerate() {
+            e.sprite.set(0, 0, x as u32, 0, Rgba(v, v, v, 255));
+        }
+        e.sprite.palette = vec![
+            Rgba::TRANSPARENT,
+            Rgba(0, 0, 0, 255),
+            Rgba(255, 255, 255, 255),
+        ];
+        e.sprite.transparent_index = 0;
+        e.set_dither(DitherMode::Bayer2);
+        assert!(e.sprite.is_indexed());
+        assert_eq!(e.palette, e.sprite.palette);
+        assert_eq!(e.msg, "dither: bayer2");
+
+        e.undo();
+        assert_eq!(e.sprite.color_mode, ColorMode::Auto);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba(0, 0, 0, 255));
+        assert_eq!(e.sprite.get(0, 0, 1, 0), Rgba(85, 85, 85, 255));
     }
 
     #[test]
