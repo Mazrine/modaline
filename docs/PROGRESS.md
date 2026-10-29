@@ -10,7 +10,7 @@
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-51 extensions** (see batch 97).
+- Last completed batch: **P6 backlog opened** (see batch 98).
 
 ## How to resume
 
@@ -484,18 +484,30 @@ Read, in order:
 97. **P5-51 — extensions** — zip/manifest install/list/remove with traversal and
   size limits; `:ext` commands; sandboxed contributed scripts; theme listing/
   application. 3 tests (261 total); Xvfb installed, listed and ran `demo`.
+98. **P6 backlog opened** — added seven tasks (P6-00…P6-06) for the documented
+  Partial/Not-supported matrix rows: layer-content move, reopen closed docs,
+  Lua object API/fs, full string extraction, dirty-rect composition, async
+  filtering, PCX/FLC/FLI codecs. Docs-only; 261 tests unchanged.
 
 ## Next step (exact)
 
 **P5 is open.** Read `docs/ASEPRITE_PARITY.md` and `docs/ROADMAP.md` P5; the
 loop picks the first unchecked task whose dependencies are met.
 
-### Next (P5)
+### Next (P6)
 
-- **All P5 backlog tasks are checked.** No unblocked tasks remain. The loop stops
-  here. Documented Partial rows remain in `docs/ASEPRITE_PARITY.md`: scripting
-  object coverage (Image/Cel/Dialog/fs), localization strings, async filtering
-  and CPU dirty compositing.
+P5 is complete; **P6 is open (0/7)** in `docs/ROADMAP.md`:
+
+- **P6-00** — move layer/cel content tool (first open task).
+- **P6-01** — reopen closed documents.
+- **P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects.
+- **P6-03** — localization string extraction.
+- **P6-04** — incremental dirty compositing.
+- **P6-05** — async filter pipeline.
+- **P6-06** — PCX/FLC/FLI import.
+
+The loop should pick the first task whose dependencies are met and resume the
+same gate/commit/docs workflow.
 
 ## Known limitations (do not forget)
 

@@ -1,15 +1,15 @@
 # Aseprite Parity Matrix
 
-**Source of truth for P5.** One row per Aseprite capability. A row is closed
+**Source of truth for P5/P6.** One row per Aseprite capability. A row is closed
 when its status is Covered (or an approved deferral) and its task is checked in
 `docs/ROADMAP.md`. Update this file in the same commit that changes a
-capability, and add `Refs: P5-xx` to that commit.
+capability, and add `Refs: P5-xx`/`P6-xx` to that commit.
 
 Legend: **Covered** = capability present and tested · **Partial** = some depth
 missing · **Missing** = no equivalent · **Blocked** = task cannot proceed
 (reason given) · **Out of scope** = deliberate, user-approved.
 
-Last audited: 2026-10-28 (after P4; P5 just opened).
+Last audited: 2026-10-29 (after P5; P6 opened for the remaining Partial rows).
 Last smoke (P5-00): 2026-10-28 — text stamp, mouse paint, dirty close guard,
 save/export, recents, argv open, idle autosave recovery; drag-and-drop not
 exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
@@ -93,7 +93,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Alpha-lock painting flag | Covered | P5-18 |
 | Pressure/tablet sensitivity | Covered (manual + device force where reported) | P5-20 |
 | Tiled mode | Covered (configurable repeats, opacity, preview) | P5-27 |
-| Move layer/cel content tool | Partial (selection/cel move; no layer-content drag tool) | P5-24 |
+| Move layer/cel content tool | Partial (selection/cel move; no layer-content drag tool) | P6-00 |
 | Text tool (editable, fonts, sizes) | Covered (bitmap font) | P5-28 |
 
 ## Transformations
@@ -164,9 +164,9 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Image sequence export | Covered | P5-40 |
 | Filename templates (`{frame}`, `{layer}`, `{tag}`, `{title}`, `{duration}`) | Covered | P5-40 |
 | JPG / BMP / TGA / WebP | Covered (static read/write) | P5-43 |
-| PCX / FLC / FLI | Not supported (documented gap: no image-crate codec) | P5-43 |
+| PCX / FLC / FLI | Not supported (documented gap: no codec yet) | P6-06 |
 | Crash recovery | Covered | — |
-| Reopen closed files | Partial (recent list) | P5-52 |
+| Reopen closed files | Partial (recent list) | P6-01 |
 | File browser dialog | Covered (in-app, no native dep) | P5-45 |
 | Drag-and-drop open | Covered | — |
 | Recent files | Covered | — |
@@ -204,7 +204,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Capability | Status | Task |
 |---|---|---|
 | Scripting engine decision | Covered (Lua/mlua; `docs/SCRIPTING.md`) | P5-48 |
-| Lua scripting API | Partial (sandboxed engine; matrix in `docs/SCRIPTING.md`; Image/Cel/Dialog/fs remain missing) | P5-49, P5-50 |
+| Lua scripting API | Partial (sandboxed engine; matrix in `docs/SCRIPTING.md`; Image/Cel/Dialog/fs remain missing) | P5-49, P5-50, P6-02 |
 | Script from CLI / `:script` | Covered | P5-49 |
 | `.aseprite-extension` packages | Covered (zip/manifest install/remove, scripts run sandboxed, themes listed/applied) | P5-51 |
 | JSON `Op` replay (vixel-specific automation) | Covered | — |
@@ -218,7 +218,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Keyboard shortcut customization | Covered (actions, rebinding, conflicts, persisted) | P5-55 |
 | Mouse-wheel customization | Covered (wheel-up/down actions) | P5-55 |
 | Workspace layouts | Covered (4 built-ins, JSON layouts, reset, drag sizes) | P5-54 |
-| Localization | Partial (JSON catalogs, runtime switch, English fallback; core labels localized, status/help strings remain English) | P5-56 |
+| Localization | Partial (JSON catalogs, runtime switch, English fallback; core labels localized, status/help strings remain English) | P5-56, P6-03 |
 
 ## Editors, workspace, undo, performance
 
@@ -230,8 +230,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Undo history panel | Covered | P5-38 |
 | Non-linear undo | Covered (jump within the linear stack; branching documented) | P5-38 |
 | Compact/bounded undo memory | Covered (count limit + 256 MB byte budget; oldest trimmed) | P5-59 |
-| Incremental rendering / large-canvas performance | Partial (revision/frame cache, dirty-rect texture uploads; dirty composite still CPU full-frame) | P5-58 |
-| Filter threading | Partial (pointwise filters run on scoped workers; neighborhood filters synchronous and the caller waits) | P5-59 |
+| Incremental rendering / large-canvas performance | Partial (revision/frame cache, dirty-rect texture uploads; dirty composite still CPU full-frame) | P6-04 |
+| Filter threading | Partial (pointwise filters run on scoped workers; neighborhood filters synchronous and the caller waits) | P6-05 |
 
 ## vixel extras (not parity gaps)
 

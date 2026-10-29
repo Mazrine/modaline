@@ -713,6 +713,51 @@ met; blocked tasks are marked with the reason.
 is checked or marked blocked with a reason; the full gate is green; and the
 `.ase` round-trip fixtures in `docs/TESTING.md`/`docs/ASEPRITE_PARITY.md` pass.
 
+## P6 — documented parity gaps — **open**
+
+P5 shipped every planned task. P6 tracks the remaining matrix rows that are
+Partial or Not supported, so "no unexplained gap" is true again.
+
+- [ ] **P6-00 — Move layer/cel content tool** (M) — deps: P5-24.
+  Add a layer-content move tool (not just selection-mask transform): drag the
+  active cel's pixels with a floating preview, clip at canvas edges, respect
+  lock/editable/reference, commit as one undo step. Tests: drag preserves
+  transparency and alpha, clipping, undo, locked layer refusal. UI Xvfb smoke.
+- [ ] **P6-01 — Reopen closed documents** (S) — deps: P5-52.
+  Keep a bounded stack of closed clean documents (path + active tab) and add
+  `:reopen`/`:closed` to restore the most recent; never retain dirty content
+  silently. Tests for stack order/dedup and GUI smoke.
+- [ ] **P6-02 — Lua object API coverage** (L) — deps: P5-49, P5-50.
+  Add `Image` (pixel get/set, clear, bounds), `Cel` (layer/frame/image/bounds),
+  `Selection` (bounds/add/subtract), `Dialog` (alert/confirm/text) and a
+  sandboxed `app.fs` read/write limited to an explicit project root. Expand
+  `docs/SCRIPTING.md`; representative Aseprite scripts + denial tests.
+- [ ] **P6-03 — Localization string extraction** (M) — deps: P5-56.
+  Move status, help-overlay, window and command messages to catalog keys;
+  complete `pt-BR`; add a test that the catalog covers every key used by the
+  UI (or an explicit allowlist). Runtime switch must leave no mixed language.
+- [ ] **P6-04 — Incremental dirty compositing** (L) — deps: P5-58.
+  Add `Sprite::composite_rect` and recompose only changed bounds instead of the
+  whole frame; patch the texture from that smaller image and extend the
+  benchmark with a dirty-rect vs full case. Correctness test compares the
+  incremental result to a full composite over random edits.
+- [ ] **P6-05 — Async filter pipeline** (M) — deps: P5-59.
+  Run filters on a worker job (pointwise and neighborhood) with progress/cancel,
+  apply the result on the UI thread as one undo step, and keep the editor
+  responsive. Tests for completion, cancellation and undo; Xvfb large-canvas
+  responsiveness check.
+- [ ] **P6-06 — PCX / FLC / FLI import** (M) — deps: none.
+  Evaluate/implement codecs for PCX and FLC/FLI (frames + durations), integrate
+  with `load_any` and sequence import; add fixtures and docs. If no maintainable
+  crate/decoder is available offline, mark Blocked with the exact missing
+  dependency instead of silently dropping the formats.
+
+### P6 definition of done
+
+Every row in `docs/ASEPRITE_PARITY.md` is Covered or explicitly Out of scope; no
+Partial/Not supported row remains without a checked task or a Blocked reason.
+The full gate is green and each UI task has an Xvfb/headless check.
+
 ## Explicitly out of scope (for now)
 
 - Web/Wasm build (Aseprite has no web build; product choice).
@@ -721,7 +766,6 @@ is checked or marked blocked with a reason; the full gate is green; and the
 Verification: `docs/TESTING.md` drives the real GUI under Xvfb with a window
 manager and records what each pass proved.
 
-P0-P4 are closed. **P5 is the open set**: full Aseprite capability parity,
-tracked in `docs/ASEPRITE_PARITY.md` and listed above. The P3 sub-items keep
-their re-open conditions; keymap customization is P5-55 and ICC embedding is
-P5-09.
+P0-P5 are closed. **P6 is the open set**: closing the documented Partial and
+Not-supported rows in `docs/ASEPRITE_PARITY.md`. The P3 sub-items keep their
+re-open conditions.

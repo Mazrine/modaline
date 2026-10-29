@@ -302,10 +302,10 @@ vixel -b in.ase --split-grid grid/ --columns 4 --rows 2 --export-tileset tiles.p
 `-b/--batch` never opens a window. Run `vixel -b --help` for all options
 (save-as/sheet/data/gif, filters, trim/crop, layouts, atlas metadata, lists).
 
-Aseprite scripting (Lua) is decided in `docs/SCRIPTING.md` but blocked on an
-offline dependency; JSON `Op` replay remains available.
+Aseprite scripting (Lua 5.4 via `mlua`) and `.aseprite-extension` packages are
+documented in `docs/SCRIPTING.md`; JSON `Op` replay remains available.
 
-Aseprite-parity programme in progress: `docs/ASEPRITE_PARITY.md` tracks every
-Aseprite capability against the task that closes it, and `docs/ROADMAP.md` P5
-is the ordered backlog. Out-of-scope by product choice: Web/Wasm and custom GPU
-shaders.
+Aseprite-parity programme: `docs/ASEPRITE_PARITY.md` tracks every capability
+against the task that closes it. P5 is complete; `docs/ROADMAP.md` P6 is the
+open backlog for the documented Partial/unsupported rows. Out-of-scope by
+product choice: Web/Wasm and custom GPU shaders.
