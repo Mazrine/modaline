@@ -160,6 +160,11 @@ thin shells:
   `builtin` from it) and map new colors through `apply`.
 - UI strings go through `View::tr(key)` with keys in `lang/en.json`; add the
   translation to `lang/pt-BR.json` or it falls back to English.
+- Status messages are `Status` values: build one with `crate::status!` in the
+  library or `vixel::status!` in the shell so the `format!` template is
+  recorded (plain `.into()` literals translate by exact text). Add the English
+  template to `lang/en.json` `messages` and its translation to
+  `lang/pt-BR.json`; the i18n coverage test fails on a missing entry.
 - Keymap actions run before the fixed modal handlers. When a char key is
   consumed, set `view.suppress_text` so the following `Event::Text` does not run
   the old handler again; `blocks_default` handles moved defaults.

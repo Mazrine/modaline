@@ -713,7 +713,7 @@ met; blocked tasks are marked with the reason.
 is checked or marked blocked with a reason; the full gate is green; and the
 `.ase` round-trip fixtures in `docs/TESTING.md`/`docs/ASEPRITE_PARITY.md` pass.
 
-## P6 — documented parity gaps — **open**
+## P6 — documented parity gaps — **complete (2026-10-29)**
 
 P5 shipped every planned task. P6 tracks the remaining matrix rows that are
 Partial or Not supported, so "no unexplained gap" is true again.
@@ -747,14 +747,19 @@ Partial or Not supported, so "no unexplained gap" is true again.
   3 tests (268 total): objects, fs denials, headless dialogs. Xvfb smoke:
   `:scriptroot`, fs write, `Image`+cel write, selection add, absolute-path
   denial all reported in the status line.
-- [ ] **P6-03 — Localization string extraction** (M) — deps: P5-56.
-  Partial landing 2026-10-29: the 96-line help overlay and the files /
-  preferences / export / history / preview window titles are catalog keys,
-  `pt-BR` is complete for every key, and a test scans literal `tr("…")` keys in
-  `gui.rs`/`app.rs` and fails when either catalog lacks one. Still English:
-  preferences/panel labels and the ~400 interpolated status/command messages,
-  which need a message-key schema before they can be translated. The row stays
-  Partial until that second half lands.
+- [x] **P6-03 — Localization string extraction** (M) — deps: P5-56.
+  Landed 2026-10-29. `Editor::msg` is a `Status` (English text plus the
+  `format!` template); `status!` records the template so the status line
+  re-renders in the active language by substituting values into translated
+  literal segments, and plain literals use their text as the key. 411 message
+  templates, the 96-line help overlay, window titles and the preferences labels
+  have pt-BR entries. Tests scan `status!`, `.msg` literals and `.tr()` keys in
+  the UI sources and fail on a missing translation, and pt-BR is checked
+  against the English source. Technical widget words still shown in English
+  (side-panel/timeline labels such as "spacing") are allowlisted. Xvfb:
+  `:lang pt-BR` then `:grid 12` reported "grade: 12 px", `:filter invert`
+  "filtro: invert (25 px)", `?` opened the Portuguese help and `:prefs` was
+  fully Portuguese; `:lang en` switched them back with no stale text.
 - [x] **P6-04 — Incremental dirty compositing** (L) — deps: P5-58.
   Landed 2026-10-29. `Sprite::composite_rect` composites only a clipped
   rectangle (groups, masks, cel z and blend modes stay per-pixel), and the

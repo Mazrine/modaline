@@ -46,13 +46,13 @@ impl Doc {
         view.language = config.language.clone();
         match crate::i18n::resolve(&config.language) {
             Ok(catalog) => view.i18n = crate::i18n::Translator::new(catalog),
-            Err(e) => editor.msg = format!("language: {e}"),
+            Err(e) => editor.msg = vixel::status!("language: {e}"),
         }
         view.browser_favourites = config.favourites.iter().map(PathBuf::from).collect();
         if let Some(path) = path
             && let Err(e) = editor.open_path(&path)
         {
-            editor.msg = format!("open failed: {e}");
+            editor.msg = vixel::status!("open failed: {e}");
         }
         Doc {
             editor,
@@ -329,8 +329,8 @@ fn snapshot(editor: &mut Editor) {
         let _ = std::fs::create_dir_all(dir);
     }
     editor.msg = match io::save_project(&editor.sprite, &path) {
-        Ok(()) => format!("autosaved ({})", path.display()),
-        Err(e) => format!("autosave failed: {e}"),
+        Ok(()) => vixel::status!("autosaved ({})", path.display()),
+        Err(e) => vixel::status!("autosave failed: {e}"),
     };
 }
 
@@ -389,13 +389,13 @@ impl eframe::App for VixelApp {
         if theme_spec != self.theme_applied {
             match crate::theme::resolve(&theme_spec) {
                 Ok(theme) => crate::theme::apply(ui.ctx(), &theme),
-                Err(e) => self.docs[self.active].editor.msg = format!("theme: {e}"),
+                Err(e) => self.docs[self.active].editor.msg = vixel::status!("theme: {e}"),
             }
             self.theme_applied = theme_spec;
         }
         if (font_spec.clone(), font_size) != self.font_applied {
             if let Err(e) = crate::theme::install_font(ui.ctx(), &font_spec, font_size) {
-                self.docs[self.active].editor.msg = format!("font: {e}");
+                self.docs[self.active].editor.msg = vixel::status!("font: {e}");
             }
             self.font_applied = (font_spec, font_size);
         }

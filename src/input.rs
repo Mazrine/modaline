@@ -505,11 +505,11 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
             match crate::theme::resolve(&view.theme)
                 .and_then(|t| crate::theme::save(&t, std::path::Path::new(path.trim())))
             {
-                Ok(()) => editor.msg = format!("theme saved: {}", path.trim()),
-                Err(e) => editor.msg = format!("theme save failed: {e}"),
+                Ok(()) => editor.msg = vixel::status!("theme saved: {}", path.trim()),
+                Err(e) => editor.msg = vixel::status!("theme save failed: {e}"),
             }
         } else if rest.is_empty() {
-            editor.msg = format!(
+            editor.msg = vixel::status!(
                 "theme: {} (built-ins: {}; use :theme <name|file.json>)",
                 view.theme,
                 crate::theme::names().join(", ")
@@ -519,9 +519,9 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
                 Ok(theme) => {
                     crate::theme::apply(ctx, &theme);
                     view.theme = rest.to_string();
-                    editor.msg = format!("theme: {}", theme.name);
+                    editor.msg = vixel::status!("theme: {}", theme.name);
                 }
-                Err(e) => editor.msg = format!("theme: {e}"),
+                Err(e) => editor.msg = vixel::status!("theme: {e}"),
             }
         }
         return;
@@ -532,15 +532,15 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
         let rest = rest.trim();
         if let Some(path) = rest.strip_prefix("save ") {
             match crate::layout::save(&view.layout, std::path::Path::new(path.trim())) {
-                Ok(()) => editor.msg = format!("layout saved: {}", path.trim()),
-                Err(e) => editor.msg = format!("layout save failed: {e}"),
+                Ok(()) => editor.msg = vixel::status!("layout saved: {}", path.trim()),
+                Err(e) => editor.msg = vixel::status!("layout save failed: {e}"),
             }
         } else if rest == "reset" {
             view.layout = crate::layout::Layout::default();
             view.layout_pending = true;
             editor.msg = "layout: default (reset)".into();
         } else if rest.is_empty() {
-            editor.msg = format!(
+            editor.msg = vixel::status!(
                 "layout: {} (built-ins: {}; use :layout <name|file.json> | reset)",
                 view.layout.name,
                 crate::layout::names().join(", ")
@@ -551,9 +551,9 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
                     crate::layout::clamp_sizes(&mut layout);
                     view.layout = layout;
                     view.layout_pending = true;
-                    editor.msg = format!("layout: {}", view.layout.name);
+                    editor.msg = vixel::status!("layout: {}", view.layout.name);
                 }
-                Err(e) => editor.msg = format!("layout: {e}"),
+                Err(e) => editor.msg = vixel::status!("layout: {e}"),
             }
         }
         return;
@@ -570,7 +570,7 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
         let root = match crate::extension::default_root() {
             Ok(root) => root,
             Err(e) => {
-                editor.msg = format!("extensions: {e}");
+                editor.msg = vixel::status!("extensions: {e}");
                 return;
             }
         };
@@ -597,14 +597,15 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
                             )
                         })
                         .collect::<Vec<_>>()
-                        .join(", ");
+                        .join(", ")
+                        .into();
                 }
-                Err(e) => editor.msg = format!("extensions: {e}"),
+                Err(e) => editor.msg = vixel::status!("extensions: {e}"),
             },
             "install" => match it.next() {
                 Some(path) => match crate::extension::install_default(std::path::Path::new(path)) {
                     Ok(ext) => {
-                        editor.msg = format!(
+                        editor.msg = vixel::status!(
                             "installed {} {} ({} scripts, {} themes)",
                             ext.id(),
                             ext.manifest.version,
@@ -612,14 +613,14 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
                             ext.themes.len()
                         )
                     }
-                    Err(e) => editor.msg = format!("extension install: {e}"),
+                    Err(e) => editor.msg = vixel::status!("extension install: {e}"),
                 },
                 None => editor.msg = "usage: :ext install <file.aseprite-extension>".into(),
             },
             "remove" => match it.next() {
                 Some(id) => match crate::extension::remove(&root, id) {
-                    Ok(()) => editor.msg = format!("removed extension {id}"),
-                    Err(e) => editor.msg = format!("extension remove: {e}"),
+                    Ok(()) => editor.msg = vixel::status!("removed extension {id}"),
+                    Err(e) => editor.msg = vixel::status!("extension remove: {e}"),
                 },
                 None => editor.msg = "usage: :ext remove <id>".into(),
             },
@@ -629,12 +630,17 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
             {
                 Some(ext) => match ext.run_scripts(editor) {
                     Ok(out) if out.is_empty() => {
-                        editor.msg = format!("{}: scripts finished", ext.id())
+                        editor.msg = vixel::status!("{}: scripts finished", ext.id())
                     }
                     Ok(out) => {
-                        editor.msg = out.lines().last().unwrap_or("scripts finished").to_string()
+                        editor.msg = out
+                            .lines()
+                            .last()
+                            .unwrap_or("scripts finished")
+                            .to_string()
+                            .into()
                     }
-                    Err(e) => editor.msg = format!("{}: {e}", ext.id()),
+                    Err(e) => editor.msg = vixel::status!("{}: {e}", ext.id()),
                 },
                 None => editor.msg = "usage: :ext run <id>".into(),
             },
@@ -643,7 +649,7 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
                 .and_then(|id| crate::extension::get(&root, id).ok())
             {
                 Some(ext) if ext.themes.is_empty() => {
-                    editor.msg = format!("{}: no themes", ext.id())
+                    editor.msg = vixel::status!("{}: no themes", ext.id())
                 }
                 Some(ext) => {
                     editor.msg = ext
@@ -658,7 +664,8 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
                             )
                         })
                         .collect::<Vec<_>>()
-                        .join(", ");
+                        .join(", ")
+                        .into();
                 }
                 None => editor.msg = "usage: :ext themes <id>".into(),
             },
@@ -671,18 +678,18 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
                             Ok(theme) => {
                                 crate::theme::apply(ctx, &theme);
                                 view.theme = path.to_string_lossy().to_string();
-                                editor.msg = format!("theme: {}", theme.name);
+                                editor.msg = vixel::status!("theme: {}", theme.name);
                             }
-                            Err(e) => editor.msg = format!("extension theme: {e}"),
+                            Err(e) => editor.msg = vixel::status!("extension theme: {e}"),
                         },
-                        None => editor.msg = format!("{}: no theme {index}", ext.id()),
+                        None => editor.msg = vixel::status!("{}: no theme {index}", ext.id()),
                     },
                     None => editor.msg = "usage: :ext theme <id> [n]".into(),
                 }
             }
             other => {
                 editor.msg =
-                    format!("usage: :ext list|install|remove|run|themes|theme (got {other})")
+                    vixel::status!("usage: :ext list|install|remove|run|themes|theme (got {other})")
             }
         }
         return;
@@ -693,15 +700,15 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
         let rest = rest.trim();
         if let Some(path) = rest.strip_prefix("save ") {
             match view.i18n.catalog.save(std::path::Path::new(path.trim())) {
-                Ok(()) => editor.msg = format!("language saved: {}", path.trim()),
-                Err(e) => editor.msg = format!("language save failed: {e}"),
+                Ok(()) => editor.msg = vixel::status!("language saved: {}", path.trim()),
+                Err(e) => editor.msg = vixel::status!("language save failed: {e}"),
             }
         } else if rest == "check" {
             let missing = view.i18n.missing();
             editor.msg = if missing.is_empty() {
-                format!("language {}: complete", view.language)
+                vixel::status!("language {}: complete", view.language)
             } else {
-                format!(
+                vixel::status!(
                     "language {}: {} missing ({})",
                     view.language,
                     missing.len(),
@@ -717,16 +724,16 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
                 text.push_str(&format!("{code}={name} "));
             }
             text.push_str("; :lang <code|file.json>)");
-            editor.msg = text;
+            editor.msg = text.into();
         } else {
             match crate::i18n::resolve(rest) {
                 Ok(catalog) => {
                     let name = catalog.name.clone();
                     view.language = rest.to_string();
                     view.i18n = crate::i18n::Translator::new(catalog);
-                    editor.msg = format!("language: {name}");
+                    editor.msg = vixel::status!("language: {name}");
                 }
-                Err(e) => editor.msg = format!("language: {e}"),
+                Err(e) => editor.msg = vixel::status!("language: {e}"),
             }
         }
         return;
@@ -750,7 +757,7 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
             if !conflicts.is_empty() {
                 text.push_str(&format!(" CONFLICTS: {}", conflicts.len()));
             }
-            editor.msg = text;
+            editor.msg = text.into();
         } else if rest == "reset" {
             view.keymap = crate::keymap::Keymap::default();
             editor.msg = "bindings: defaults restored".into();
@@ -759,38 +766,39 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
             let name = it.next().unwrap_or("");
             let target = it.next();
             let Some(action) = crate::keymap::Action::parse(name) else {
-                editor.msg = format!("unknown action '{name}' (use :bind list)");
+                editor.msg = vixel::status!("unknown action '{name}' (use :bind list)");
                 return;
             };
             match target {
                 None => {
-                    editor.msg = format!(
+                    editor.msg = vixel::status!(
                         "usage: :bind {} <chord|wheel-up|wheel-down|none>",
                         action.name()
                     )
                 }
                 Some("none") => {
                     view.keymap.unbind(action);
-                    editor.msg = format!("{}: unbound", action.name());
+                    editor.msg = vixel::status!("{}: unbound", action.name());
                 }
                 Some("wheel-up") | Some("wheel-down") => {
                     view.keymap.set_wheel(action, target == Some("wheel-up"));
-                    editor.msg = format!("{}: {} (scroll)", action.name(), target.unwrap());
+                    editor.msg = vixel::status!("{}: {} (scroll)", action.name(), target.unwrap());
                 }
                 Some(chord) => match crate::keymap::Chord::parse(chord) {
                     None => {
-                        editor.msg = format!("bad chord '{chord}' (e.g. ctrl-shift-z, f1, space)")
+                        editor.msg =
+                            vixel::status!("bad chord '{chord}' (e.g. ctrl-shift-z, f1, space)")
                     }
                     Some(chord) => {
                         let stolen = view.keymap.set(action, chord.clone());
                         editor.msg = match stolen {
-                            Some(old) => format!(
+                            Some(old) => vixel::status!(
                                 "{} = {} (stole from {})",
                                 action.name(),
                                 chord.label(),
                                 old.name()
                             ),
-                            None => format!("{} = {}", action.name(), chord.label()),
+                            None => vixel::status!("{} = {}", action.name(), chord.label()),
                         };
                     }
                 },
@@ -816,9 +824,9 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
             Ok(()) => {
                 view.ui_font = path.to_string();
                 view.ui_font_size = size.clamp(8.0, 32.0);
-                editor.msg = format!("ui font: {path} @ {:.0}", view.ui_font_size);
+                editor.msg = vixel::status!("ui font: {path} @ {:.0}", view.ui_font_size);
             }
-            Err(e) => editor.msg = format!("ui font failed: {e}"),
+            Err(e) => editor.msg = vixel::status!("ui font failed: {e}"),
         }
         return;
     }
@@ -834,9 +842,9 @@ fn save(editor: &mut Editor) {
         match io::save_project(&editor.sprite, &p) {
             Ok(()) => {
                 editor.dirty = false;
-                editor.msg = editor.saved_note();
+                editor.msg = editor.saved_note().into();
             }
-            Err(err) => editor.msg = format!("save failed: {err}"),
+            Err(err) => editor.msg = vixel::status!("save failed: {err}"),
         }
     } else {
         editor.msg = "no filename (use :w <file>)".into();
@@ -884,7 +892,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             }
             let (w, h) = parse_dims(arg, 32, 32);
             editor.new_sprite(w, h);
-            editor.msg = format!("new {w}x{h}");
+            editor.msg = vixel::status!("new {w}x{h}");
         }
         "resize" => {
             let (w, h) = parse_dims(arg, editor.sprite.width, editor.sprite.height);
@@ -892,7 +900,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "resize needs width/height >= 1".into();
             } else {
                 editor.resize(w, h);
-                editor.msg = format!("resized to {w}x{h}");
+                editor.msg = vixel::status!("resized to {w}x{h}");
             }
         }
         "crop" => {
@@ -958,14 +966,14 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 Some("x") => match it.next().and_then(|v| v.parse::<u32>().ok()) {
                     Some(n) => {
                         editor.tile_x = n.clamp(1, 8);
-                        editor.msg = format!("tile: {}x per side", editor.tile_x);
+                        editor.msg = vixel::status!("tile: {}x per side", editor.tile_x);
                     }
                     None => editor.msg = "usage: :tile x <1-8>".into(),
                 },
                 Some("y") => match it.next().and_then(|v| v.parse::<u32>().ok()) {
                     Some(n) => {
                         editor.tile_y = n.clamp(1, 8);
-                        editor.msg = format!("tile: {}y per side", editor.tile_y);
+                        editor.msg = vixel::status!("tile: {}y per side", editor.tile_y);
                     }
                     None => editor.msg = "usage: :tile y <1-8>".into(),
                 },
@@ -976,8 +984,11 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         (Some(x), Some(y)) => {
                             editor.tile_x = x.clamp(1, 8);
                             editor.tile_y = y.clamp(1, 8);
-                            editor.msg =
-                                format!("tile: {}x {}y per side", editor.tile_x, editor.tile_y);
+                            editor.msg = vixel::status!(
+                                "tile: {}x {}y per side",
+                                editor.tile_x,
+                                editor.tile_y
+                            );
                         }
                         _ => editor.msg = "usage: :tile repeats <x> <y>".into(),
                     }
@@ -985,7 +996,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 Some("opacity") => match it.next().and_then(|v| v.parse::<u8>().ok()) {
                     Some(n) => {
                         editor.tile_opacity = n;
-                        editor.msg = format!("tile opacity: {n}");
+                        editor.msg = vixel::status!("tile opacity: {n}");
                     }
                     None => editor.msg = "usage: :tile opacity <0-255>".into(),
                 },
@@ -1031,6 +1042,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         .map(|t| format!("{} {}-{}", t.name, t.from, t.to))
                         .collect::<Vec<_>>()
                         .join(", ")
+                        .into()
                 };
             }
         },
@@ -1072,7 +1084,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "layeruuid" | "uuid" => match arg {
             Some("new") => editor.new_layer_uuid(),
             Some("clear") => editor.clear_layer_uuid(),
-            None => editor.msg = format!("layer uuid: {}", editor.layer_uuid_hex()),
+            None => editor.msg = vixel::status!("layer uuid: {}", editor.layer_uuid_hex()),
             _ => editor.msg = "usage: :layeruuid [new|clear]".into(),
         },
         "tagrepeat" => match arg.and_then(|s| s.parse::<u16>().ok()) {
@@ -1099,7 +1111,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 if let Some(n) = it.next().and_then(|v| v.parse::<u8>().ok()) {
                     editor.sym_axes = n.clamp(2, 16);
                 }
-                editor.msg = format!("symmetry: {}", editor.symmetry.name());
+                editor.msg = vixel::status!("symmetry: {}", editor.symmetry.name());
             } else {
                 editor.msg = "usage: :sym none|horizontal|vertical|both|radial [axes]".into();
             }
@@ -1111,7 +1123,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 ["cursor"] | [] => {
                     editor.sym_center = Some(editor.cursor);
                     let (x, y) = editor.sym_center.unwrap();
-                    editor.msg = format!("symmetry centre: {x},{y}");
+                    editor.msg = vixel::status!("symmetry centre: {x},{y}");
                 }
                 ["reset"] => {
                     editor.sym_center = None;
@@ -1120,7 +1132,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 [x, y] => match (x.parse::<u32>(), y.parse::<u32>()) {
                     (Ok(x), Ok(y)) => {
                         editor.sym_center = Some((x, y));
-                        editor.msg = format!("symmetry centre: {x},{y}");
+                        editor.msg = vixel::status!("symmetry centre: {x},{y}");
                     }
                     _ => editor.msg = "usage: :symcenter cursor|reset|<x> <y>".into(),
                 },
@@ -1150,8 +1162,8 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 return;
             };
             match editor.export_cels(std::path::Path::new(dir)) {
-                Ok(n) => editor.msg = format!("cels exported: {n} -> {dir}"),
-                Err(e) => editor.msg = format!("cel export failed: {e:#}"),
+                Ok(n) => editor.msg = vixel::status!("cels exported: {n} -> {dir}"),
+                Err(e) => editor.msg = vixel::status!("cel export failed: {e:#}"),
             }
         }
         "exporttileset" | "tilesetexport" => {
@@ -1166,14 +1178,14 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 })
                 .unwrap_or_else(|| std::path::PathBuf::from("tileset.png"));
             match crate::io::export_tileset(&editor.sprite, None, &path) {
-                Ok(()) => editor.msg = format!("tileset exported: {}", path.display()),
-                Err(e) => editor.msg = format!("tileset export failed: {e:#}"),
+                Ok(()) => editor.msg = vixel::status!("tileset exported: {}", path.display()),
+                Err(e) => editor.msg = vixel::status!("tileset export failed: {e:#}"),
             }
         }
         "tileid" => match arg.and_then(|v| v.parse::<u32>().ok()) {
             Some(id) => {
                 editor.tile_brush = id;
-                editor.msg = format!("tile brush: #{id}");
+                editor.msg = vixel::status!("tile brush: #{id}");
             }
             None => editor.msg = "usage: :tileid <0-1024>".into(),
         },
@@ -1186,15 +1198,15 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             }
             Some("x") => {
                 editor.tile_flip_x = !editor.tile_flip_x;
-                editor.msg = format!("tile flip x: {}", editor.tile_flip_x);
+                editor.msg = vixel::status!("tile flip x: {}", editor.tile_flip_x);
             }
             Some("y") => {
                 editor.tile_flip_y = !editor.tile_flip_y;
-                editor.msg = format!("tile flip y: {}", editor.tile_flip_y);
+                editor.msg = vixel::status!("tile flip y: {}", editor.tile_flip_y);
             }
             Some("diag" | "d" | "diagonal") => {
                 editor.tile_flip_diagonal = !editor.tile_flip_diagonal;
-                editor.msg = format!("tile flip diag: {}", editor.tile_flip_diagonal);
+                editor.msg = vixel::status!("tile flip diag: {}", editor.tile_flip_diagonal);
             }
             _ => editor.msg = "usage: :tileflip x|y|diag|none".into(),
         },
@@ -1234,14 +1246,14 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "text font: vixel (bitmap 8x8)".into();
             }
             Some(other) => {
-                editor.msg = format!("text font: {other} unsupported (bitmap 'vixel' only)");
+                editor.msg = vixel::status!("text font: {other} unsupported (bitmap 'vixel' only)");
             }
             None => editor.msg = "usage: :textfont vixel".into(),
         },
         "textsize" => match arg.and_then(|v| v.parse::<u32>().ok()) {
             Some(n) => {
                 editor.text_scale = (n / 8).clamp(1, 8);
-                editor.msg = format!("text size: {} px", editor.text_scale * 8);
+                editor.msg = vixel::status!("text size: {} px", editor.text_scale * 8);
             }
             None => editor.msg = "usage: :textsize <8-64>".into(),
         },
@@ -1262,7 +1274,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         },
         "textobj" | "textobject" => match arg.filter(|t| !t.is_empty()) {
             Some(text) => editor.set_text_object(text),
-            None => editor.msg = editor.text_object_summary(),
+            None => editor.msg = editor.text_object_summary().into(),
         },
         "text" | "t" => {
             let Some(text) = arg.filter(|t| !t.is_empty()) else {
@@ -1291,7 +1303,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 Err(_) => editor.msg = "usage: :pressure <0-100>|auto".into(),
             },
             None => {
-                editor.msg = format!(
+                editor.msg = vixel::status!(
                     "pressure: {:.0}% ({})",
                     editor.pressure() * 100.0,
                     editor.pressure_source()
@@ -1312,7 +1324,8 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         Some(n) => {
                             editor.brush_size = n.clamp(1, 64);
                             editor.set_brush_kind(kind);
-                            editor.msg = format!("brush: {} {} px", kind.name(), editor.brush_size);
+                            editor.msg =
+                                vixel::status!("brush: {} {} px", kind.name(), editor.brush_size);
                         }
                         None => editor.msg = "usage: :brush square|circle <1-64>".into(),
                     }
@@ -1334,20 +1347,20 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         editor.msg = "usage: :brush load <file.png>".into();
                     } else {
                         if let Err(e) = editor.load_brush(std::path::Path::new(&path)) {
-                            editor.msg = format!("brush load failed: {e}");
+                            editor.msg = vixel::status!("brush load failed: {e}");
                         }
                     }
                 }
                 Some("save") => {
                     let name = it.next().unwrap_or("brush");
                     if let Err(e) = editor.save_brush(name) {
-                        editor.msg = format!("brush save failed: {e}");
+                        editor.msg = vixel::status!("brush save failed: {e}");
                     }
                 }
                 Some("use") => match it.next() {
                     Some(name) => {
                         if let Err(e) = editor.use_brush(name) {
-                            editor.msg = format!("brush: {e}");
+                            editor.msg = vixel::status!("brush: {e}");
                         }
                     }
                     None => editor.msg = "usage: :brush use <name>".into(),
@@ -1357,14 +1370,14 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     editor.msg = if names.is_empty() {
                         "brush library: empty".into()
                     } else {
-                        format!("brushes: {}", names.join(", "))
+                        vixel::status!("brushes: {}", names.join(", "))
                     };
                 }
                 Some(n) => match n.parse::<u32>() {
                     Ok(n) => {
                         editor.brush_size = n.clamp(1, 64);
                         editor.set_brush_kind(crate::brush::BrushKind::Square);
-                        editor.msg = format!("brush: {} px", editor.brush_size);
+                        editor.msg = vixel::status!("brush: {} px", editor.brush_size);
                     }
                     Err(_) => {
                         editor.msg = "usage: :brush <1-64> | square|circle <n> | \
@@ -1378,7 +1391,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "grid" => match arg.and_then(|v| v.parse::<u32>().ok()) {
             Some(n) => {
                 editor.grid = n.max(1);
-                editor.msg = format!("grid: {} px", editor.grid);
+                editor.msg = vixel::status!("grid: {} px", editor.grid);
             }
             None => editor.msg = "usage: :grid <px>".into(),
         },
@@ -1393,14 +1406,14 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             }
             None => {
                 editor.snap = !editor.snap;
-                editor.msg = format!("snap: {}", if editor.snap { "on" } else { "off" });
+                editor.msg = vixel::status!("snap: {}", if editor.snap { "on" } else { "off" });
             }
             _ => editor.msg = "usage: :snap on|off".into(),
         },
         "wand" | "tolerance" => {
             if let Some(n) = arg.and_then(|s| s.parse::<u8>().ok()) {
                 editor.wand_tolerance = n;
-                editor.msg = format!("wand tolerance: {n}");
+                editor.msg = vixel::status!("wand tolerance: {n}");
             } else {
                 editor.msg = "usage: :wand <0-255>".into();
             }
@@ -1420,7 +1433,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             let on = matches!(arg, Some("on" | "true" | "1" | "all"));
             if arg.is_some() {
                 editor.wand_all_layers = on;
-                editor.msg = format!("wand all layers: {}", if on { "on" } else { "off" });
+                editor.msg = vixel::status!("wand all layers: {}", if on { "on" } else { "off" });
             } else {
                 editor.msg = "usage: :wandall on|off".into();
             }
@@ -1448,7 +1461,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             let mut it = rest.split_whitespace();
             let sub = it.next().unwrap_or("");
             match sub {
-                "" => editor.msg = editor.profile_summary(),
+                "" => editor.msg = editor.profile_summary().into(),
                 "srgb" | "linear" => {
                     if let Some(p) = crate::sprite::ColorProfile::parse(sub) {
                         editor.set_color_profile(p);
@@ -1462,7 +1475,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                             gamma: 0.0,
                             icc: bytes,
                         })),
-                        Err(e) => editor.msg = format!("profile: cannot read {path}: {e}"),
+                        Err(e) => editor.msg = vixel::status!("profile: cannot read {path}: {e}"),
                     },
                     None => editor.msg = "usage: :profile icc <file>".into(),
                 },
@@ -1504,7 +1517,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             None => editor.msg = "usage: :mode auto|rgba|grayscale|indexed".into(),
         },
         "dither" => match arg {
-            None => editor.msg = format!("dither: {}", editor.dither.name()),
+            None => editor.msg = vixel::status!("dither: {}", editor.dither.name()),
             Some(a) => match crate::sprite::DitherMode::parse(a) {
                 Some(m) => editor.set_dither(m),
                 None => {
@@ -1591,7 +1604,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             }
             _ => {
                 editor.transform_rotsprite = !editor.transform_rotsprite;
-                editor.msg = format!(
+                editor.msg = vixel::status!(
                     "rotsprite: {}",
                     if editor.transform_rotsprite {
                         "on"
@@ -1613,13 +1626,13 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 match (x, y) {
                     (Some(x), Some(y)) => {
                         editor.transform_pivot = Some((x, y));
-                        editor.msg = format!("transform pivot: {x:.1},{y:.1}");
+                        editor.msg = vixel::status!("transform pivot: {x:.1},{y:.1}");
                     }
                     _ => editor.msg = "usage: :pivot <x> <y>|clear".into(),
                 }
             }
             None => {
-                editor.msg = format!(
+                editor.msg = vixel::status!(
                     "transform pivot: {}",
                     editor
                         .transform_pivot
@@ -1709,7 +1722,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             if let Some(name) = arg
                 && editor.set_selection_op(name)
             {
-                editor.msg = format!("selection: {}", editor.selection_op.name());
+                editor.msg = vixel::status!("selection: {}", editor.selection_op.name());
             } else {
                 editor.msg = "usage: :selop replace|add|subtract|intersect".into();
             }
@@ -1747,13 +1760,13 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     editor.msg = if list.is_empty() {
                         "gradient: fg -> bg".into()
                     } else {
-                        list.join("  ")
+                        list.join("  ").into()
                     };
                 }
                 Some("dither") => match it.next().and_then(crate::sprite::DitherMode::parse) {
                     Some(mode) => {
                         editor.gradient_dither = mode;
-                        editor.msg = format!("gradient dither: {}", mode.name());
+                        editor.msg = vixel::status!("gradient dither: {}", mode.name());
                     }
                     None => editor.msg = "usage: :grad dither none|bayer2|bayer4|bayer8".into(),
                 },
@@ -1779,7 +1792,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     None => editor.msg = "usage: :grad stop <0-100> [#rrggbb]".into(),
                 },
                 None => {
-                    editor.msg = format!(
+                    editor.msg = vixel::status!(
                         "gradient: {} · {} stops · dither {}",
                         if editor.gradient_radial {
                             "radial"
@@ -1801,12 +1814,16 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             Some(path) => match crate::script::run_file(editor, std::path::Path::new(path)) {
                 Ok(out) => {
                     editor.msg = if out.is_empty() {
-                        format!("script: {path}")
+                        vixel::status!("script: {path}")
                     } else {
-                        out.lines().last().unwrap_or("script finished").to_string()
+                        out.lines()
+                            .last()
+                            .unwrap_or("script finished")
+                            .to_string()
+                            .into()
                     }
                 }
-                Err(e) => editor.msg = format!("script: {e}"),
+                Err(e) => editor.msg = vixel::status!("script: {e}"),
             },
             None => editor.msg = "usage: :script <file.lua>".into(),
         },
@@ -1816,10 +1833,10 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     editor.msg = if out.is_empty() {
                         "lua: ok".into()
                     } else {
-                        out.lines().last().unwrap_or("lua: ok").to_string()
+                        out.lines().last().unwrap_or("lua: ok").to_string().into()
                     }
                 }
-                Err(e) => editor.msg = format!("lua: {e}"),
+                Err(e) => editor.msg = vixel::status!("lua: {e}"),
             },
             None => editor.msg = "usage: :lua <code>".into(),
         },
@@ -1832,17 +1849,17 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 let path = PathBuf::from(dir);
                 if path.is_dir() {
                     editor.script_root = Some(path.canonicalize().unwrap_or(path));
-                    editor.msg = format!(
+                    editor.msg = vixel::status!(
                         "script root: {}",
                         editor.script_root.as_ref().unwrap().display()
                     );
                 } else {
-                    editor.msg = format!("scriptroot: {dir} is not a directory");
+                    editor.msg = vixel::status!("scriptroot: {dir} is not a directory");
                 }
             }
             None => {
                 editor.msg = match &editor.script_root {
-                    Some(p) => format!("script root: {}", p.display()),
+                    Some(p) => vixel::status!("script root: {}", p.display()),
                     None => "script root: none (app.fs denied; default is the open file's folder)"
                         .into(),
                 }
@@ -1856,13 +1873,13 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             Some(spec) => match crate::color::parse_hex(spec) {
                 Some(c) => {
                     editor.set_background_color(Some(c));
-                    editor.msg = format!("background: #{:02x}{:02x}{:02x}", c.0, c.1, c.2);
+                    editor.msg = vixel::status!("background: #{:02x}{:02x}{:02x}", c.0, c.1, c.2);
                 }
                 None => editor.msg = "usage: :bgcolor #rrggbb|clear".into(),
             },
             None => {
                 editor.msg = match editor.sprite.background_color() {
-                    Some(c) => format!("background: #{:02x}{:02x}{:02x}", c.0, c.1, c.2),
+                    Some(c) => vixel::status!("background: #{:02x}{:02x}{:02x}", c.0, c.1, c.2),
                     None => "background: none".into(),
                 };
             }
@@ -1874,9 +1891,9 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 } else {
                     editor.set_bg(c);
                 }
-                editor.msg = format!("{name}: #{:02x}{:02x}{:02x}", c.0, c.1, c.2);
+                editor.msg = vixel::status!("{name}: #{:02x}{:02x}{:02x}", c.0, c.1, c.2);
             }
-            None => editor.msg = format!("usage: :{name} #rrggbb"),
+            None => editor.msg = vixel::status!("usage: :{name} #rrggbb"),
         },
         "contour" | "outline" => {
             for tok in arg.unwrap_or("").split_whitespace() {
@@ -1894,7 +1911,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             }
             let (x, y) = editor.cursor;
             editor.contour_at(x, y);
-            editor.msg = format!(
+            editor.msg = vixel::status!(
                 "contour: {} px {}",
                 editor.contour_width,
                 if editor.contour_inside {
@@ -1912,9 +1929,10 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     if let Some(radius) = it.next().and_then(|v| v.parse::<u32>().ok()) {
                         editor.spray_radius = radius.clamp(1, 64);
                     }
-                    editor.msg = format!(
+                    editor.msg = vixel::status!(
                         "spray: {} dots, radius {}",
-                        editor.spray_rate, editor.spray_radius
+                        editor.spray_rate,
+                        editor.spray_radius
                     );
                 }
                 None => editor.msg = "usage: :spray <1-64> [radius 1-64]".into(),
@@ -1923,14 +1941,14 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "shade" => match arg.and_then(|v| v.parse::<u32>().ok()) {
             Some(n) => {
                 editor.shade_strength = n.clamp(1, 100);
-                editor.msg = format!("shade strength: {}%", editor.shade_strength);
+                editor.msg = vixel::status!("shade strength: {}%", editor.shade_strength);
             }
             None => editor.msg = "usage: :shade <1-100>".into(),
         },
         "blur" => match arg.and_then(|v| v.parse::<u32>().ok()) {
             Some(n) => {
                 editor.blur_radius = n.clamp(1, 32);
-                editor.msg = format!("blur radius: {} px", editor.blur_radius);
+                editor.msg = vixel::status!("blur radius: {} px", editor.blur_radius);
             }
             None => editor.msg = "usage: :blur <1-32>".into(),
         },
@@ -1947,9 +1965,9 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             match parsed {
                 Ok(list) => {
                     let changed = editor.apply(&list);
-                    editor.msg = format!("ops: {} applied, {changed} px", list.len());
+                    editor.msg = vixel::status!("ops: {} applied, {changed} px", list.len());
                 }
-                Err(e) => editor.msg = format!("ops failed: {e}"),
+                Err(e) => editor.msg = vixel::status!("ops failed: {e}"),
             }
         }
         "pal" | "palette" => {
@@ -2028,14 +2046,14 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                             Ok(colors) => {
                                 let n = colors.len();
                                 editor.load_palette(colors);
-                                editor.msg = format!("palette: {n} colors");
+                                editor.msg = vixel::status!("palette: {n} colors");
                             }
-                            Err(e) => editor.msg = format!("palette load failed: {e}"),
+                            Err(e) => editor.msg = vixel::status!("palette load failed: {e}"),
                         }
                     } else {
                         match palette::save(&editor.palette, p) {
                             Ok(()) => editor.msg = "palette saved".into(),
-                            Err(e) => editor.msg = format!("palette save failed: {e}"),
+                            Err(e) => editor.msg = vixel::status!("palette save failed: {e}"),
                         }
                     }
                 }
@@ -2060,7 +2078,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         .iter()
                         .map(|s| format!("{} ({} keys)", s.name, s.keys.len()))
                         .collect();
-                    editor.msg = format!("slices: {}", names.join(", "));
+                    editor.msg = vixel::status!("slices: {}", names.join(", "));
                 }
             } else {
                 let mode = it.next();
@@ -2099,8 +2117,10 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     )
                 };
                 match exported {
-                    Ok(paths) => editor.msg = format!("slices: {} files in {dir}", paths.len()),
-                    Err(e) => editor.msg = format!("slices failed: {e}"),
+                    Ok(paths) => {
+                        editor.msg = vixel::status!("slices: {} files in {dir}", paths.len())
+                    }
+                    Err(e) => editor.msg = vixel::status!("slices failed: {e}"),
                 }
             }
         }
@@ -2220,7 +2240,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     editor.export_config = cfg.clone();
                     match crate::io::export_config(&editor.sprite, &cfg, &stem) {
                         Ok(paths) => {
-                            editor.msg = format!(
+                            editor.msg = vixel::status!(
                                 "exported {}",
                                 paths
                                     .iter()
@@ -2230,7 +2250,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                                     .join(", ")
                             );
                         }
-                        Err(e) => editor.msg = format!("export failed: {e:#}"),
+                        Err(e) => editor.msg = vixel::status!("export failed: {e:#}"),
                     }
                 }
                 _ => {
@@ -2280,8 +2300,8 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     })
                 };
                 match res {
-                    Ok(what) => editor.msg = what,
-                    Err(err) => editor.msg = format!("export failed: {err}"),
+                    Ok(what) => editor.msg = what.into(),
+                    Err(err) => editor.msg = vixel::status!("export failed: {err}"),
                 }
             }
         }
@@ -2297,7 +2317,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                             editor.replace_sprite(sprite);
                             editor.msg = "atlas imported".into();
                         }
-                        Err(e) => editor.msg = format!("atlas import failed: {e:#}"),
+                        Err(e) => editor.msg = vixel::status!("atlas import failed: {e:#}"),
                     }
                 }
                 None => editor.msg = "usage: :importatlas <sheet.png> [meta.json|xml]".into(),
@@ -2312,9 +2332,9 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 Ok(sprite) => {
                     editor.replace_sprite(sprite);
                     editor.msg =
-                        format!("sequence imported: {} frames", editor.sprite.frames.len());
+                        vixel::status!("sequence imported: {} frames", editor.sprite.frames.len());
                 }
-                Err(e) => editor.msg = format!("sequence import failed: {e:#}"),
+                Err(e) => editor.msg = vixel::status!("sequence import failed: {e:#}"),
             }
         }
         "importsheet" | "importsheet!" => {
@@ -2330,9 +2350,9 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         let n = s.frames.len();
                         editor.replace_sprite(s);
                         editor.path = None;
-                        editor.msg = format!("imported sheet: {n} frames");
+                        editor.msg = vixel::status!("imported sheet: {n} frames");
                     }
-                    Err(e) => editor.msg = format!("import sheet failed: {e}"),
+                    Err(e) => editor.msg = vixel::status!("import sheet failed: {e}"),
                 }
             }
         }
@@ -2346,7 +2366,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         editor.replace_sprite(s);
                         editor.msg = "imported".into();
                     }
-                    Err(err) => editor.msg = format!("import failed: {err}"),
+                    Err(err) => editor.msg = vixel::status!("import failed: {err}"),
                 }
             } else {
                 editor.msg = "usage: :import <file.png>".into();
@@ -2359,7 +2379,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 }
                 let path = editor.recent[n - 1].clone();
                 if let Err(e) = editor.open_path(&path) {
-                    editor.msg = format!("open failed: {e}");
+                    editor.msg = vixel::status!("open failed: {e}");
                 }
             }
             Some(_) => editor.msg = "no such recent entry".into(),
@@ -2374,6 +2394,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         .map(|(i, p)| format!("{}: {}", i + 1, p.display()))
                         .collect::<Vec<_>>()
                         .join(" · ")
+                        .into()
                 };
             }
         },
@@ -2390,7 +2411,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         editor.dirty = true;
                         editor.msg = "recovered (use :w <file>)".into();
                     }
-                    Err(e) => editor.msg = format!("recover failed: {e}"),
+                    Err(e) => editor.msg = vixel::status!("recover failed: {e}"),
                 },
                 None => editor.msg = "no recovery path".into(),
             }
@@ -2402,7 +2423,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 }
                 match editor.open_path(PathBuf::from(p).as_path()) {
                     Ok(()) => {}
-                    Err(err) => editor.msg = format!("load failed: {err}"),
+                    Err(err) => editor.msg = vixel::status!("load failed: {err}"),
                 }
             } else {
                 editor.msg = "usage: :open <file.vpx|file.ase|file.png>".into();
@@ -2419,12 +2440,12 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     .rev()
                     .map(|p| p.display().to_string())
                     .collect();
-                format!("closed ({}): {}", list.len(), list.join(", "))
+                vixel::status!("closed ({}): {}", list.len(), list.join(", "))
             };
         }
         "reopen" => editor.request_reopen(),
         "" => {}
-        _ => editor.msg = format!("unknown command: {name}"),
+        _ => editor.msg = vixel::status!("unknown command: {name}"),
     }
 }
 
@@ -2435,7 +2456,7 @@ fn save_to(editor: &mut Editor, path: PathBuf) -> bool {
     match editor.save_path(&path) {
         Ok(()) => true,
         Err(err) => {
-            editor.msg = format!("save failed: {err}");
+            editor.msg = vixel::status!("save failed: {err}");
             false
         }
     }
@@ -2445,7 +2466,7 @@ fn save_to(editor: &mut Editor, path: PathBuf) -> bool {
 /// edits unless forced with `!`, matching `:q`.
 fn replace_ok(editor: &mut Editor, force: bool, cmd: &str) -> bool {
     if editor.dirty && !force {
-        editor.msg = format!("unsaved changes (use :{cmd}! to force or :w to save)");
+        editor.msg = vixel::status!("unsaved changes (use :{cmd}! to force or :w to save)");
         false
     } else {
         true

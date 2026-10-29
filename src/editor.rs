@@ -609,7 +609,7 @@ pub struct Editor {
     /// Background filter currently running, polled by the app each frame.
     pub filter_job: Option<FilterJob>,
     pub cmdline: String,
-    pub msg: String,
+    pub msg: crate::status::Status,
     pub dirty: bool,
     /// Monotonic counter for cache invalidation (timeline thumbnails). Every
     /// edit bumps it; the view compares it instead of rebuilding each frame.
@@ -949,7 +949,7 @@ impl Editor {
 
     pub fn set_ink(&mut self, ink: Ink) {
         self.tool_inks[self.tool.index()] = ink;
-        self.msg = format!("ink: {}", ink.name());
+        self.msg = crate::status!("ink: {}", ink.name());
     }
 
     pub fn set_alpha_lock(&mut self, on: bool) {
@@ -997,7 +997,7 @@ impl Editor {
     /// Copy the active cel (resolving links) to the cel clipboard.
     pub fn copy_cel(&mut self) {
         let cel = self.active_cel_content();
-        self.msg = format!("cel copied ({}x{})", cel.w, cel.h);
+        self.msg = crate::status!("cel copied ({}x{})", cel.w, cel.h);
         self.cel_clipboard = Some(cel);
     }
 
@@ -1085,7 +1085,7 @@ impl Editor {
         if !self.cel_selection.remove(&(layer, frame)) {
             self.cel_selection.insert((layer, frame));
         }
-        self.msg = format!("cel selection: {}", self.cel_selection.len());
+        self.msg = crate::status!("cel selection: {}", self.cel_selection.len());
     }
 
     pub fn clear_cel_selection(&mut self) {
@@ -1555,7 +1555,7 @@ impl Editor {
             _ => return false,
         };
         self.gradient_stops = stops;
-        self.msg = format!("gradient preset: {name}");
+        self.msg = crate::status!("gradient preset: {name}");
         true
     }
 
@@ -1567,7 +1567,7 @@ impl Editor {
         self.gradient_stops.push((pos, color));
         self.gradient_stops
             .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-        self.msg = format!("gradient stop: {:.0}%", pos * 100.0);
+        self.msg = crate::status!("gradient stop: {:.0}%", pos * 100.0);
     }
 
     /// Neighbour offsets for the tiled preview, including `(0, 0)`.
@@ -1698,12 +1698,12 @@ impl Editor {
 
     pub fn set_brush_kind(&mut self, kind: BrushKind) {
         self.brush_kind = kind;
-        self.msg = format!("brush: {}", kind.name());
+        self.msg = crate::status!("brush: {}", kind.name());
     }
 
     pub fn set_brush_spacing(&mut self, percent: u32) {
         self.brush_spacing = percent.clamp(1, 200);
-        self.msg = format!("brush spacing: {}%", self.brush_spacing);
+        self.msg = crate::status!("brush spacing: {}%", self.brush_spacing);
     }
 
     /// Effective pressure: manual override, else device force, else full.
@@ -1726,12 +1726,12 @@ impl Editor {
 
     pub fn set_pressure(&mut self, pressure: f32) {
         self.manual_pressure = Some(pressure.clamp(0.0, 1.0));
-        self.msg = format!("pressure: {:.0}% (manual)", self.pressure() * 100.0);
+        self.msg = crate::status!("pressure: {:.0}% (manual)", self.pressure() * 100.0);
     }
 
     pub fn pressure_auto(&mut self) {
         self.manual_pressure = None;
-        self.msg = format!("pressure: auto ({})", self.pressure_source());
+        self.msg = crate::status!("pressure: auto ({})", self.pressure_source());
     }
 
     pub fn set_device_pressure(&mut self, pressure: Option<f32>) {
@@ -1742,14 +1742,14 @@ impl Editor {
         let brush = brush::load(path)?;
         self.custom_brush = Some(brush.clone());
         self.brush_kind = BrushKind::Custom;
-        self.msg = format!("brush: {} ({}x{})", brush.name, brush.w, brush.h);
+        self.msg = crate::status!("brush: {} ({}x{})", brush.name, brush.w, brush.h);
         Ok(())
     }
 
     pub fn save_brush(&mut self, name: &str) -> anyhow::Result<std::path::PathBuf> {
         let brush = self.current_brush();
         let path = brush::save_named(&brush, name)?;
-        self.msg = format!("brush saved: {}", path.display());
+        self.msg = crate::status!("brush saved: {}", path.display());
         Ok(path)
     }
 
@@ -1757,7 +1757,7 @@ impl Editor {
         let brush = brush::load_named(name)?;
         self.custom_brush = Some(brush.clone());
         self.brush_kind = BrushKind::Custom;
-        self.msg = format!("brush: {} ({}x{})", brush.name, brush.w, brush.h);
+        self.msg = crate::status!("brush: {} ({}x{})", brush.name, brush.w, brush.h);
         Ok(())
     }
 
@@ -1820,7 +1820,7 @@ impl Editor {
         self.preview_text_object();
         self.commit_text_edit();
         if let Some((object, _)) = self.text_object_for(None) {
-            self.msg = format!("text object: {:?} ({} px)", object.text, object.size);
+            self.msg = crate::status!("text object: {:?} ({} px)", object.text, object.size);
         }
     }
 
@@ -1838,7 +1838,7 @@ impl Editor {
             self.text_edit_before = Some(Box::new(self.sprite.clone()));
         }
         self.rebuild_text_cel(&object, color);
-        self.msg = format!("text: {} px, align {}", object.size, object.align);
+        self.msg = crate::status!("text: {} px, align {}", object.size, object.align);
     }
 
     /// Commit a live preview as exactly one undo step.
@@ -1938,7 +1938,7 @@ impl Editor {
         self.msg = if id == 0 {
             "tile: empty".into()
         } else {
-            format!("tile: {id} placed")
+            crate::status!("tile: {id} placed")
         };
     }
 
@@ -2036,7 +2036,7 @@ impl Editor {
             self.tile_flip_x = tile.flip_x;
             self.tile_flip_y = tile.flip_y;
             self.tile_flip_diagonal = tile.flip_diagonal;
-            self.msg = format!("tile: picked {}", tile.id);
+            self.msg = crate::status!("tile: picked {}", tile.id);
         }
     }
 
@@ -2061,7 +2061,7 @@ impl Editor {
         self.text_edit_before = Some(Box::new(self.sprite.clone()));
         self.rebuild_text_cel(&object, color);
         self.commit_text_edit();
-        self.msg = format!("text placed at {},{} ({} px)", x, y, object.size);
+        self.msg = crate::status!("text placed at {},{} ({} px)", x, y, object.size);
     }
 
     fn text_object_for(&self, at: Option<(i32, i32)>) -> Option<(TextObject, Rgba)> {
@@ -2229,7 +2229,7 @@ impl Editor {
             }
         }
         self.end_stroke();
-        self.msg = format!(
+        self.msg = crate::status!(
             "text: {text:?} ({} px)",
             if any { "stamped" } else { "empty" }
         );
@@ -2661,7 +2661,7 @@ impl Editor {
         });
         let n = list.len();
         self.load_palette(list.into_iter().map(|(c, _)| c).collect());
-        self.msg = format!("palette: {n} colours from the frame");
+        self.msg = crate::status!("palette: {n} colours from the frame");
         n
     }
 
@@ -2701,7 +2701,7 @@ impl Editor {
             self.bg_idx += 1;
         }
         self.sync_palette_to_sprite(false);
-        self.msg = format!("palette: inserted at {i}");
+        self.msg = crate::status!("palette: inserted at {i}");
     }
 
     /// Remove the entry at `index`; indexed pixels that used it snap to the
@@ -2723,7 +2723,7 @@ impl Editor {
         self.fg = self.palette[self.fg_idx];
         self.bg = self.palette[self.bg_idx];
         self.sync_palette_to_sprite(true);
-        self.msg = format!("palette: removed {index}");
+        self.msg = crate::status!("palette: removed {index}");
     }
 
     pub fn remove_palette_color(&mut self) {
@@ -2765,7 +2765,7 @@ impl Editor {
         self.fg = fg;
         self.bg = bg;
         self.sync_palette_to_sprite(false);
-        self.msg = format!("palette: sorted by {key}");
+        self.msg = crate::status!("palette: sorted by {key}");
     }
 
     pub fn set_palette_name(&mut self, index: usize, name: &str) {
@@ -2779,7 +2779,7 @@ impl Editor {
             self.dirty = true;
             self.touch();
         }
-        self.msg = format!("palette: name {index}");
+        self.msg = crate::status!("palette: name {index}");
     }
 
     pub fn palette_name(&self, index: usize) -> &str {
@@ -2795,11 +2795,11 @@ impl Editor {
             Some(colors) => {
                 let n = colors.len();
                 self.load_palette(colors);
-                self.msg = format!("palette: {name} ({n})");
+                self.msg = crate::status!("palette: {name} ({n})");
                 true
             }
             None => {
-                self.msg = format!("unknown palette preset: {name}");
+                self.msg = crate::status!("unknown palette preset: {name}");
                 false
             }
         }
@@ -2847,7 +2847,7 @@ impl Editor {
         self.fg_idx = track(self.fg_idx);
         self.bg_idx = track(self.bg_idx);
         self.sync_palette_to_sprite(false);
-        self.msg = format!("palette {from} -> {to}");
+        self.msg = crate::status!("palette {from} -> {to}");
     }
 
     /// Set fg/bg from `#rrggbb`, as the picker's hex field and `:fg` do.
@@ -2984,7 +2984,7 @@ impl Editor {
             }
         };
         self.active_tag = Some(idx);
-        self.msg = format!("tag '{name}': frames {a}-{b}");
+        self.msg = crate::status!("tag '{name}': frames {a}-{b}");
         self.record_structure(before, at);
     }
 
@@ -3001,7 +3001,7 @@ impl Editor {
         tag.name = name.to_string();
         tag.from = a;
         tag.to = b;
-        self.msg = format!("tag '{name}': frames {a}-{b}");
+        self.msg = crate::status!("tag '{name}': frames {a}-{b}");
         self.record_structure(before, at);
     }
 
@@ -3148,7 +3148,7 @@ impl Editor {
         let before = self.sprite.clone();
         let at = self.edit_point();
         self.sprite.tags[i].direction = direction;
-        self.msg = format!("tag '{}': {}", self.sprite.tags[i].name, direction.name());
+        self.msg = crate::status!("tag '{}': {}", self.sprite.tags[i].name, direction.name());
         self.record_structure(before, at);
     }
 
@@ -3164,7 +3164,7 @@ impl Editor {
         let before = self.sprite.clone();
         let at = self.edit_point();
         self.sprite.tags[i].repeat = repeat;
-        self.msg = format!(
+        self.msg = crate::status!(
             "tag '{}': {}",
             self.sprite.tags[i].name,
             if repeat == 0 {
@@ -3198,7 +3198,7 @@ impl Editor {
         self.pending = None;
         self.paste_pos = None;
         self.snapshot(before);
-        self.msg = format!("cropped to {w}x{h}");
+        self.msg = crate::status!("cropped to {w}x{h}");
     }
 
     /// Crop to the current selection's bounding box.
@@ -3270,7 +3270,7 @@ impl Editor {
         self.sprite.ase_profile = profile;
         self.dirty = true;
         self.touch();
-        self.msg = self.profile_summary();
+        self.msg = self.profile_summary().into();
     }
 
     /// One-line description of the embedded `.ase` colour profile.
@@ -3295,7 +3295,7 @@ impl Editor {
     pub fn set_color_profile(&mut self, to: crate::sprite::ColorProfile) {
         use crate::sprite::ColorProfile;
         if to == self.sprite.color_profile {
-            self.msg = format!("profile: {}", to.name());
+            self.msg = crate::status!("profile: {}", to.name());
             return;
         }
         let before = self.sprite.clone();
@@ -3317,7 +3317,7 @@ impl Editor {
         self.bg = Rgba(f(self.bg.0), f(self.bg.1), f(self.bg.2), self.bg.3);
         self.dirty = true;
         self.touch();
-        self.msg = format!("profile: {}", to.name());
+        self.msg = crate::status!("profile: {}", to.name());
     }
 
     // ---- sprite properties ----
@@ -3329,7 +3329,7 @@ impl Editor {
         use crate::sprite::ColorMode;
         let needs_palette = mode == ColorMode::Indexed && self.sprite.palette.is_empty();
         if mode == self.sprite.color_mode && !needs_palette {
-            self.msg = format!("mode: {}", mode.name());
+            self.msg = crate::status!("mode: {}", mode.name());
             return;
         }
         match mode {
@@ -3369,7 +3369,7 @@ impl Editor {
         }
         self.dirty = true;
         self.touch();
-        self.msg = format!("mode: {}", mode.name());
+        self.msg = crate::status!("mode: {}", mode.name());
     }
 
     /// Choose the dithering used for indexed conversion. A non-`None` mode
@@ -3397,15 +3397,16 @@ impl Editor {
             self.dirty = true;
             self.touch();
         }
-        self.msg = format!("dither: {}", mode.name());
+        self.msg = crate::status!("dither: {}", mode.name());
     }
 
     pub fn set_pixel_aspect(&mut self, x: u16, y: u16) {
         self.sprite.pixel_aspect = (x.max(1), y.max(1));
         self.dirty = true;
-        self.msg = format!(
+        self.msg = crate::status!(
             "pixel aspect: {}:{}",
-            self.sprite.pixel_aspect.0, self.sprite.pixel_aspect.1
+            self.sprite.pixel_aspect.0,
+            self.sprite.pixel_aspect.1
         );
     }
 
@@ -3416,7 +3417,7 @@ impl Editor {
             self.grid = w;
         }
         self.dirty = true;
-        self.msg = format!("sprite grid: {}x{}", w, h);
+        self.msg = crate::status!("sprite grid: {}x{}", w, h);
     }
 
     pub fn set_sprite_grid_origin(&mut self, x: i32, y: i32) {
@@ -3425,13 +3426,13 @@ impl Editor {
             y.clamp(i16::MIN as i32, i16::MAX as i32),
         );
         self.dirty = true;
-        self.msg = format!("sprite grid origin: {},{}", x, y);
+        self.msg = crate::status!("sprite grid origin: {},{}", x, y);
     }
 
     pub fn set_sprite_grid_bounds(&mut self, x: i32, y: i32, w: u32, h: u32) {
         self.set_sprite_grid(w, h);
         self.set_sprite_grid_origin(x, y);
-        self.msg = format!("sprite grid: {}x{} at {},{}", w, h, x, y);
+        self.msg = crate::status!("sprite grid: {}x{} at {},{}", w, h, x, y);
     }
 
     // ---- free transform ----
@@ -3460,7 +3461,7 @@ impl Editor {
         self.active_frame = saved_frame;
         self.undo.truncate(undo_len);
         self.snapshot(before);
-        self.msg = format!(
+        self.msg = crate::status!(
             "transform: {} cels (rotate {angle_deg:.0} deg, scale {sx:.2}x{sy:.2}, skew {skew_deg:.0} deg)",
             targets.len()
         );
@@ -3561,7 +3562,7 @@ impl Editor {
         }
         self.end_stroke();
         self.dirty = true;
-        self.msg = format!(
+        self.msg = crate::status!(
             "transform: rotate {angle_deg:.0} deg, scale {sx:.2}x{sy:.2}, skew {skew_deg:.0} deg"
         );
     }
@@ -3580,7 +3581,7 @@ impl Editor {
             .collect();
         let dst = apply_filter_parallel(&src, w, h, f, self.fg);
         let changed = self.apply_filter_result(&src, &dst);
-        self.msg = format!("filter: {} ({changed} px)", f.name());
+        self.msg = crate::status!("filter: {} ({changed} px)", f.name());
     }
 
     /// `:filter`: small canvases run inline (instant and testable), large ones
@@ -3602,7 +3603,7 @@ impl Editor {
             .collect();
         let name = f.name();
         self.filter_job = Some(FilterJob::spawn(src, w, h, l, frame, f, self.fg));
-        self.msg = format!("filter: {name}...");
+        self.msg = crate::status!("filter: {name}...");
     }
 
     /// Progress of the background filter, for the status line.
@@ -3616,7 +3617,7 @@ impl Editor {
         match &self.filter_job {
             Some(job) => {
                 job.cancel();
-                self.msg = format!("filter: {} cancelling", job.name);
+                self.msg = crate::status!("filter: {} cancelling", job.name);
             }
             None => self.msg = "no filter running".into(),
         }
@@ -3634,14 +3635,14 @@ impl Editor {
         let job = self.filter_job.take().unwrap();
         let name = job.name.clone();
         let Some((src, dst, w, h, layer, frame)) = job.take() else {
-            self.msg = format!("filter: {name} cancelled");
+            self.msg = crate::status!("filter: {name} cancelled");
             return true;
         };
         if (w, h) != (self.sprite.width, self.sprite.height)
             || layer >= self.sprite.layers.len()
             || frame >= self.sprite.frames.len()
         {
-            self.msg = format!("filter: {name} discarded (sprite changed)");
+            self.msg = crate::status!("filter: {name} discarded (sprite changed)");
             return true;
         }
         let (saved_layer, saved_frame) = (self.active_layer, self.active_frame);
@@ -3650,7 +3651,7 @@ impl Editor {
         let changed = self.apply_filter_result(&src, &dst);
         self.active_layer = saved_layer;
         self.active_frame = saved_frame;
-        self.msg = format!("filter: {name} ({changed} px)");
+        self.msg = crate::status!("filter: {name} ({changed} px)");
         true
     }
 
@@ -3741,7 +3742,7 @@ impl Editor {
             g = dilate(&g, w, h);
         }
         self.grid_to_selection(&g);
-        self.msg = format!("selection: expand {n}");
+        self.msg = crate::status!("selection: expand {n}");
     }
 
     /// Shrink the selection by `n` pixels. A selection thinner than `2n` goes.
@@ -3752,7 +3753,7 @@ impl Editor {
             g = erode(&g, w, h);
         }
         self.grid_to_selection(&g);
-        self.msg = format!("selection: contract {n}");
+        self.msg = crate::status!("selection: contract {n}");
     }
 
     /// Keep only the `n`-pixel ring along the selection's edge.
@@ -3771,7 +3772,7 @@ impl Editor {
             .map(|(o, i)| *o && !i)
             .collect();
         self.grid_to_selection(&ring);
-        self.msg = format!("selection: border {n}");
+        self.msg = crate::status!("selection: border {n}");
     }
 
     /// Fill the current selection (or the whole cel when there is none) with
@@ -3829,7 +3830,7 @@ impl Editor {
             }
         }
         self.end_stroke();
-        self.msg = format!(
+        self.msg = crate::status!(
             "selection: stroke {n} {}",
             if inside { "inside" } else { "outside" }
         );
@@ -3856,7 +3857,7 @@ impl Editor {
             }
         }
         self.grid_to_selection(&g);
-        self.msg = format!("selection: colour (tolerance {tolerance})");
+        self.msg = crate::status!("selection: colour (tolerance {tolerance})");
     }
 
     /// Select the opaque pixels of the active layer (or the flattened frame).
@@ -3924,8 +3925,9 @@ impl Editor {
             }
         }
         self.grid_to_selection(&out);
-        self.msg =
-            format!("selection transform: {angle_deg:.0} deg, {sx:.2}x{sy:.2}, skew {skew_deg:.0}");
+        self.msg = crate::status!(
+            "selection transform: {angle_deg:.0} deg, {sx:.2}x{sy:.2}, skew {skew_deg:.0}"
+        );
     }
 
     /// Move the selection mask without moving pixels.
@@ -3983,7 +3985,7 @@ impl Editor {
             }
         }
         self.grid_to_selection(&out);
-        self.msg = format!("selection: feather {n}");
+        self.msg = crate::status!("selection: feather {n}");
     }
 
     /// Everything the selection is not, inside the sprite.
@@ -4437,7 +4439,7 @@ impl Editor {
         self.msg = if dx == 0 && dy == 0 {
             "move: unchanged".into()
         } else {
-            format!("cel moved {dx:+},{dy:+}")
+            crate::status!("cel moved {dx:+},{dy:+}")
         };
     }
 
@@ -4478,7 +4480,7 @@ impl Editor {
         let at = self.edit_point();
         if let Some(to) = self.sprite.move_layer(from, to) {
             self.active_layer = to;
-            self.msg = format!("layer {from} -> {to}");
+            self.msg = crate::status!("layer {from} -> {to}");
             self.record_structure(before, at);
         }
     }
@@ -4636,7 +4638,7 @@ impl Editor {
         let before = self.sprite.clone();
         if self.sprite.link_cel(l, f, target) {
             self.snapshot(before);
-            self.msg = format!("cel linked to frame {target}");
+            self.msg = crate::status!("cel linked to frame {target}");
         } else {
             self.msg = "cannot link that frame".into();
         }
@@ -4690,7 +4692,7 @@ impl Editor {
         let before = self.sprite.clone();
         self.sprite.layers[l].uuid = Some(crate::sprite::mint_uuid(l));
         self.snapshot(before);
-        self.msg = format!("layer uuid: {}", self.layer_uuid_hex());
+        self.msg = crate::status!("layer uuid: {}", self.layer_uuid_hex());
     }
 
     pub fn clear_layer_uuid(&mut self) {
@@ -4708,7 +4710,7 @@ impl Editor {
     pub fn set_prefer_linked(&mut self, on: bool) {
         let l = self.active_layer;
         if self.sprite.layers[l].prefer_linked == on {
-            self.msg = format!("prefer linked: {on}");
+            self.msg = crate::status!("prefer linked: {on}");
             return;
         }
         let before = self.sprite.clone();
@@ -4738,7 +4740,7 @@ impl Editor {
         self.redo.clear();
         self.dirty = true;
         self.touch();
-        self.msg = format!("cel z: {z}");
+        self.msg = crate::status!("cel z: {z}");
     }
 
     fn edit_point(&self) -> EditPoint {
@@ -5105,7 +5107,7 @@ impl Editor {
         self.note_recent(path.to_path_buf());
         self.path = Some(path.to_path_buf());
         self.dirty = false;
-        self.msg = self.saved_note();
+        self.msg = self.saved_note().into();
         Ok(())
     }
 
@@ -5130,7 +5132,7 @@ impl Editor {
     pub fn request_reopen(&mut self) {
         match self.closed.last() {
             Some(path) => {
-                self.msg = format!("reopen: {}", path.display());
+                self.msg = crate::status!("reopen: {}", path.display());
                 self.reopen_request = Some(path.clone());
             }
             None => self.msg = "no closed documents".into(),
@@ -5185,7 +5187,7 @@ impl Editor {
         let stage = sidecar_stage(path).unwrap_or_else(|| "fix".to_string());
         self.active_layer = fix;
         self.mode = Mode::Draw;
-        self.msg = format!("{stage} fix — painting on the `fix` layer");
+        self.msg = crate::status!("{stage} fix — painting on the `fix` layer");
         self.bundle_stage = Some(stage);
     }
 

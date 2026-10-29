@@ -13,6 +13,8 @@ pub struct Catalog {
     pub lang: String,
     pub name: String,
     pub strings: BTreeMap<String, String>,
+    /// English status template → translated template.
+    pub messages: BTreeMap<String, String>,
 }
 
 impl Catalog {
@@ -67,6 +69,16 @@ impl Translator {
 
     pub fn tr(&self, key: &str) -> String {
         self.catalog.tr_with(&self.source, key)
+    }
+
+    /// Translation for a status template (the English `format!` source text).
+    pub fn message(&self, template: &str) -> String {
+        self.catalog
+            .messages
+            .get(template)
+            .or_else(|| self.source.messages.get(template))
+            .cloned()
+            .unwrap_or_else(|| template.to_string())
     }
 
     pub fn missing(&self) -> Vec<String> {
@@ -135,6 +147,7 @@ mod tests {
             lang: "xx".into(),
             name: "Partial".into(),
             strings: BTreeMap::from([("brush".into(), "pen".into())]),
+            ..Catalog::default()
         };
         assert_eq!(partial.tr_with(&en, "brush"), "pen");
         assert_eq!(partial.tr_with(&en, "text"), "text");
@@ -150,6 +163,7 @@ mod tests {
             lang: "xx".into(),
             name: "Test".into(),
             strings: BTreeMap::from([("brush".into(), "brush!".into())]),
+            ..Catalog::default()
         };
         custom.save(&path).unwrap();
         assert_eq!(resolve(path.to_str().unwrap()).unwrap(), custom);
@@ -158,6 +172,126 @@ mod tests {
         assert_eq!(partial.tr("brush"), "b");
         assert!(partial.lang.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn unescape(lit: &str) -> String {
+        let mut out = String::new();
+        let mut chars = lit.chars();
+        while let Some(c) = chars.next() {
+            if c != '\\' {
+                out.push(c);
+                continue;
+            }
+            match chars.next() {
+                // Rust's `\` + newline strips the newline and the next line's
+                // leading whitespace.
+                Some('\n') => {
+                    while matches!(chars.clone().next(), Some(' ')) {
+                        chars.next();
+                    }
+                }
+                Some('n') => out.push('\n'),
+                Some('t') => out.push('\t'),
+                Some('r') => out.push('\r'),
+                Some(other) => out.push(other),
+                None => {}
+            }
+        }
+        out
+    }
+
+    /// String literals in `src` immediately followed by `.into()`.
+    fn into_literals(src: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut chars = src.char_indices().peekable();
+        while let Some((_, c)) = chars.next() {
+            if c != '"' {
+                continue;
+            }
+            let mut raw = String::new();
+            let mut end = 0;
+            let mut escaped = false;
+            while let Some(&(j, ch)) = chars.peek() {
+                chars.next();
+                end = j + ch.len_utf8();
+                if escaped {
+                    raw.push(ch);
+                    escaped = false;
+                } else if ch == '\\' {
+                    raw.push(ch);
+                    escaped = true;
+                } else if ch == '"' {
+                    break;
+                } else {
+                    raw.push(ch);
+                }
+            }
+            if end > 0 && src[end..].starts_with(".into()") {
+                out.push(unescape(&raw));
+            }
+        }
+        out
+    }
+
+    /// The literal at the start of `s`, after optional whitespace.
+    fn leading_literal(s: &str) -> Option<String> {
+        let t = s.trim_start();
+        let t = t.strip_prefix('"')?;
+        let mut raw = String::new();
+        let mut escaped = false;
+        for c in t.chars() {
+            if escaped {
+                raw.push('\\');
+                raw.push(c);
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                return Some(unescape(&raw));
+            } else {
+                raw.push(c);
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn every_status_message_has_a_translation() {
+        let pt = builtin("pt-BR").unwrap();
+        let sources = [
+            include_str!("editor.rs"),
+            include_str!("input.rs"),
+            include_str!("gui.rs"),
+            include_str!("app.rs"),
+            include_str!("script.rs"),
+        ];
+        let mut seen = std::collections::BTreeSet::new();
+        for src in sources {
+            for part in src.split("status!(").skip(1) {
+                if let Some(tpl) = leading_literal(part) {
+                    seen.insert(tpl);
+                }
+            }
+            let mut rest = src;
+            while let Some(pos) = rest.find(".msg = ") {
+                let window = &rest[pos..(pos + 900).min(rest.len())];
+                if let Some(tpl) = leading_literal(&window[".msg = ".len()..]) {
+                    seen.insert(tpl);
+                }
+                for lit in into_literals(window) {
+                    if !lit.is_empty() && !lit.contains('{') {
+                        seen.insert(lit);
+                    }
+                }
+                rest = &rest[pos + 1..];
+            }
+        }
+        assert!(seen.len() > 300, "the scan found {} messages", seen.len());
+        let missing: Vec<_> = seen
+            .iter()
+            .filter(|m| !pt.messages.contains_key(*m))
+            .collect();
+        assert!(missing.is_empty(), "pt-BR missing messages: {missing:?}");
     }
 
     #[test]

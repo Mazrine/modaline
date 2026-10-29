@@ -9,7 +9,7 @@ Legend: **Covered** = capability present and tested · **Partial** = some depth
 missing · **Missing** = no equivalent · **Blocked** = task cannot proceed
 (reason given) · **Out of scope** = deliberate, user-approved.
 
-Last audited: 2026-10-29 (after P5; P6 opened for the remaining Partial rows).
+Last audited: 2026-10-29 (after P6; every capability row is Covered or explicitly deferred).
 Last smoke (P5-00): 2026-10-28 — text stamp, mouse paint, dirty close guard,
 save/export, recents, argv open, idle autosave recovery; drag-and-drop not
 exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
@@ -219,7 +219,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Keyboard shortcut customization | Covered (actions, rebinding, conflicts, persisted) | P5-55 |
 | Mouse-wheel customization | Covered (wheel-up/down actions) | P5-55 |
 | Workspace layouts | Covered (4 built-ins, JSON layouts, reset, drag sizes) | P5-54 |
-| Localization | Partial (JSON catalogs, runtime switch, English fallback; help overlay and window titles localized; panel labels and status/command messages remain English) | P5-56, P6-03 |
+| Localization | Covered (runtime catalogs for UI keys, status/command messages, help and windows; technical side-panel words allowlisted) | P5-56, P6-03 |
 
 ## Editors, workspace, undo, performance
 
@@ -252,7 +252,6 @@ These are deliberate differences, not rows to close:
 
 | Item | Reason | Re-open condition |
 |---|---|---|
-| Scripting engine | No Lua/scripting crate cached; `mlua` needs network or a vendored source | P5-48 decision confirms the dependency can be added |
-| FLC/FLI/PCX export | Obsolete formats; `image` has no codecs | A consumer requires them |
+| PCX/FLC/FLI export | Import is covered (P6-06); the formats are obsolete and the import crates do not write them | A consumer requires export |
 | Custom GPU shaders | Not an Aseprite capability (vixel extra) | A shader can be verified on real hardware |
 | Web/Wasm build | Aseprite has no web build; product choice | Product requirement changes |

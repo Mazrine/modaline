@@ -440,7 +440,7 @@ fn browser_activate(editor: &mut Editor, view: &mut View, path: PathBuf) {
                 Ok(()) => {
                     view.browser_open = false;
                 }
-                Err(e) => editor.msg = format!("open failed: {e:#}"),
+                Err(e) => editor.msg = vixel::status!("open failed: {e:#}"),
             }
         }
         BrowserMode::Save => {
@@ -450,7 +450,7 @@ fn browser_activate(editor: &mut Editor, view: &mut View, path: PathBuf) {
             }
             match editor.save_path(&path) {
                 Ok(()) => view.browser_open = false,
-                Err(e) => editor.msg = format!("save failed: {e:#}"),
+                Err(e) => editor.msg = vixel::status!("save failed: {e:#}"),
             }
         }
     }
@@ -601,11 +601,11 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
             egui::ScrollArea::vertical()
                 .max_height(430.0)
                 .show(ui, |ui| {
-                    egui::CollapsingHeader::new("editor")
+                    egui::CollapsingHeader::new(view.tr("prefs.editor"))
                         .default_open(true)
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                ui.label("brush");
+                                ui.label(view.tr("brush"));
                                 ui.add(egui::Slider::new(&mut editor.brush_size, 1..=64));
                                 egui::ComboBox::from_id_salt("prefs_brush")
                                     .selected_text(editor.brush_kind.name())
@@ -624,19 +624,20 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
                                     });
                             });
                             ui.horizontal(|ui| {
-                                ui.label("spacing");
+                                ui.label(view.tr("prefs.spacing"));
                                 ui.add(
                                     egui::Slider::new(&mut editor.brush_spacing, 1..=200)
                                         .suffix("%"),
                                 );
-                                ui.checkbox(&mut editor.pixel_perfect, "pixel perfect");
+                                ui.checkbox(&mut editor.pixel_perfect, view.tr("prefs.pixel_perfect"));
                             });
                             ui.horizontal(|ui| {
-                                ui.checkbox(&mut editor.snap, "snap");
-                                ui.checkbox(&mut view.show_aspect, "wide px");
+                                ui.checkbox(&mut editor.snap, view.tr("prefs.snap"));
+                                let wide = view.tr("prefs.wide_px");
+                                ui.checkbox(&mut view.show_aspect, wide);
                             });
                             ui.horizontal(|ui| {
-                                ui.label("undo steps");
+                                ui.label(view.tr("prefs.undo_steps"));
                                 let mut limit = editor.undo_limit;
                                 if ui
                                     .add(egui::DragValue::new(&mut limit).range(10..=1000))
@@ -653,46 +654,47 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
                                 ));
                             });
                         });
-                    egui::CollapsingHeader::new("grid and canvas")
+                    egui::CollapsingHeader::new(view.tr("prefs.grid_canvas"))
                         .default_open(true)
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                ui.checkbox(&mut view.show_grid, "pixel grid");
-                                ui.label("grid");
+                                let pixel_grid = view.tr("prefs.pixel_grid");
+                                ui.checkbox(&mut view.show_grid, pixel_grid);
+                                ui.label(view.tr("prefs.grid"));
                                 ui.add(egui::DragValue::new(&mut editor.grid).range(1..=64));
-                                ui.label("snap cell");
+                                ui.label(view.tr("prefs.snap_cell"));
                                 ui.add(egui::DragValue::new(&mut view.snap_grid).range(0..=64));
                             });
-                            if ui.button("reset zoom / pan").clicked() {
+                            if ui.button(view.tr("prefs.reset_zoom")).clicked() {
                                 view.initialized = false;
                             }
                         });
-                    egui::CollapsingHeader::new("export").show(ui, |ui| {
+                    egui::CollapsingHeader::new(view.tr("prefs.export")).show(ui, |ui| {
                         let cfg = &mut editor.export_config;
                         ui.horizontal(|ui| {
-                            ui.checkbox(&mut cfg.sheet, "sheet");
-                            ui.checkbox(&mut cfg.gif, "gif");
-                            ui.checkbox(&mut cfg.meta, "meta");
-                            ui.checkbox(&mut cfg.sequence, "sequence");
+                            ui.checkbox(&mut cfg.sheet, view.tr("prefs.sheet"));
+                            ui.checkbox(&mut cfg.gif, view.tr("prefs.gif"));
+                            ui.checkbox(&mut cfg.meta, view.tr("prefs.meta"));
+                            ui.checkbox(&mut cfg.sequence, view.tr("prefs.sequence"));
                         });
                         ui.horizontal(|ui| {
-                            ui.checkbox(&mut cfg.trim, "trim");
-                            ui.checkbox(&mut cfg.ignore_empty, "ignore empty");
-                            ui.checkbox(&mut cfg.merge_duplicates, "merge dup");
+                            ui.checkbox(&mut cfg.trim, view.tr("prefs.trim"));
+                            ui.checkbox(&mut cfg.ignore_empty, view.tr("prefs.ignore_empty"));
+                            ui.checkbox(&mut cfg.merge_duplicates, view.tr("prefs.merge_dup"));
                         });
                         ui.horizontal(|ui| {
-                            ui.label("scale");
+                            ui.label(view.tr("prefs.scale"));
                             ui.add(egui::DragValue::new(&mut cfg.scale).range(1..=16));
-                            if ui.button("open export panel").clicked() {
+                            if ui.button(view.tr("prefs.open_export")).clicked() {
                                 view.export_open = true;
                             }
                         });
                     });
-                    egui::CollapsingHeader::new("appearance")
+                    egui::CollapsingHeader::new(view.tr("prefs.appearance"))
                         .default_open(true)
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                ui.label("theme");
+                                ui.label(view.tr("prefs.theme"));
                                 egui::ComboBox::from_id_salt("prefs_theme")
                                     .selected_text(view.theme.clone())
                                     .show_ui(ui, |ui| {
@@ -710,11 +712,11 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
                                     });
                             });
                             ui.horizontal(|ui| {
-                                ui.label("UI font size");
+                                ui.label(view.tr("prefs.ui_font_size"));
                                 ui.add(egui::Slider::new(&mut view.ui_font_size, 8.0..=32.0));
                             });
                             ui.horizontal(|ui| {
-                                ui.label("language");
+                                ui.label(view.tr("prefs.language"));
                                 let current = crate::i18n::resolve(&view.language)
                                     .map(|c| c.name)
                                     .unwrap_or_else(|_| view.language.clone());
@@ -737,20 +739,20 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
                                     });
                             });
                         });
-                    egui::CollapsingHeader::new("keys").show(ui, |ui| {
+                    egui::CollapsingHeader::new(view.tr("prefs.keys")).show(ui, |ui| {
                         ui.label(format!(
                             "{} actions bound, {} conflicts",
                             view.keymap.bindings.len(),
                             view.keymap.conflicts().len()
                         ));
-                        ui.label("rebind with :bind <action> <chord>; list with :bind list");
-                        if ui.button("reset bindings").clicked() {
+                        ui.label(view.tr("prefs.rebind_hint"));
+                        if ui.button(view.tr("prefs.reset_bindings")).clicked() {
                             view.keymap = crate::keymap::Keymap::default();
                         }
                     });
-                    egui::CollapsingHeader::new("workspace").show(ui, |ui| {
+                    egui::CollapsingHeader::new(view.tr("prefs.workspace")).show(ui, |ui| {
                         ui.label(format!("layout: {}", view.layout.name));
-                        if ui.button("reset layout").clicked() {
+                        if ui.button(view.tr("prefs.reset_layout")).clicked() {
                             view.layout = crate::layout::Layout::default();
                             view.layout_pending = true;
                         }
@@ -758,7 +760,7 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
                 });
             ui.separator();
             ui.horizontal(|ui| {
-                if ui.button("close").clicked() {
+                if ui.button(view.tr("prefs.close")).clicked() {
                     close_clicked = true;
                 }
             });
@@ -967,9 +969,9 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                 };
                 match crate::io::export_config(&editor.sprite, cfg, &stem) {
                     Ok(paths) => {
-                        editor.msg = format!("exported {} files", paths.len());
+                        editor.msg = vixel::status!("exported {} files", paths.len());
                     }
-                    Err(e) => editor.msg = format!("export failed: {e:#}"),
+                    Err(e) => editor.msg = vixel::status!("export failed: {e:#}"),
                 }
             }
         });
@@ -1287,7 +1289,7 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         } else if let Some((name, progress)) = editor.filter_progress() {
             ui.label(format!("filter: {name} {progress}%"));
         } else {
-            ui.label(&editor.msg);
+            ui.label(editor.msg.render(&view.i18n));
         }
     });
 }

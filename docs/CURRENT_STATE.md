@@ -151,8 +151,9 @@ L-shaped corners for the 1 px pencil/eraser.
   all backed by the live editor/view fields and existing config persistence.
 - **localization**: JSON catalogs in `lang/` (`en`, `pt-BR`) with English
   fallback; `:lang` switches at runtime, `:lang check` lists missing keys and
-  `:lang save` exports. Core labels (theme, brush, text, symmetry, timeline,
-  untitled) are translated; status/help text remains English. Saved in config.
+  `:lang save` exports. Core labels, the help overlay, window/preferences text
+  and every status/command message (via `Status` templates) are translated;
+  side-panel technical words stay English. Saved in config.
 - **keymap customization**: 28 actions with default chords; `:bind` rebinds,
   steals/reports conflicts, unbinds or maps `wheel-up`/`wheel-down`, lists and
   resets. Bindings are global across tabs and persisted in `config.json`.

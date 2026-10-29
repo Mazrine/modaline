@@ -520,43 +520,37 @@ Read, in order:
   to a legacy extension is refused. 4 tests (278 total) + checked-in fixtures
   (`sample.pcx`, `sample.flc`). CLI `-b sample.flc --save-as` round-trips to
   2 frames at 120 ms.
-105. **P6-03 (partial) — localization extraction** — the help overlay (96 lines,
-  now `help.text`), help title and the files/preferences/export/history/preview
-  window titles are catalog keys; `pt-BR` covers every key; a new test scans
-  literal `tr("…")` keys in `gui.rs`/`app.rs` and fails if either catalog is
-  missing one (1 test, 279 total). Xvfb: `:lang pt-BR` + `?` showed the full
-  Portuguese help and `preferências`. Remaining for P6-03: preferences/panel
-  labels and the interpolated status/command messages.
+105. **P6-03 — localization extraction** — `Editor::msg` is a `Status` (English
+  text + `format!` template); `status!` records the template and the status line
+  re-renders translated values in place. 411 message templates + help overlay +
+  window titles + preferences labels translated to pt-BR; tests scan
+  `status!`/`.msg`/`.tr()` usage and fail on missing translations (2 tests, 284
+  total). Xvfb: `:lang pt-BR` gave "grade: 12 px", "filtro: invert (25 px)",
+  Portuguese help/prefs; `:lang en` switched back cleanly. Side-panel/timeline
+  technical words stay English (allowlisted).
 
 ## Next step (exact)
 
-**P6 is open.** Read `docs/ASEPRITE_PARITY.md` and `docs/ROADMAP.md` P6; the
-loop picks the first unchecked task whose dependencies are met.
+**P6 is complete (7/7).** All P6 tasks are checked in `docs/ROADMAP.md` and
+their matrix rows in `docs/ASEPRITE_PARITY.md` are Covered or allowlisted.
+The next pass is the P6 definition-of-done audit: re-read the matrix for any
+remaining Partial/Not-supported row, run the full gate (tests + clippy), and
+repeat the Xvfb smoke from `docs/TESTING.md` on a desktop.
 
-### Next (P6)
+### P6 landed (2026-10-29)
 
-P5 is complete; **P6 is open (6/7)** in `docs/ROADMAP.md`:
-
-- ~~**P6-00** — move layer/cel content tool~~ (done 2026-10-29).
-- ~~**P6-01** — reopen closed documents~~ (done 2026-10-29).
-- ~~**P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects~~ (done 2026-10-29).
-- ~~**P6-04** — incremental dirty compositing~~ (done 2026-10-29).
-- ~~**P6-05** — async filter pipeline~~ (done 2026-10-29).
-- ~~**P6-06** — PCX/FLC/FLI import~~ (done 2026-10-29).
-- **P6-03** — localization string extraction (last open task).
+- **P6-00** — move layer/cel content tool.
+- **P6-01** — reopen closed documents.
 - **P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects.
 - **P6-03** — localization string extraction.
 - **P6-04** — incremental dirty compositing.
 - **P6-05** — async filter pipeline.
 - **P6-06** — PCX/FLC/FLI import.
 
-The loop should pick the first task whose dependencies are met and resume the
-same gate/commit/docs workflow.
-
 ## Known limitations (do not forget)
 
 The matrix is the authoritative list; the entries below are the design limits
-that remain after P5. Anything marked Missing/Partial in
+that remain after P6. Anything marked Missing/Partial in
 `docs/ASEPRITE_PARITY.md` is planned work, not a permanent limitation.
 
 - Mask pixels cannot be painted directly: masks are created from the selection

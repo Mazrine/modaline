@@ -17,3 +17,4 @@ pub mod palette;
 pub mod properties;
 pub mod script;
 pub mod sprite;
+pub mod status;

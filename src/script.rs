@@ -46,6 +46,7 @@ pub fn run(editor: &mut Editor, source: &str, name: &str) -> Result<String, Stri
                 .last()
                 .unwrap_or("script finished")
                 .to_string()
+                .into()
         };
     }
     match result {
