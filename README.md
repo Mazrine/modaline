@@ -193,7 +193,8 @@ crop/resize canonicalize to the canvas.
   palette entries. Embedded sRGB/ICC/gamma profiles are read and written;
   user data (text/colour/properties) round-trips on layers, cels, tags, slices
   and the sprite; slices (name, bounds, 9-patch, pivot) round-trip and export
-  by name; unknown chunks (tileset data) are preserved on save.
+  by name; external-file entries round-trip and deprecated chunks are preserved
+  raw; unknown chunks are preserved on save.
 - **`.vpx`** — project file: JSON with size, layers, frames, and every cel.
 - **PNG** — single-frame import/export with full alpha.
 

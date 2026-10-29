@@ -14,8 +14,8 @@ use anyhow::{Context, Result, bail};
 
 use crate::color::Rgba;
 use crate::sprite::{
-    AseProfile, BlendMode, Cel, ChunkAnchor, Frame, Layer, PlayDirection, RawChunk, Slice,
-    SliceKey, Sprite, Tag, UserData,
+    AseProfile, BlendMode, Cel, ChunkAnchor, ExternalFile, Frame, Layer, PlayDirection, RawChunk,
+    Slice, SliceKey, Sprite, Tag, UserData,
 };
 
 const MAGIC: u16 = 0xA5E0;
@@ -217,6 +217,10 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
         write_color_profile(&mut body, profile);
         count += 1;
     }
+    if frame == 0 && !s.external_files.is_empty() {
+        write_external_files_chunk(&mut body, &s.external_files);
+        count += 1;
+    }
     if frame == 0 {
         if let OutDepth::Indexed { palette, .. } = depth {
             // Names describe the document palette; an auto-generated palette
@@ -305,6 +309,20 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
     let size = f.len() as u32;
     f[0..4].copy_from_slice(&size.to_le_bytes());
     out.extend_from_slice(&f);
+}
+
+fn write_external_files_chunk(out: &mut Vec<u8>, files: &[ExternalFile]) {
+    let mut b = Vec::new();
+    b.extend_from_slice(&(files.len() as u32).to_le_bytes());
+    b.extend_from_slice(&[0u8; 8]);
+    for file in files {
+        b.extend_from_slice(&file.id.to_le_bytes());
+        b.push(file.kind);
+        b.extend_from_slice(&[0u8; 7]);
+        b.extend_from_slice(&(file.name.len() as u16).to_le_bytes());
+        b.extend_from_slice(file.name.as_bytes());
+    }
+    write_chunk(out, CHUNK_EXTERNAL_FILES, &b);
 }
 
 fn write_slice_chunk(out: &mut Vec<u8>, slice: &Slice) {
@@ -563,7 +581,26 @@ fn blend_word(b: BlendMode) -> u16 {
 // ---- import ----
 
 const CHUNK_PROFILE: u16 = 0x2007;
+const CHUNK_EXTERNAL_FILES: u16 = 0x2008;
 const CHUNK_USER_DATA: u16 = 0x2020;
+
+fn parse_external_files(body: &[u8]) -> Option<Vec<ExternalFile>> {
+    let count = u32_at(body, 0) as usize;
+    let mut p = 12usize; // count + 8 reserved
+    let mut out = Vec::with_capacity(count);
+    for _ in 0..count {
+        let id = u32_at(body, p);
+        p += 4;
+        let kind = *body.get(p)?;
+        p += 1 + 7;
+        let len = u16_at(body, p) as usize;
+        p += 2;
+        let name = String::from_utf8_lossy(body.get(p..p + len)?).into_owned();
+        p += len;
+        out.push(ExternalFile { id, kind, name });
+    }
+    Some(out)
+}
 const CHUNK_SLICE: u16 = 0x2022;
 const CHUNK_TILESET: u16 = 0x2023;
 
@@ -691,6 +728,8 @@ struct Tileset {
     tile_h: u32,
     /// Row-major, `tile_w` wide and `tile_h * num_tiles` tall.
     image: Vec<Rgba>,
+    /// External file ID + tileset ID when flag 1 is set.
+    external: Option<(u32, u32)>,
 }
 
 /// A tilemap cel, kept until every tileset chunk has been read.
@@ -732,6 +771,7 @@ struct Import {
     ase_profile: Option<AseProfile>,
     sprite_user_data: Option<UserData>,
     slices: Vec<Slice>,
+    external_files: Vec<ExternalFile>,
     transparent_index: u8,
     /// `[layer][frame]`; `None` means an empty cel.
     cels: Vec<Vec<Option<Cel>>>,
@@ -891,8 +931,8 @@ impl Import {
             let Some(ts) = self.tilesets.get(ts_index) else {
                 continue;
             };
-            if ts.image.is_empty() || ts.tile_w == 0 || ts.tile_h == 0 {
-                continue;
+            if ts.external.is_some() || ts.image.is_empty() || ts.tile_w == 0 || ts.tile_h == 0 {
+                continue; // external tileset pixels are resolved by P5-33
             }
             let tiles_w = tc.tiles_w.max(1);
             let tiles_h = (tc.tiles.len() as u32).div_ceil(tiles_w);
@@ -973,6 +1013,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         ase_profile: None,
         sprite_user_data: None,
         slices: Vec::new(),
+        external_files: Vec::new(),
         transparent_index: data[28],
         cels: Vec::new(),
         layer_tilesets: Vec::new(),
@@ -1054,6 +1095,18 @@ pub fn load(path: &Path) -> Result<Sprite> {
                             after: anchor,
                         });
                     }
+                }
+                CHUNK_EXTERNAL_FILES => {
+                    match parse_external_files(body) {
+                        Some(files) => im.external_files.extend(files),
+                        None => im.raw_chunks.push(RawChunk {
+                            frame,
+                            kind: chunk_type,
+                            body: body.to_vec(),
+                            after: anchor,
+                        }),
+                    }
+                    last = Last::Other;
                 }
                 CHUNK_PROFILE => {
                     match parse_color_profile(body) {
@@ -1237,6 +1290,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         raw_chunks: im.raw_chunks,
         user_data: im.sprite_user_data,
         slices: im.slices,
+        external_files: im.external_files,
     };
     sprite.normalize_levels();
     sprite.clamp_tags();
@@ -1284,8 +1338,10 @@ fn parse_tileset(body: &[u8], depth: u16, palette: &[Rgba], transparent: u8) -> 
     let tile_h = u16_at(body, 14) as u32;
     let name_len = u16_at(body, 32) as usize;
     let mut p = 34 + name_len;
+    let mut external = None;
     if flags & 1 != 0 {
-        p += 8; // external tileset file reference: pixels live elsewhere
+        external = Some((u32_at(body, p), u32_at(body, p + 4)));
+        p += 8; // pixels live in the external file
     }
     let mut image = Vec::new();
     if flags & 2 != 0 {
@@ -1310,6 +1366,7 @@ fn parse_tileset(body: &[u8], depth: u16, palette: &[Rgba], transparent: u8) -> 
         tile_w,
         tile_h,
         image,
+        external,
     })
 }
 
@@ -2346,6 +2403,91 @@ mod tests {
         let ud = back.cels[0][0].user_data.as_ref().expect("user data");
         assert_eq!(ud.text_object(), Some(object));
         assert_eq!(ud.color, Some(Rgba(1, 2, 3, 4)));
+    }
+
+    #[test]
+    fn external_files_chunk_round_trips() {
+        let mut s = Sprite::new(1, 1);
+        s.external_files.push(ExternalFile {
+            id: 1,
+            kind: 0,
+            name: "pal.gpl".into(),
+        });
+        s.external_files.push(ExternalFile {
+            id: 7,
+            kind: 1,
+            name: "tiles.ase".into(),
+        });
+        let path = tmp("vixel_ase_external.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let body = walk_chunks(&data)
+            .into_iter()
+            .find(|(_, k, _)| *k == CHUNK_EXTERNAL_FILES)
+            .expect("external files chunk")
+            .2;
+        assert_eq!(u32_at(&body, 0), 2);
+        assert_eq!(u32_at(&body, 12), 1);
+        assert_eq!(body[16], 0);
+        assert_eq!(u16_at(&body, 24), 7);
+        assert_eq!(&body[26..33], b"pal.gpl");
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.external_files, s.external_files);
+    }
+
+    #[test]
+    fn external_tileset_reference_is_read() {
+        let mut body = Vec::new();
+        body.extend_from_slice(&0u32.to_le_bytes()); // tileset id
+        body.extend_from_slice(&1u32.to_le_bytes()); // external flag
+        body.extend_from_slice(&4u32.to_le_bytes()); // tiles
+        body.extend_from_slice(&8u16.to_le_bytes()); // width
+        body.extend_from_slice(&8u16.to_le_bytes()); // height
+        body.extend_from_slice(&1i16.to_le_bytes()); // base
+        body.extend_from_slice(&[0u8; 14]);
+        body.extend_from_slice(&0u16.to_le_bytes()); // name
+        body.extend_from_slice(&7u32.to_le_bytes()); // external file id
+        body.extend_from_slice(&9u32.to_le_bytes()); // tileset id in file
+        let ts = parse_tileset(&body, 32, &[], 0).unwrap();
+        assert_eq!(ts.external, Some((7, 9)));
+        assert!(ts.image.is_empty());
+
+        let mut plain = body[..body.len() - 8].to_vec();
+        plain[4..8].copy_from_slice(&0u32.to_le_bytes());
+        assert_eq!(parse_tileset(&plain, 32, &[], 0).unwrap().external, None);
+    }
+
+    #[test]
+    fn deprecated_chunks_are_preserved() {
+        let mut raw = Vec::new();
+        raw.extend_from_slice(&1u16.to_le_bytes());
+        raw.extend_from_slice(&1u16.to_le_bytes());
+        raw.extend_from_slice(&[255, 0, 0, 255]);
+        let mut data = ase_header(1, 1, 32, 1);
+        data.extend(ase_frame(&[
+            (CHUNK_LAYER, layer_chunk(0, 0)),
+            (CHUNK_CEL, cel_chunk(0, 0, &raw)),
+            (0x2006, vec![0u8; 32]),
+            (0x2016, vec![0u8; 20]),
+            (0x2017, vec![1, 2, 3]),
+        ]));
+        let s = load_bytes("vixel_ase_deprecated.ase", data);
+        for kind in [0x2006, 0x2016, 0x2017] {
+            assert!(s.raw_chunks.iter().any(|c| c.kind == kind), "{kind:#x}");
+        }
+        let path = tmp("vixel_ase_deprecated_rt.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        for kind in [0x2006, 0x2016, 0x2017] {
+            assert!(
+                walk_chunks(&data).iter().any(|(_, k, _)| *k == kind),
+                "{kind:#x} written"
+            );
+            assert!(back.raw_chunks.iter().any(|c| c.kind == kind));
+        }
     }
 
     #[test]

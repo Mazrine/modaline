@@ -338,9 +338,14 @@ met; blocked tasks are marked with the reason.
   property codec, `.ase` text object, and editor rasterise/update/undo.
   Aseprite main still rasterises text (text layers are on its roadmap), so the
   property layout is vixel's forward-compatible representation.
-- [ ] **P5-17 — External files + deprecated chunks** (S) — deps: P5-07.
-  Pass through 0x2008; fix external-tileset skip/flag; document deprecated
-  chunks left unsupported.
+- [x] **P5-17 — External files + deprecated chunks** (S) — deps: P5-07.
+  Landed 2026-10-28. `ExternalFile { id, kind, name }` is parsed from and
+  written to 0x2008. Tileset flag 1 now records the external file/tileset IDs
+  and skips external pixels without treating the tileset as corrupt. Deprecated
+  0x2006 cel-extra, 0x2016 mask and 0x2017 path chunks stay in the raw
+  pass-through and are documented as such. 3 new tests (163 total): external
+  files round trip, external tileset flag, and deprecated chunk preservation.
+  Resolving external tileset pixels remains P5-33.
 
 ### Epic 5 — Text UI
 

@@ -447,6 +447,16 @@ impl UserData {
     }
 }
 
+/// One entry of the `.ase` external-files chunk (0x2008).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ExternalFile {
+    pub id: u32,
+    /// 0 palette, 1 tileset, 2 extension name, 3 tile management.
+    pub kind: u8,
+    #[serde(default)]
+    pub name: String,
+}
+
 /// One slice key: valid from `frame` to the end of the animation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct SliceKey {
@@ -543,6 +553,8 @@ pub struct Sprite {
     pub user_data: Option<UserData>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub slices: Vec<Slice>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub external_files: Vec<ExternalFile>,
 }
 
 /// The two working spaces this editor understands. A sprite authored in linear
@@ -685,6 +697,7 @@ impl Sprite {
             raw_chunks: Vec::new(),
             user_data: None,
             slices: Vec::new(),
+            external_files: Vec::new(),
         }
     }
 

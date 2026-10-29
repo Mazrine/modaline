@@ -113,6 +113,9 @@ thin shells:
   `size`, `align`, `antialias`, `x`, `y`); use `properties::parse/write` so
   unknown sibling properties survive edits. A cel with user data but no pixels
   still needs its cel chunk written.
+- External files (0x2008) are parsed into `Sprite.external_files`; external
+  tilesets store their file/tileset IDs and deliberately skip pixel decoding
+  until P5-33. Deprecated chunks stay in `raw_chunks` on purpose.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not

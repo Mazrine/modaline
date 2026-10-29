@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **160 tests green** (151 lib + 9 bin)
+- `cargo test` → **163 tests green** (154 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-16 text object model** (see batch 53).
+- Last completed batch: **P5-17 external files and deprecated chunks** (see batch 54).
 
 ## How to resume
 
@@ -315,6 +315,12 @@ Read, in order:
     3 new tests (160 total): property codec, `.ase` text object, editor
     rasterise/update/undo. Aseprite main still rasterises text; this is the
     forward-compatible user-data layout.
+54. **P5-17 — external files + deprecated chunks** — `ExternalFile { id, kind,
+    name }` parsed/written from 0x2008; tileset flag 1 records external
+    file/tileset IDs and skips external pixels without treating them as
+    corruption. Deprecated 0x2006/0x2016/0x2017 stay raw. 3 new tests (163
+    total): external chunk round trip, external tileset flag, deprecated chunk
+    preservation. External pixel resolution remains P5-33.
 
 ## Next step (exact)
 
@@ -323,8 +329,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-17** — external files + deprecated chunks (first open task), then
-  continue down the P5 roadmap in dependency order.
+- **P5-18** — ink engine (first open task), then continue down the P5 roadmap
+  in dependency order.
 
 ## Known limitations (do not forget)
 

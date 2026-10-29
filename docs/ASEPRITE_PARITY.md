@@ -117,7 +117,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Tile flips X/Y/diagonal | Partial (import) | P5-29 |
 | Write tileset/tilemap chunks (`.ase`) | Missing | P5-32 |
 | Tileset editing + export | Missing | P5-33 |
-| External tileset files | Missing | P5-17, P5-33 |
+| External tileset files | Partial (references read) | P5-33 |
 
 ## Slices
 
@@ -152,7 +152,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | `.ase` user data (text/color/properties) | Covered | P5-14 |
 | `.ase` slices | Covered | P5-15 |
 | `.ase` color profile / ICC | Covered | P5-09 |
-| `.ase` external files chunk | Missing | P5-17 |
+| `.ase` external files chunk | Covered | P5-17 |
+| Deprecated chunks (0x2006/0x2016/0x2017) | Preserved (raw) | P5-17 |
 | `.vpx` project JSON | Covered | — |
 | PNG import/export | Covered | — |
 | Sheet PNG + meta import/export | Covered (vixel format) | — |

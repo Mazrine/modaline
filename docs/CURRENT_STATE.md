@@ -185,6 +185,9 @@ L-shaped corners for the 1 px pencil/eraser.
     user data stays in the raw-chunk pass-through until those models land.
   - Reads and writes **slices** (0x2022): names, frame keys, bounds, 9-patch
     centre and pivot.
+  - Reads/writes the **external files** chunk (0x2008) as `ExternalFile`
+    entries and records external tileset references; external pixels are not
+    resolved yet. Deprecated 0x2006/0x2016/0x2017 chunks are preserved raw.
   - Reads RGBA (32), grayscale (16) and indexed (8) pixels, new and legacy
     palette chunks, layer names/visibility/blend/opacity, layer groups (type +
     child level), the editable flag, **per-cel opacity** and frame durations.
