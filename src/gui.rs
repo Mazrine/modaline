@@ -1,7 +1,7 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, Vec2};
 
 use crate::color::Rgba;
-use crate::editor::{Editor, LayerProps, Mode, SelectionOp, Shape, Symmetry, Tool};
+use crate::editor::{Editor, Ink, LayerProps, Mode, SelectionOp, Shape, Symmetry, Tool};
 use crate::sprite::{BlendMode, ellipse_points, line_points, rect_points};
 
 /// Onion-skin settings: how many frames each side, how strong, and the two
@@ -494,6 +494,35 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         ui.add(egui::Slider::new(&mut editor.brush_size, 1..=16));
         ui.checkbox(&mut editor.pixel_perfect, "perfect")
             .on_hover_text("drop L-shaped corner pixels while drawing");
+    });
+    ui.horizontal(|ui| {
+        ui.label("ink");
+        egui::ComboBox::from_id_salt("ink")
+            .selected_text(editor.ink().name())
+            .show_ui(ui, |ui| {
+                for ink in [
+                    Ink::Simple,
+                    Ink::LockAlpha,
+                    Ink::Replace,
+                    Ink::Shading,
+                    Ink::Erase,
+                ] {
+                    if ui
+                        .selectable_label(editor.ink() == ink, ink.name())
+                        .clicked()
+                    {
+                        editor.set_ink(ink);
+                    }
+                }
+            });
+        let mut lock = editor.alpha_lock;
+        if ui
+            .checkbox(&mut lock, "α lock")
+            .on_hover_text("only change pixels that are already opaque")
+            .changed()
+        {
+            editor.set_alpha_lock(lock);
+        }
     });
     ui.checkbox(&mut view.show_grid, "pixel grid");
     ui.checkbox(&mut view.onion.enabled, "onion skin");
@@ -1748,6 +1777,7 @@ const HELP: &[&str] = &[
     "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   (free transform)",
     "  :brush <1-64>   :perfect on|off   :grid <px>   :snap on|off   (brush, grid)",
     "  :crop [x y w h]   :trim   (crop to a rect/selection, or to content)",
+    "  :ink simple|lockalpha|replace|shading|erase   :alphalock on|off",
     "  :mode auto|rgba|grayscale|indexed   :dither none|bayer2|bayer4|bayer8|floyd",
     "  :aspect <x> <y>   :sgrid [x y] <w> <h>",
     "  :pal preset <name>|insert <i> [#hex]|delete <i>|sort [rgb|luma|hue]|name <i> <name>",

@@ -128,6 +128,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:textobj <string>` | create/edit an editable text object (stored in cel user data) |
 | `:grid <px>` / `:snap [on\|off]` | design grid and snapping |
 | `:brush <1-64>` | pencil/eraser brush width (also a panel slider) |
+| `:ink simple\|lockalpha\|replace\|shading\|erase` / `:alphalock on\|off` | per-tool ink and alpha-locked painting |
 | `:perfect on\|off` | pixel-perfect freehand: drop L-shaped corner pixels |
 | `:mode auto\|rgba\|grayscale\|indexed` / `:aspect <x> <y>` / `:sgrid [x y] <w> <h>` | sprite colour mode, pixel ratio, grid size + origin |
 | `:dither none\|bayer2\|bayer4\|bayer8\|floyd` | dithering for indexed conversion |
@@ -238,7 +239,7 @@ polygon selection**
 with **add/subtract/intersect**, **expand/contract/border/feather/invert** and
 copy/cut/paste/move, **eight filters**, **free rotate/scale/skew**, **8x8 bitmap
 text**, **brush size 1-64**, **pixel-perfect freehand**, **crop/trim**,
-**design grid + snap**,
+**per-tool inks + alpha lock**, **design grid + snap**,
 **symmetry painting**
 (mirror or radial,
 including bucket fill and paste), flip H/V + rotate 90° (**selection-aware**),

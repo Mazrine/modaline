@@ -760,6 +760,15 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 }
             }
         }
+        "ink" => match arg.and_then(crate::editor::Ink::parse) {
+            Some(ink) => editor.set_ink(ink),
+            None => editor.msg = "usage: :ink simple|lockalpha|replace|shading|erase".into(),
+        },
+        "alphalock" | "alphlock" => match arg {
+            Some("on") | Some("true") | Some("1") => editor.set_alpha_lock(true),
+            Some("off") | Some("false") | Some("0") => editor.set_alpha_lock(false),
+            _ => editor.msg = "usage: :alphalock on|off".into(),
+        },
         "mode" | "colormode" => match arg.and_then(crate::sprite::ColorMode::parse) {
             Some(m) => editor.set_color_mode(m),
             None => editor.msg = "usage: :mode auto|rgba|grayscale|indexed".into(),

@@ -86,7 +86,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Colour-range selection | Missing | P5-25 |
 | Selection from layer alpha | Missing | P5-25 |
 | Custom brushes (images, spacing, library) | Missing | P5-19 |
-| Ink modes (simple, lock-alpha, replace, shading, erase) | Missing | P5-18 |
+| Ink modes (simple, lock-alpha, replace, shading, erase) | Covered | P5-18 |
+| Alpha-lock painting flag | Covered | P5-18 |
 | Pressure/tablet sensitivity | Missing | P5-20 |
 | Tiled mode | Covered (fixed 3×3) | P5-27 |
 | Move layer/cel content tool | Partial | P5-24 |

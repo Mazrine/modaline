@@ -32,6 +32,9 @@ ellipse (outline or **filled**), **gradient (linear/radial)**, **spray**,
 all with live preview where applicable — plus **symmetry painting** (mirror or
 radial, including bucket fill and paste). Pencil and eraser share a square
 brush, 1-64 px (`:brush` or the panel slider), clipped at the canvas edges.
+Each tool remembers its own **ink** (`simple`, `lock-alpha`, `replace`,
+`shading`, `erase`; `:ink` or the panel selector), and **alpha lock**
+(`:alphalock`) restricts painting to pixels that are already opaque.
 **Pixel-perfect** freehand (`:perfect on|off`) joins pointer steps and drops
 L-shaped corners for the 1 px pencil/eraser.
 
@@ -259,6 +262,7 @@ middle-drag = pan.
 `filter <name> [amount]` · `rotate <deg>` · `scale <sx> [sy]` · `skew <deg>` ·
 `sel expand|contract|border|feather <n>` / `sel invert|none|all` ·
 `text <string>` · `textobj <string>` · `grid <px>` · `snap [on|off]` · `brush <1-64>` ·
+`ink simple|lockalpha|replace|shading|erase` · `alphalock on|off` ·
 `perfect on|off` · `sym radial [axes]` ·
 `symcenter cursor|reset|<x> <y>` · `fg|bg #rrggbb` · `pal move <from> <to>` ·
 `pal preset <name>` · `pal insert <i> [#hex]` · `pal delete <i>` ·

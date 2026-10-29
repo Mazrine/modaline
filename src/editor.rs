@@ -33,6 +33,64 @@ pub enum Tool {
     Polygon,
 }
 
+/// How a brush colour combines with the destination pixel.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Ink {
+    #[default]
+    Simple,
+    LockAlpha,
+    Replace,
+    Shading,
+    Erase,
+}
+
+impl Ink {
+    pub fn name(self) -> &'static str {
+        match self {
+            Ink::Simple => "simple",
+            Ink::LockAlpha => "lockalpha",
+            Ink::Replace => "replace",
+            Ink::Shading => "shading",
+            Ink::Erase => "erase",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<Ink> {
+        Some(
+            match name.to_ascii_lowercase().replace(['_', '-'], "").as_str() {
+                "simple" | "normal" => Ink::Simple,
+                "lockalpha" | "alpha" => Ink::LockAlpha,
+                "replace" | "replacealpha" => Ink::Replace,
+                "shading" | "shade" => Ink::Shading,
+                "erase" | "eraser" => Ink::Erase,
+                _ => return None,
+            },
+        )
+    }
+}
+
+impl Tool {
+    pub fn index(self) -> usize {
+        match self {
+            Tool::Pencil => 0,
+            Tool::Eraser => 1,
+            Tool::Bucket => 2,
+            Tool::Picker => 3,
+            Tool::Line => 4,
+            Tool::Rect => 5,
+            Tool::Ellipse => 6,
+            Tool::Gradient => 7,
+            Tool::Shade => 8,
+            Tool::Spray => 9,
+            Tool::Blur => 10,
+            Tool::Lasso => 11,
+            Tool::Polygon => 12,
+        }
+    }
+}
+
+const TOOL_COUNT: usize = 13;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Symmetry {
     None,
@@ -233,6 +291,10 @@ pub struct Editor {
     pub cursor: (u32, u32),
     pub mode: Mode,
     pub tool: Tool,
+    /// Ink remembered per tool (indexed by `Tool::index`).
+    pub tool_inks: [Ink; TOOL_COUNT],
+    /// Restrict every ink to pixels that are already opaque.
+    pub alpha_lock: bool,
     /// Pencil/eraser brush width in pixels (a square, clipped at the edges).
     pub brush_size: u32,
     /// Drop L-shaped corner pixels while freehand drawing.
@@ -328,6 +390,12 @@ impl Editor {
             cursor: (0, 0),
             mode: Mode::Normal,
             tool: Tool::Pencil,
+            tool_inks: {
+                let mut inks = [Ink::Simple; TOOL_COUNT];
+                inks[Tool::Eraser.index()] = Ink::Erase;
+                inks
+            },
+            alpha_lock: false,
             brush_size: 1,
             pixel_perfect: false,
             pp: Vec::new(),
@@ -480,11 +548,68 @@ impl Editor {
         self.paint_pixel_unclipped(x, y, color);
     }
 
-    /// Write one pixel without the selection clip. Only for operations that
-    /// own their mask (paste, transform writes, contour); recorded truth
-    /// (undo/redo) uses `sprite.set` directly. Everything else must go through
-    /// `paint_pixel`, which is where the selection clips.
+    /// Exact, selection-clipped write used by clear/cut/transform/filters so
+    /// they do not run through the active ink.
+    fn put_pixel(&mut self, x: u32, y: u32, color: Rgba) {
+        if x >= self.sprite.width || y >= self.sprite.height || !self.selection_allows(x, y) {
+            return;
+        }
+        self.put_pixel_unclipped(x, y, color);
+    }
+
+    pub fn ink(&self) -> Ink {
+        self.tool_inks[self.tool.index()]
+    }
+
+    pub fn set_ink(&mut self, ink: Ink) {
+        self.tool_inks[self.tool.index()] = ink;
+        self.msg = format!("ink: {}", ink.name());
+    }
+
+    pub fn set_alpha_lock(&mut self, on: bool) {
+        self.alpha_lock = on;
+        self.msg = if on {
+            "alpha lock on".into()
+        } else {
+            "alpha lock off".into()
+        };
+    }
+
+    /// Paint through the active ink, respecting the selection.
     pub(crate) fn paint_pixel_unclipped(&mut self, x: u32, y: u32, color: Rgba) {
+        if x >= self.sprite.width || y >= self.sprite.height {
+            return;
+        }
+        let (l, f) = (self.active_layer, self.active_frame);
+        if !self.sprite.layer_editable(l) {
+            self.msg = "layer is locked or hidden".into();
+            return;
+        }
+        let color = if self.sprite.is_indexed() {
+            self.sprite.indexed_color(color)
+        } else {
+            color
+        };
+        if self.palette_lock && !color.is_transparent() && !self.palette.contains(&color) {
+            self.msg = "palette locked: that colour is not in it".into();
+            return;
+        }
+        let old = self.sprite.get(l, f, x, y);
+        if self.alpha_lock && old.3 == 0 {
+            return;
+        }
+        let new = apply_ink(self.ink(), old, color);
+        if old == new {
+            return;
+        }
+        self.sprite.set(l, f, x, y, new);
+        self.dirty = true;
+        self.record(l, f, x, y, old, new);
+    }
+
+    /// Exact write for paste, transforms and contour: no ink, but the same
+    /// layer/selection-owner checks as a paint.
+    pub(crate) fn put_pixel_unclipped(&mut self, x: u32, y: u32, color: Rgba) {
         if x >= self.sprite.width || y >= self.sprite.height {
             return;
         }
@@ -540,7 +665,7 @@ impl Editor {
             if old.is_transparent() {
                 continue;
             }
-            self.paint_pixel(px, py, shade_color(old, darken));
+            self.put_pixel(px, py, shade_color(old, darken));
         }
     }
 
@@ -600,7 +725,7 @@ impl Editor {
                 (sb / sa) as u8,
                 (sa / count.max(1)) as u8,
             );
-            self.paint_pixel(px, py, out);
+            self.put_pixel(px, py, out);
         }
     }
 
@@ -627,7 +752,7 @@ impl Editor {
                     .any(|&(nx, ny)| nx < w && ny < h && region[(ny * w + nx) as usize])
                 {
                     // The ring is just outside the selection by construction.
-                    self.paint_pixel_unclipped(x, y, color);
+                    self.put_pixel_unclipped(x, y, color);
                 }
             }
         }
@@ -765,7 +890,7 @@ impl Editor {
     /// replaces the selection rather than being limited by it.
     fn paint_symmetric_unclipped(&mut self, x: u32, y: u32, color: Rgba) {
         for (px, py) in self.symmetry_points(x, y) {
-            self.paint_pixel_unclipped(px, py, color);
+            self.put_pixel_unclipped(px, py, color);
         }
     }
 
@@ -2101,7 +2226,7 @@ impl Editor {
         for y in ry..ry + rh {
             for x in rx..rx + rw {
                 if inside(x, y) && y < h && x < w {
-                    self.paint_pixel(x, y, Rgba::TRANSPARENT);
+                    self.put_pixel(x, y, Rgba::TRANSPARENT);
                 }
             }
         }
@@ -2159,7 +2284,7 @@ impl Editor {
             {
                 continue;
             }
-            self.paint_pixel(x, y, dst[i]);
+            self.put_pixel(x, y, dst[i]);
             changed += 1;
         }
         self.end_stroke();
@@ -2629,7 +2754,7 @@ impl Editor {
         for yy in 0..sel.h {
             for xx in 0..sel.w {
                 if sel.selected(xx, yy) {
-                    self.paint_pixel(sel.x + xx, sel.y + yy, Rgba::TRANSPARENT);
+                    self.put_pixel(sel.x + xx, sel.y + yy, Rgba::TRANSPARENT);
                 }
             }
         }
@@ -3266,7 +3391,7 @@ impl Editor {
                     // The mapped pixels leave the old mask; the selection is
                     // replaced with the transformed shape below. Clip against
                     // the old one and the move would delete its own content.
-                    self.paint_pixel_unclipped(ox + xx, oy + yy, final_grid[i]);
+                    self.put_pixel_unclipped(ox + xx, oy + yy, final_grid[i]);
                 }
             }
         }
@@ -3449,6 +3574,67 @@ fn combine_masks(a: &Selection, b: &Selection, op: SelectionOp) -> Selection {
 fn is_corner(a: (u32, u32), b: (u32, u32), c: (u32, u32)) -> bool {
     let diagonal = (a.0 as i32 - c.0 as i32).abs() == 1 && (a.1 as i32 - c.1 as i32).abs() == 1;
     diagonal && ((b.0 == a.0 && b.1 == c.1) || (b.0 == c.0 && b.1 == a.1))
+}
+
+fn source_over(src: Rgba, dst: Rgba) -> Rgba {
+    let sa = src.3 as f32 / 255.0;
+    let da = dst.3 as f32 / 255.0;
+    let ao = sa + da * (1.0 - sa);
+    if ao <= 0.0 {
+        return Rgba::TRANSPARENT;
+    }
+    let ch = |s: u8, d: u8| ((s as f32 * sa + d as f32 * da * (1.0 - sa)) / ao).round() as u8;
+    Rgba(
+        ch(src.0, dst.0),
+        ch(src.1, dst.1),
+        ch(src.2, dst.2),
+        (ao * 255.0).round() as u8,
+    )
+}
+
+fn luma(c: Rgba) -> u32 {
+    299 * u32::from(c.0) + 587 * u32::from(c.1) + 114 * u32::from(c.2)
+}
+
+/// Apply one Aseprite ink to a destination pixel.
+pub(crate) fn apply_ink(ink: Ink, old: Rgba, color: Rgba) -> Rgba {
+    match ink {
+        // Transparent paint has always meant "clear" for the internal callers
+        // (cut, transform vacate, eraser fallbacks).
+        Ink::Simple => {
+            if color.3 == 0 {
+                Rgba::TRANSPARENT
+            } else {
+                source_over(color, old)
+            }
+        }
+        Ink::LockAlpha => {
+            if old.3 == 0 {
+                old
+            } else {
+                let mut out = source_over(color, old);
+                out.3 = old.3;
+                out
+            }
+        }
+        Ink::Replace => color,
+        Ink::Shading => {
+            if old.3 == 0 {
+                old
+            } else {
+                shade_color(old, luma(color) <= luma(old))
+            }
+        }
+        Ink::Erase => {
+            let amount = if color.3 == 0 { 255 } else { color.3 };
+            let a = old.3 - (old.3 as u32 * amount as u32 / 255) as u8;
+            if a == 0 {
+                Rgba::TRANSPARENT
+            } else {
+                Rgba(old.0, old.1, old.2, a)
+            }
+        }
+    }
 }
 
 /// Darken (`f = 0.8`) or lighten (`f = 1.25`) a color, keeping alpha.
@@ -4269,6 +4455,58 @@ mod tests {
         e.del_tag(Some("walk"));
         assert_eq!(e.play_range(), (0, 2));
         assert!(e.active_tag.is_none());
+    }
+
+    #[test]
+    fn ink_modes_blend_replace_erase_and_lock_alpha() {
+        let white = Rgba(255, 255, 255, 255);
+        let red = Rgba(255, 0, 0, 255);
+        assert_eq!(
+            apply_ink(Ink::Replace, white, Rgba(1, 2, 3, 4)),
+            Rgba(1, 2, 3, 4)
+        );
+
+        let mixed = apply_ink(Ink::Simple, white, Rgba(255, 0, 0, 128));
+        assert!(mixed.0 == 255 && mixed.1 > 0 && mixed.1 < 255, "{mixed:?}");
+        assert_eq!(mixed.3, 255, "opaque destination stays opaque");
+
+        assert_eq!(
+            apply_ink(Ink::LockAlpha, Rgba::TRANSPARENT, red),
+            Rgba::TRANSPARENT
+        );
+        let locked = apply_ink(Ink::LockAlpha, Rgba(0, 0, 0, 128), red);
+        assert_eq!(locked.3, 128, "alpha is preserved");
+
+        assert_eq!(
+            apply_ink(Ink::Erase, white, Rgba::TRANSPARENT),
+            Rgba::TRANSPARENT
+        );
+        assert_eq!(apply_ink(Ink::Erase, white, Rgba(0, 0, 0, 128)).3, 127);
+
+        let shaded = apply_ink(Ink::Shading, Rgba(100, 100, 100, 255), white);
+        assert!(shaded.0 > 100, "lighter brush lightens");
+    }
+
+    #[test]
+    fn inks_are_per_tool_and_alpha_lock_blocks_empty_pixels() {
+        let mut e = Editor::new(2, 1);
+        e.fg = Rgba(255, 0, 0, 255);
+        e.paint_pixel(0, 0, Rgba(255, 255, 255, 255));
+        e.set_ink(Ink::Replace);
+        assert_eq!(e.ink(), Ink::Replace);
+        e.set_tool(Tool::Eraser);
+        assert_eq!(e.ink(), Ink::Erase, "eraser remembers its own ink");
+        e.paint_with_tool(0, 0);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::TRANSPARENT);
+        e.set_tool(Tool::Pencil);
+        assert_eq!(e.ink(), Ink::Replace, "pencil keeps its ink");
+
+        e.set_alpha_lock(true);
+        e.paint_pixel(1, 0, e.fg);
+        assert_eq!(e.sprite.get(0, 0, 1, 0), Rgba::TRANSPARENT);
+        e.set_alpha_lock(false);
+        e.paint_pixel(1, 0, e.fg);
+        assert_eq!(e.sprite.get(0, 0, 1, 0), Rgba(255, 0, 0, 255));
     }
 
     #[test]

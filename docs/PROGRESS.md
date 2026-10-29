@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **163 tests green** (154 lib + 9 bin)
+- `cargo test` → **165 tests green** (156 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-17 external files and deprecated chunks** (see batch 54).
+- Last completed batch: **P5-18 ink engine** (see batch 55).
 
 ## How to resume
 
@@ -321,6 +321,12 @@ Read, in order:
     corruption. Deprecated 0x2006/0x2016/0x2017 stay raw. 3 new tests (163
     total): external chunk round trip, external tileset flag, deprecated chunk
     preservation. External pixel resolution remains P5-33.
+55. **P5-18 — ink engine** — `Ink` (simple, lock-alpha, replace, shading,
+    erase) with one remembered per tool and an alpha-lock flag. Brush paths go
+    through `apply_ink`; cut/transform/paste/contour/filters use an exact put
+    path. Indexed dabs still snap via `Sprite::set`. 2 new tests (165 total):
+    ink math and per-tool/alpha-lock behaviour. `:ink`/`:alphalock` and a panel
+    selector.
 
 ## Next step (exact)
 
@@ -329,8 +335,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-18** — ink engine (first open task), then continue down the P5 roadmap
-  in dependency order.
+- **P5-19** — custom brushes (first open task), then continue down the P5
+  roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

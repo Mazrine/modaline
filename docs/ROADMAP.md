@@ -237,9 +237,14 @@ met; blocked tasks are marked with the reason.
 
 ### Epic 3 — Brush, ink, tools
 
-- [ ] **P5-18 — Ink engine** (L) — deps: P5-02, P5-03.
-  `Ink` (simple, lock-alpha, replace, shading, erase), per-tool ink, alpha-lock
-  flag, indexed dab resolution.
+- [x] **P5-18 — Ink engine** (L) — deps: P5-02, P5-03.
+  Landed 2026-10-28. `Ink` (simple, lock-alpha, replace, shading, erase), one
+  remembered per tool; an alpha-lock flag blocks painting on transparent
+  pixels. All brush paths run through `apply_ink`; cut/transform/paste/contour/
+  filters use an exact put path so they stay ink-independent. Indexed dabs still
+  resolve through `Sprite::set`. `:ink`, `:alphalock` and a panel selector expose
+  it. 2 new tests (165 total): every ink mode's math and per-tool ink/alpha-lock
+  behaviour. UI selector not screenshotted (manual check: switch ink and paint).
 - [ ] **P5-19 — Custom brushes** (L) — deps: P5-18.
   Brush image masks, square/circle built-ins, spacing, library save/load,
   cursor preview, `for_each_stamp` for pencil/eraser/shapes.
