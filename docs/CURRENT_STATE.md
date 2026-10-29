@@ -94,7 +94,7 @@ L-shaped corners for the 1 px pencil/eraser.
 - **frame tags** (named inclusive ranges): `:tag <name> [from to]`,
   `:tagdel [name]`; tags are listed above the timeline, clicking one restricts
   playback to its range (click again to clear). Tags carry a play direction
-  (forward/reverse/ping-pong, `:tagdir`) and a repeat count (`:tagrepeat`,
+  (forward/reverse/ping-pong/ping-pong-reverse, `:tagdir`) and a repeat count (`:tagrepeat`,
   0 = forever); both round-trip in `.vpx` and `.ase` (name, range, color,
   direction, repeat) and follow frame insert/remove.
 - **frame reorder**: drag a timeline thumbnail onto another slot, or
@@ -134,7 +134,8 @@ L-shaped corners for the 1 px pencil/eraser.
   `.pal` (JASC)** via `:pal`.
 - **sprite properties**: colour mode (auto / rgba / grayscale / indexed — the
   declared mode drives the .ase depth; grayscale also converts the pixels),
-  pixel ratio (written to and read from the .ase header) and the sprite grid.
+  pixel ratio and the sprite grid size + origin (all written to and read from
+  the .ase header).
 - **indexed mode**: `:mode indexed` builds a document palette from the pixels
   (exact up to 255 opaque colours, median cut above that), keeps a transparent
   slot, and snaps painting/fills to palette entries. The palette and
@@ -235,7 +236,7 @@ middle-drag = pan.
 `pal preset <name>` · `pal insert <i> [#hex]` · `pal delete <i>` ·
 `pal sort [rgb|luma|hue]` · `pal name <i> <name>` ·
 `mode auto|rgba|grayscale|indexed` · `dither none|bayer2|bayer4|bayer8|floyd` ·
-`aspect <x> <y>` · `sgrid <w> <h>` ·
+`aspect <x> <y>` · `sgrid [x y] <w> <h>` ·
 `slices <dir> [cols rows]` · `export <file> [scale]` · `profile srgb|linear` ·
 `renderer glow|wgpu` ·
 `ops <file.json>` · `recover [file]` · `help`.

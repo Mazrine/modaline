@@ -688,6 +688,28 @@ mod tests {
     }
 
     #[test]
+    fn grid_origin_survives_vpx_and_old_files_default_to_zero() {
+        let mut s = Sprite::new(1, 1);
+        s.grid = (8, 6);
+        s.grid_origin = (3, -4);
+        let path =
+            std::env::temp_dir().join(format!("vixel_grid_origin_{}.vpx", std::process::id()));
+        save_project(&s, &path).unwrap();
+        let json = std::fs::read_to_string(&path).unwrap();
+        let back = load_project(&path).unwrap();
+        assert_eq!(back.grid, (8, 6));
+        assert_eq!(back.grid_origin, (3, -4));
+
+        let old = json.replace("\"grid_origin\":[3,-4],", "");
+        assert!(!old.contains("grid_origin"));
+        std::fs::write(&path, old).unwrap();
+        let migrated = load_project(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(migrated.grid, (8, 6), "the size survives");
+        assert_eq!(migrated.grid_origin, (0, 0), "missing origin defaults to 0");
+    }
+
+    #[test]
     fn load_any_dispatches_on_the_extension() {
         // The one dispatch shared by `:open` and the command line: a JSON
         // project has no extension rule of its own, so a `.vpx` must not be

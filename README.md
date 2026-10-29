@@ -96,7 +96,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:framemove <from> <to>` | move a frame (or drag a timeline thumbnail) |
 | `:tag <name> [from to]` | create/update a named frame tag |
 | `:tagdel [name]` | delete a frame tag (default: the active one) |
-| `:tagdir forward\|reverse\|pingpong` | play direction of the active tag |
+| `:tagdir forward\|reverse\|pingpong\|pingpong-reverse` | play direction of the active tag |
 | `:tagrepeat <n>` | repeat count of the active tag (0 = forever) |
 | `:newlayer` / `:dellayer` | add / remove layer |
 | `:duplayer` | duplicate the active layer (with its cels) |
@@ -125,7 +125,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:grid <px>` / `:snap [on\|off]` | design grid and snapping |
 | `:brush <1-64>` | pencil/eraser brush width (also a panel slider) |
 | `:perfect on\|off` | pixel-perfect freehand: drop L-shaped corner pixels |
-| `:mode auto\|rgba\|grayscale\|indexed` / `:aspect <x> <y>` / `:sgrid <w> <h>` | sprite colour mode, pixel ratio, grid |
+| `:mode auto\|rgba\|grayscale\|indexed` / `:aspect <x> <y>` / `:sgrid [x y] <w> <h>` | sprite colour mode, pixel ratio, grid size + origin |
 | `:dither none\|bayer2\|bayer4\|bayer8\|floyd` | dithering for indexed conversion |
 | `:profile srgb\|linear` / `:renderer glow\|wgpu` | colour profile / renderer (applied on next launch) |
 | `:fg #rrggbb` / `:bg #rrggbb` | set fg / bg exactly |
@@ -233,7 +233,7 @@ including bucket fill and paste), flip H/V + rotate 90° (**selection-aware**),
 stroke-grouped undo/redo (**structural layer/frame/tag edits and panel
 properties undo too**),
 **`.ase`/`.aseprite` + PNG + `.vpx` import/export**, **sheet + GIF + meta JSON
-export**, **sprite properties** (colour mode, pixel ratio, grid) and
+export**, **sprite properties** (colour mode, pixel ratio, grid size + origin) and
 **sRGB/linear colour profiles**, **custom palettes** (`.gpl`/`.hex`/`.pal`),
 **OS clipboard**, **tile mode** (3x3 seamless preview + wrapping cursor),
 **frame tags + drag reorder**, full vim keymap (normal/draw/visual/paste/command

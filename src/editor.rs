@@ -1540,8 +1540,20 @@ impl Editor {
 
     /// Reset the pass counter when playback starts (or the tag changes).
     pub fn start_playback(&mut self) {
+        use crate::sprite::PlayDirection;
         self.play_passes = 0;
-        self.play_dir = 1;
+        let dir = self
+            .active_tag
+            .and_then(|i| self.sprite.tags.get(i))
+            .map(|t| t.direction);
+        self.play_dir = if dir == Some(PlayDirection::PingPongReverse) {
+            -1
+        } else {
+            1
+        };
+        if dir == Some(PlayDirection::PingPongReverse) {
+            self.active_frame = self.play_range().1;
+        }
     }
 
     /// Step to the next playback frame inside the active tag. Returns whether
@@ -1561,7 +1573,7 @@ impl Editor {
         let repeat = tag.map_or(0, |t| t.repeat);
         use crate::sprite::PlayDirection;
         match direction {
-            PlayDirection::PingPong => {
+            PlayDirection::PingPong | PlayDirection::PingPongReverse => {
                 // `b` is the last frame, so the turn happens when the step
                 // would leave the range, and the endpoint is shown once.
                 let mut f = self.active_frame as i32 + self.play_dir;
@@ -1874,6 +1886,21 @@ impl Editor {
         }
         self.dirty = true;
         self.msg = format!("sprite grid: {}x{}", w, h);
+    }
+
+    pub fn set_sprite_grid_origin(&mut self, x: i32, y: i32) {
+        self.sprite.grid_origin = (
+            x.clamp(i16::MIN as i32, i16::MAX as i32),
+            y.clamp(i16::MIN as i32, i16::MAX as i32),
+        );
+        self.dirty = true;
+        self.msg = format!("sprite grid origin: {},{}", x, y);
+    }
+
+    pub fn set_sprite_grid_bounds(&mut self, x: i32, y: i32, w: u32, h: u32) {
+        self.set_sprite_grid(w, h);
+        self.set_sprite_grid_origin(x, y);
+        self.msg = format!("sprite grid: {}x{} at {},{}", w, h, x, y);
     }
 
     // ---- free transform ----
@@ -4076,6 +4103,31 @@ mod tests {
         assert!(e.advance_frame());
         assert_eq!(e.active_frame, 1, "bounces off the start");
         assert_eq!(e.play_dir, 1);
+    }
+
+    #[test]
+    fn ping_pong_reverse_starts_at_the_end() {
+        use crate::sprite::{PlayDirection, Tag};
+        let mut e = Editor::new(1, 1);
+        e.add_frame();
+        e.add_frame(); // 3 frames
+        e.sprite.tags.push(Tag {
+            name: "back".into(),
+            from: 0,
+            to: 2,
+            color: Rgba(1, 2, 3, 255),
+            direction: PlayDirection::PingPongReverse,
+            repeat: 0,
+        });
+        e.active_tag = Some(0);
+        e.start_playback();
+        assert_eq!(e.active_frame, 2, "reverse ping-pong starts at the end");
+        assert!(e.advance_frame());
+        assert_eq!(e.active_frame, 1);
+        assert!(e.advance_frame());
+        assert_eq!(e.active_frame, 0);
+        assert!(e.advance_frame());
+        assert_eq!(e.active_frame, 1, "bounces off the start");
     }
 
     #[test]

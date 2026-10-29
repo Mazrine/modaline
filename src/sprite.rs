@@ -135,6 +135,8 @@ pub enum PlayDirection {
     Forward,
     Reverse,
     PingPong,
+    /// Ping-pong that starts from the tag's last frame (Aseprite's byte 3).
+    PingPongReverse,
 }
 
 impl PlayDirection {
@@ -143,14 +145,17 @@ impl PlayDirection {
             PlayDirection::Forward => "forward",
             PlayDirection::Reverse => "reverse",
             PlayDirection::PingPong => "pingpong",
+            PlayDirection::PingPongReverse => "pingpong-reverse",
         }
     }
 
-    /// Aseprite's tag direction byte: 0 forward, 1 reverse, 2 ping-pong.
+    /// Aseprite's tag direction byte: 0 forward, 1 reverse, 2 ping-pong,
+    /// 3 ping-pong reverse.
     pub fn from_ase(byte: u8) -> Self {
         match byte {
             1 => PlayDirection::Reverse,
             2 => PlayDirection::PingPong,
+            3 => PlayDirection::PingPongReverse,
             _ => PlayDirection::Forward,
         }
     }
@@ -160,14 +165,16 @@ impl PlayDirection {
             PlayDirection::Forward => 0,
             PlayDirection::Reverse => 1,
             PlayDirection::PingPong => 2,
+            PlayDirection::PingPongReverse => 3,
         }
     }
 
     pub fn parse(name: &str) -> Option<Self> {
-        match name {
+        match name.to_ascii_lowercase().replace(['_', ' '], "-").as_str() {
             "forward" | "fwd" | "f" => Some(PlayDirection::Forward),
             "reverse" | "rev" | "back" | "r" => Some(PlayDirection::Reverse),
-            "pingpong" | "ping-pong" | "pp" | "bounce" | "b" => Some(PlayDirection::PingPong),
+            "pingpong" | "pp" | "bounce" | "b" => Some(PlayDirection::PingPong),
+            "pingpong-reverse" | "ppr" | "bounceback" => Some(PlayDirection::PingPongReverse),
             _ => None,
         }
     }
@@ -255,6 +262,9 @@ pub struct Sprite {
     /// properties dialog shows.
     #[serde(default)]
     pub grid: (u32, u32),
+    /// Grid origin in sprite pixels (Aseprite writes it as two SHORTs).
+    #[serde(default)]
+    pub grid_origin: (i32, i32),
     /// Which transfer function the pixel values are in.
     #[serde(default)]
     pub color_profile: ColorProfile,
@@ -398,6 +408,7 @@ impl Sprite {
             transparent_index: 0,
             pixel_aspect: (1, 1),
             grid: (0, 0),
+            grid_origin: (0, 0),
             color_profile: ColorProfile::Srgb,
             raw_chunks: Vec::new(),
         }
@@ -1758,6 +1769,20 @@ mod tests {
             let got = blend_over(mode, src, 128, dst);
             assert_eq!([got.0, got.1, got.2], want, "{mode:?} at alpha 128");
             assert_eq!(got.3, 255, "{mode:?} alpha");
+        }
+    }
+
+    #[test]
+    fn ase_direction_bytes_round_trip() {
+        use PlayDirection::*;
+        for (direction, byte) in [
+            (Forward, 0),
+            (Reverse, 1),
+            (PingPong, 2),
+            (PingPongReverse, 3),
+        ] {
+            assert_eq!(direction.to_ase(), byte);
+            assert_eq!(PlayDirection::from_ase(byte), direction);
         }
     }
 

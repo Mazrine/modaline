@@ -162,6 +162,12 @@ fn write_header(out: &mut Vec<u8>, s: &Sprite, depth: &OutDepth) {
     }
     h[34] = s.pixel_aspect.0.clamp(1, 255) as u8; // pixel width
     h[35] = s.pixel_aspect.1.clamp(1, 255) as u8; // pixel height
+    let gx = s.grid_origin.0.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+    let gy = s.grid_origin.1.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+    h[36..38].copy_from_slice(&gx.to_le_bytes());
+    h[38..40].copy_from_slice(&gy.to_le_bytes());
+    h[40..42].copy_from_slice(&(s.grid.0.min(u16::MAX as u32) as u16).to_le_bytes());
+    h[42..44].copy_from_slice(&(s.grid.1.min(u16::MAX as u32) as u16).to_le_bytes());
     out.extend_from_slice(&h);
 }
 
@@ -626,6 +632,8 @@ pub fn load(path: &Path) -> Result<Sprite> {
         (0, _) | (_, 0) => None,
         (x, y) => Some((x as u16, y as u16)),
     };
+    let grid_origin = (i16_at(&data, 36) as i32, i16_at(&data, 38) as i32);
+    let grid = (u16_at(&data, 40) as u32, u16_at(&data, 42) as u32);
 
     let mut im = Import {
         depth,
@@ -788,7 +796,8 @@ pub fn load(path: &Path) -> Result<Sprite> {
             _ => crate::sprite::ColorMode::Grayscale,
         },
         pixel_aspect: pixel_aspect.unwrap_or((1, 1)),
-        grid: (0, 0),
+        grid,
+        grid_origin,
         // Aseprite files carry an optional ICC/gamma chunk; this build reads
         // the pixels as-is, which is sRGB for anything Aseprite writes.
         color_profile: crate::sprite::ColorProfile::Srgb,
@@ -1082,6 +1091,49 @@ mod tests {
             );
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn header_grid_origin_and_size_round_trip() {
+        let mut s = Sprite::new(2, 2);
+        s.grid = (8, 6);
+        s.grid_origin = (-4, 7);
+        let path = tmp("vixel_ase_grid.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        assert_eq!(i16_at(&data, 36), -4);
+        assert_eq!(i16_at(&data, 38), 7);
+        assert_eq!(u16_at(&data, 40), 8);
+        assert_eq!(u16_at(&data, 42), 6);
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.grid, (8, 6));
+        assert_eq!(back.grid_origin, (-4, 7));
+    }
+
+    #[test]
+    fn tag_direction_three_round_trips() {
+        let mut s = Sprite::new(1, 1);
+        s.tags.push(Tag {
+            name: "back".into(),
+            from: 0,
+            to: 0,
+            color: Rgba(1, 2, 3, 255),
+            direction: PlayDirection::PingPongReverse,
+            repeat: 0,
+        });
+        let path = tmp("vixel_ase_tag3.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let body = walk_chunks(&data)
+            .into_iter()
+            .find(|(_, k, _)| *k == CHUNK_TAGS)
+            .expect("tags chunk")
+            .2;
+        assert_eq!(body[14], 3, "raw direction byte");
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.tags[0].direction, PlayDirection::PingPongReverse);
     }
 
     #[test]

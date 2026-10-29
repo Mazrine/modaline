@@ -895,6 +895,13 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         if (g1.changed() || g2.changed()) && (gx, gy) != editor.sprite.grid {
             editor.set_sprite_grid(gx, gy);
         }
+        ui.label("origin");
+        let (mut ox, mut oy) = editor.sprite.grid_origin;
+        let o1 = ui.add(egui::DragValue::new(&mut ox).range(-32768..=32767));
+        let o2 = ui.add(egui::DragValue::new(&mut oy).range(-32768..=32767));
+        if (o1.changed() || o2.changed()) && (ox, oy) != editor.sprite.grid_origin {
+            editor.set_sprite_grid_origin(ox, oy);
+        }
     });
 
     ui.separator();
@@ -1648,7 +1655,7 @@ const HELP: &[&str] = &[
     "  :w [file]   :q   :q!   :wq   :new [w h]   :resize w h",
     "  :newframe / :dupframe / :delframe   (drag a thumbnail to reorder)",
     "  :tag <name> [from to] / :tagdel [name]   (named frame ranges)",
-    "  :tagdir forward|reverse|pingpong   :tagrepeat <n>   (0 = forever)",
+    "  :tagdir forward|reverse|pingpong|pingpong-reverse   :tagrepeat <n>   (0 = forever)",
     "  :framemove <from> <to>",
     "  :newlayer / :dellayer / :layerup / :layerdown / :layername <name>",
     "  :duplayer   :merge   :flatten   (duplicate / merge down / flatten)",
@@ -1663,7 +1670,7 @@ const HELP: &[&str] = &[
     "  :brush <1-64>   :perfect on|off   :grid <px>   :snap on|off   (brush, grid)",
     "  :crop [x y w h]   :trim   (crop to a rect/selection, or to content)",
     "  :mode auto|rgba|grayscale|indexed   :dither none|bayer2|bayer4|bayer8|floyd",
-    "  :aspect <x> <y>   :sgrid <w> <h>",
+    "  :aspect <x> <y>   :sgrid [x y] <w> <h>",
     "  :pal preset <name>|insert <i> [#hex]|delete <i>|sort [rgb|luma|hue]|name <i> <name>",
     "  :profile srgb|linear   (converts the pixels; the palette follows)",
     "  :renderer glow|wgpu    (wgpu also needs a build with --features wgpu)",

@@ -528,7 +528,9 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         },
         "tagdir" => match arg.and_then(crate::sprite::PlayDirection::parse) {
             Some(dir) => editor.set_tag_direction(dir),
-            None => editor.msg = "usage: :tagdir forward|reverse|pingpong".into(),
+            None => {
+                editor.msg = "usage: :tagdir forward|reverse|pingpong|pingpong-reverse".into();
+            }
         },
         "tagrepeat" => match arg.and_then(|s| s.parse::<u16>().ok()) {
             Some(n) => editor.set_tag_repeat(n),
@@ -704,12 +706,23 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             }
         }
         "sgrid" => {
-            let mut it = arg.unwrap_or("").split_whitespace();
-            let w = it.next().and_then(|v| v.parse::<u32>().ok());
-            let h = it.next().and_then(|v| v.parse::<u32>().ok());
-            match (w, h) {
-                (Some(w), Some(h)) => editor.set_sprite_grid(w, h),
-                _ => editor.msg = "usage: :sgrid <w> <h>".into(),
+            let v: Vec<i64> = arg
+                .unwrap_or("")
+                .split_whitespace()
+                .filter_map(|s| s.parse().ok())
+                .collect();
+            match v.as_slice() {
+                [w, h] => editor.set_sprite_grid(
+                    (*w).clamp(0, u32::MAX as i64) as u32,
+                    (*h).clamp(0, u32::MAX as i64) as u32,
+                ),
+                [x, y, w, h] => editor.set_sprite_grid_bounds(
+                    (*x).clamp(i16::MIN as i64, i16::MAX as i64) as i32,
+                    (*y).clamp(i16::MIN as i64, i16::MAX as i64) as i32,
+                    (*w).clamp(0, u32::MAX as i64) as u32,
+                    (*h).clamp(0, u32::MAX as i64) as u32,
+                ),
+                _ => editor.msg = "usage: :sgrid [x y] <w> <h>".into(),
             }
         }
         "rotate" => match arg.and_then(|v| v.parse::<f32>().ok()) {

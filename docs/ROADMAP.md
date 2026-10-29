@@ -225,10 +225,15 @@ met; blocked tasks are marked with the reason.
   and cap, `.ase` name flag/length + round trip, and wheel angle mapping. UI:
   wheel/name field not screenshotted (manual check: drag the ring, type a name,
   click a recent swatch).
-- [ ] **P5-08 — Header and small-chunk fidelity** (M) — deps: P5-03, P5-07.
-  Grid origin + size (`.vpx` migration), transparent index, palette names, tag
-  direction 3.
-  Gate: header round trip; direction 3 in `.ase`.
+- [x] **P5-08 — Header and small-chunk fidelity** (M) — deps: P5-03, P5-07.
+  Landed 2026-10-28. `Sprite.grid_origin` (serde default for old `.vpx`), header
+  SHORT x/y + WORD w/h read/write, `:sgrid [x y] <w> <h>` and panel origin
+  drags. `PlayDirection::PingPongReverse` maps Aseprite's byte 3 and playback
+  starts at the tag's last frame. Transparent index and palette names were
+  already covered by P5-03/P5-06. 5 new tests (130 total): header bytes +
+  round trip, `.vpx` origin + missing-field default, direction byte mapping,
+  direction-3 tag chunk + round trip, and reverse ping-pong playback. UI origin
+  drags not screenshotted (manual check: change origin, save, reopen).
 
 ### Epic 3 — Brush, ink, tools
 

@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **125 tests green** (116 lib + 9 bin)
+- `cargo test` → **130 tests green** (121 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-06 palette editor and picker** (see batch 44).
+- Last completed batch: **P5-08 header and small-chunk fidelity** (see batch 45).
 
 ## How to resume
 
@@ -256,6 +256,13 @@ Read, in order:
     and the last 12 recent colours; the palette panel has a name field and
     preset combo. 5 new tests (125 total). UI not screenshotted; manual check:
     drag the wheel, type a name, click a recent swatch.
+45. **P5-08 — header and small-chunk fidelity** — `Sprite.grid_origin`
+    (serde default so old `.vpx` files migrate), `.ase` header SHORT origin +
+    WORD size, `:sgrid [x y] <w> <h>` and panel origin drags. Added
+    `PlayDirection::PingPongReverse` for direction byte 3; playback starts at
+    the tag's last frame and bounces. 5 new tests (130 total): header bytes and
+    round trip, `.vpx` origin + missing-field default, direction byte mapping,
+    direction-3 tags chunk + round trip, reverse ping-pong playback.
 
 ## Next step (exact)
 
@@ -264,7 +271,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-08** — header and small-chunk fidelity (first open task), then continue
+- **P5-09** — ICC colour-profile embedding (first open task), then continue
   down the P5 roadmap in dependency order.
 
 ## Known limitations (do not forget)

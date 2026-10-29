@@ -22,7 +22,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Per-frame duration | Covered | — |
 | Tags: name, range, color, playback range | Covered | — |
 | Tag direction + repeat | Covered | — |
-| Tag direction 3 (ping-pong reverse) | Partial | P5-08 |
+| Tag direction 3 (ping-pong reverse) | Covered | P5-08 |
 | Tag editor UI (create/edit/range/color) | Partial | P5-37 |
 | Loop / ping-pong playback | Covered | — |
 | Onion skin: count, opacity, tints | Covered | — |
@@ -143,7 +143,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 |---|---|---|
 | `.ase`/`.aseprite` core read/write | Covered | — |
 | `.ase` unknown-chunk preservation | Covered | P5-07 |
-| `.ase` grid origin/size | Missing | P5-08 |
+| `.ase` grid origin/size | Covered | P5-08 |
 | `.ase` cel bounds + z-index | Missing | P5-10, P5-11 |
 | `.ase` linked-cel write | Missing | P5-12 |
 | `.ase` layer flags + UUIDs | Partial | P5-13 |
