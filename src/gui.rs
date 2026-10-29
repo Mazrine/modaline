@@ -468,6 +468,32 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                 ui.label("padding");
                 ui.add(egui::DragValue::new(&mut cfg.padding).range(0..=64));
             });
+            ui.horizontal(|ui| {
+                ui.label("atlas");
+                egui::ComboBox::from_id_salt("atlas_format")
+                    .selected_text(cfg.atlas.name())
+                    .show_ui(ui, |ui| {
+                        for format in [
+                            crate::io::AtlasFormat::Vixel,
+                            crate::io::AtlasFormat::JsonHash,
+                            crate::io::AtlasFormat::JsonArray,
+                        ] {
+                            if ui
+                                .selectable_label(cfg.atlas == format, format.name())
+                                .clicked()
+                            {
+                                cfg.atlas = format;
+                            }
+                        }
+                    });
+                if cfg.gif {
+                    ui.label("loop");
+                    ui.add(egui::DragValue::new(&mut cfg.gif_loop).range(0..=1000));
+                    ui.label("colors");
+                    ui.add(egui::DragValue::new(&mut cfg.gif_colors).range(2..=256));
+                    ui.checkbox(&mut cfg.gif_dither, "dither");
+                }
+            });
             if ui.button("export").clicked() {
                 let stem = if view.export_path.trim().is_empty() {
                     editor
@@ -2912,6 +2938,7 @@ const HELP: &[&str] = &[
     "  :exportcfg <stem> --sequence [--per-layer] [--pattern <tpl>]   (PNG sequence)",
     "  :exportcfg <stem> --layout h|v|rows|columns|packed [--columns n] [--rows n]",
     "  :exportcfg ... --border n --shape n --inner n --extrude n   (sheet layout)",
+    "  :exportcfg ... --atlas vixel|hash|array --gif-loop n --gif-colors n --gif-dither",
     "  t                  toggle filled shapes (rect / ellipse)",
     "  , / .              prev / next color",
     "  < / >              prev / next layer",

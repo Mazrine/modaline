@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **211 tests green** (198 lib + 13 bin)
+- `cargo test` → **213 tests green** (200 lib + 13 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-41 sheet layouts** (see batch 78).
+- Last completed batch: **P5-42 atlas + GIF options** (see batch 79).
 
 ## How to resume
 
@@ -416,6 +416,9 @@ Read, in order:
 78. **P5-41 — sheet layouts** — horizontal/vertical/rows/columns/packed grids,
   border/shape/inner padding, extrusion, trim via config; metadata records the
   layout. 2 new tests (211 total): padding/extrude placement and grid choices.
+79. **P5-42 — atlas + GIF options** — JSON-hash/array metadata with tags/layers/
+  slices and templated filenames; GIF repeat count, palette cube and dither.
+  2 new tests (213 total): atlas metadata and GIF quantization/output.
 
 ## Next step (exact)
 
@@ -424,8 +427,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-42** — atlas metadata + GIF options (first open task), then continue down
-  the P5 roadmap in dependency order.
+- **P5-43** — extra image formats (first open task), then continue down the P5
+  roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

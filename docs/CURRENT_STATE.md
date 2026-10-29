@@ -154,7 +154,9 @@ L-shaped corners for the 1 px pencil/eraser.
   PNG sequences export per frame or per layer with `{frame}`, `{layer}`, `{tag}`,
   `{title}` and `{duration}` filename templates. Sheet layouts: horizontal,
   vertical, rows, columns, packed; border/shape/inner padding, extrusion and
-  trim, recorded in metadata.
+  trim, recorded in metadata. Atlas metadata can be vixel, JSON-hash or
+  JSON-array (tags/layers/slices); GIF supports repeat count, palette size and
+  ordered dithering.
 - **filters** (panel + `:filter`): invert, brightness, contrast, hue,
   saturation, desaturate, curves, levels, colour balance, posterize, outline,
   blur, sharpen, median, 3×3 convolution (custom kernel/divisor/bias) and

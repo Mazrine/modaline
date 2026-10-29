@@ -114,6 +114,32 @@ pub enum ExportLayers {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtlasFormat {
+    Vixel,
+    JsonHash,
+    JsonArray,
+}
+
+impl AtlasFormat {
+    pub fn name(self) -> &'static str {
+        match self {
+            AtlasFormat::Vixel => "vixel",
+            AtlasFormat::JsonHash => "hash",
+            AtlasFormat::JsonArray => "array",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "vixel" | "default" => AtlasFormat::Vixel,
+            "hash" | "json-hash" | "jsonhash" => AtlasFormat::JsonHash,
+            "array" | "json-array" | "jsonarray" => AtlasFormat::JsonArray,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SheetLayout {
     Horizontal,
     Vertical,
@@ -172,6 +198,11 @@ pub struct ExportConfig {
     pub shape_padding: u32,
     pub inner_padding: u32,
     pub extrude: u32,
+    pub atlas: AtlasFormat,
+    /// GIF repeats: 0 = forever.
+    pub gif_loop: u16,
+    pub gif_dither: bool,
+    pub gif_colors: u16,
 }
 
 impl Default for ExportConfig {
@@ -199,6 +230,10 @@ impl Default for ExportConfig {
             shape_padding: 0,
             inner_padding: 0,
             extrude: 0,
+            atlas: AtlasFormat::Vixel,
+            gif_loop: 0,
+            gif_dither: false,
+            gif_colors: 256,
         }
     }
 }
@@ -256,8 +291,6 @@ pub fn configured_sprite(sprite: &Sprite, cfg: &ExportConfig) -> Result<Sprite> 
         .iter()
         .map(|&l| frames.iter().map(|&f| sprite.cels[l][f].clone()).collect())
         .collect();
-    out.tags.clear();
-    out.slices.clear();
     out.raw_chunks.clear();
 
     let mut keep: Vec<usize> = Vec::new();
@@ -313,6 +346,10 @@ pub fn export_config(sprite: &Sprite, cfg: &ExportConfig, stem: &Path) -> Result
     let view = configured_sprite(sprite, cfg)?;
     let scale = cfg.scale.clamp(1, 16);
     let padding = cfg.padding.min(64);
+    let title = stem
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "vixel".into());
     let mut paths = Vec::new();
     if cfg.sheet {
         let sheet_path = with_suffix(stem, ".sheet.png");
@@ -328,13 +365,24 @@ pub fn export_config(sprite: &Sprite, cfg: &ExportConfig, stem: &Path) -> Result
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            export_meta(&view, sheet, &image, &meta_path)?;
+            let size = image::open(&sheet_path)
+                .with_context(|| format!("open {}", sheet_path.display()))?
+                .to_rgba8()
+                .dimensions();
+            export_meta_format(&view, &sheet, &image, size, &meta_path, cfg, &title)?;
             paths.push(meta_path);
         }
     }
     if cfg.gif {
         let gif_path = with_suffix(stem, ".gif");
-        export_gif_scaled(&view, &gif_path, scale)?;
+        export_gif_configured(
+            &view,
+            &gif_path,
+            scale,
+            cfg.gif_loop,
+            cfg.gif_dither,
+            cfg.gif_colors,
+        )?;
         paths.push(gif_path);
     }
     if cfg.sequence {
@@ -686,6 +734,220 @@ pub fn export_gif_scaled(sprite: &Sprite, path: &Path, scale: u32) -> Result<()>
             ))
             .with_context(|| format!("gif frame {frame}"))?;
     }
+    Ok(())
+}
+
+fn bayer4(x: u32, y: u32) -> f32 {
+    const M: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+    (f32::from(M[(y % 4) as usize][(x % 4) as usize]) + 0.5) / 16.0
+}
+
+/// Quantize to a fixed RGB cube (levels³ colours); alpha is thresholded.
+pub fn gif_quantize(img: &image::RgbaImage, colors: u16, dither: bool) -> image::RgbaImage {
+    let levels = ((f32::from(colors.clamp(2, 256))).cbrt().round() as u32).clamp(2, 8);
+    let steps = (levels - 1) as f32;
+    let mut out = img.clone();
+    for y in 0..img.height() {
+        for x in 0..img.width() {
+            let p = *img.get_pixel(x, y);
+            if p.0[3] < 128 {
+                out.put_pixel(x, y, image::Rgba([0, 0, 0, 0]));
+                continue;
+            }
+            let q = |c: u8, channel: u32| {
+                let scaled = f32::from(c) / 255.0 * steps;
+                let v = if dither {
+                    (scaled + bayer4(x, y + channel * 4)).floor()
+                } else {
+                    scaled.round()
+                };
+                (v / steps * 255.0).round().clamp(0.0, 255.0) as u8
+            };
+            out.put_pixel(
+                x,
+                y,
+                image::Rgba([q(p.0[0], 0), q(p.0[1], 1), q(p.0[2], 2), 255]),
+            );
+        }
+    }
+    out
+}
+
+/// GIF export with repeat count, palette size and optional ordered dithering.
+pub fn export_gif_configured(
+    sprite: &Sprite,
+    path: &Path,
+    scale: u32,
+    repeat: u16,
+    dither: bool,
+    colors: u16,
+) -> Result<()> {
+    use image::codecs::gif::{GifEncoder, Repeat};
+    let file = std::fs::File::create(path).with_context(|| format!("create {}", path.display()))?;
+    let mut encoder = GifEncoder::new_with_speed(std::io::BufWriter::new(file), 10);
+    encoder
+        .set_repeat(if repeat == 0 {
+            Repeat::Infinite
+        } else {
+            Repeat::Finite(repeat)
+        })
+        .context("gif repeat")?;
+    for frame in 0..sprite.frames.len().max(1) {
+        let delay = sprite
+            .frames
+            .get(frame)
+            .map_or(100, |f| f.duration_ms)
+            .max(10) as u32;
+        let img = scaled(frame_image(sprite, frame), scale);
+        let img = if dither || colors < 256 {
+            gif_quantize(&img, colors, dither)
+        } else {
+            img
+        };
+        encoder
+            .encode_frame(image::Frame::from_parts(
+                img,
+                0,
+                0,
+                image::Delay::from_numer_denom_ms(delay, 1),
+            ))
+            .with_context(|| format!("gif frame {frame}"))?;
+    }
+    Ok(())
+}
+
+/// Per-frame content rectangles inside the sheet image.
+pub fn sheet_frame_rects(sprite: &Sprite, sheet: &Sheet, cfg: &ExportConfig) -> Vec<(u32, u32)> {
+    let n = sprite.frames.len();
+    let mut out = Vec::with_capacity(n);
+    if cfg.sheet_layout.is_some() {
+        let ex = cfg.extrude.min(64);
+        let inner = cfg.inner_padding.min(64);
+        let shape = cfg.shape_padding.min(64);
+        let border = cfg.border_padding.min(64);
+        let cw = sheet.frame_w + ex * 2 + inner * 2;
+        let ch = sheet.frame_h + ex * 2 + inner * 2;
+        for frame in 0..n {
+            let ox = border + (frame as u32 % sheet.columns) * (cw + shape) + inner + ex;
+            let oy = border + (frame as u32 / sheet.columns) * (ch + shape) + inner + ex;
+            out.push((ox, oy));
+        }
+    } else {
+        let pad = sheet.padding;
+        let cw = sheet.frame_w + pad * 2;
+        let ch = sheet.frame_h + pad * 2;
+        for frame in 0..n {
+            let ox = (frame as u32 % sheet.columns) * cw + pad;
+            let oy = (frame as u32 / sheet.columns) * ch + pad;
+            out.push((ox, oy));
+        }
+    }
+    out
+}
+
+/// Write vixel, JSON-hash or JSON-array atlas metadata.
+pub fn export_meta_format(
+    sprite: &Sprite,
+    sheet: &Sheet,
+    image: &str,
+    image_size: (u32, u32),
+    path: &Path,
+    cfg: &ExportConfig,
+    title: &str,
+) -> Result<()> {
+    if cfg.atlas == AtlasFormat::Vixel {
+        return export_meta(sprite, sheet.clone(), image, path);
+    }
+    let rects = sheet_frame_rects(sprite, sheet, cfg);
+    let tag = cfg.tag.as_deref().unwrap_or("all");
+    let frames: Vec<serde_json::Value> = sprite
+        .frames
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let (x, y) = rects.get(i).copied().unwrap_or((0, 0));
+            let filename =
+                render_filename(&cfg.filename, title, i, None, tag, u32::from(f.duration_ms));
+            serde_json::json!({
+                "filename": filename,
+                "frame": {"x": x, "y": y, "w": sheet.frame_w, "h": sheet.frame_h},
+                "rotated": false,
+                "trimmed": false,
+                "spriteSourceSize": {"x": 0, "y": 0, "w": sheet.frame_w, "h": sheet.frame_h},
+                "sourceSize": {"w": sheet.frame_w, "h": sheet.frame_h},
+                "duration": f.duration_ms,
+            })
+        })
+        .collect();
+    let frame_tags: Vec<serde_json::Value> = sprite
+        .tags
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "name": t.name,
+                "from": t.from,
+                "to": t.to,
+                "direction": t.direction.name(),
+                "repeat": t.repeat,
+                "color": [t.color.0, t.color.1, t.color.2],
+            })
+        })
+        .collect();
+    let layers: Vec<serde_json::Value> = sprite
+        .layers
+        .iter()
+        .map(|l| {
+            serde_json::json!({
+                "name": l.name,
+                "opacity": l.opacity,
+                "blend": format!("{:?}", l.blend).to_lowercase(),
+                "visible": l.visible,
+                "group": l.group,
+            })
+        })
+        .collect();
+    let slices: Vec<serde_json::Value> = sprite
+        .slices
+        .iter()
+        .map(|s| {
+            let keys: Vec<serde_json::Value> = s
+                .keys
+                .iter()
+                .map(|k| {
+                    serde_json::json!({
+                        "frame": k.frame,
+                        "bounds": {"x": k.x, "y": k.y, "w": k.w, "h": k.h},
+                        "center": k.center,
+                        "pivot": k.pivot,
+                    })
+                })
+                .collect();
+            serde_json::json!({"name": s.name, "keys": keys})
+        })
+        .collect();
+    let meta = serde_json::json!({
+        "image": image,
+        "size": {"w": image_size.0, "h": image_size.1},
+        "scale": cfg.scale,
+        "format": cfg.atlas.name(),
+        "frameTags": frame_tags,
+        "layers": layers,
+        "slices": slices,
+    });
+    let value = if cfg.atlas == AtlasFormat::JsonHash {
+        let map: serde_json::Map<String, serde_json::Value> = frames
+            .into_iter()
+            .filter_map(|f| {
+                let name = f.get("filename")?.as_str()?.to_string();
+                Some((name, f))
+            })
+            .collect();
+        serde_json::json!({"frames": map, "meta": meta})
+    } else {
+        serde_json::json!({"frames": frames, "meta": meta})
+    };
+    let text = serde_json::to_string_pretty(&value).context("serialize atlas")?;
+    std::fs::write(path, text).with_context(|| format!("write {}", path.display()))?;
     Ok(())
 }
 
@@ -1049,6 +1311,100 @@ pub fn import_sheet(path: &Path, cols: u32, rows: u32) -> Result<Sprite> {
 mod tests {
     use super::*;
     use crate::color::Rgba;
+
+    #[test]
+    fn atlas_metadata_hash_and_array_include_tags_layers_slices() {
+        use crate::sprite::{Slice, SliceKey, Tag};
+        let mut s = Sprite::new(2, 2);
+        s.add_frame_after(0);
+        s.set(0, 0, 0, 0, Rgba::rgb(255, 0, 0));
+        s.set(0, 1, 1, 1, Rgba::rgb(0, 0, 255));
+        s.tags.push(Tag {
+            name: "walk".into(),
+            from: 0,
+            to: 1,
+            color: Rgba::rgb(10, 20, 30),
+            direction: crate::sprite::PlayDirection::Forward,
+            repeat: 0,
+            user_data: None,
+        });
+        s.slices.push(Slice {
+            name: "head".into(),
+            keys: vec![SliceKey {
+                frame: 0,
+                x: 0,
+                y: 0,
+                w: 1,
+                h: 1,
+                center: None,
+                pivot: None,
+            }],
+            ..Default::default()
+        });
+        let cfg = ExportConfig {
+            gif: false,
+            atlas: AtlasFormat::JsonHash,
+            filename: "{title}_{frame}".into(),
+            ..Default::default()
+        };
+        let dir = std::env::temp_dir().join(format!("vixel-atlas-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        export_config(&s, &cfg, &dir.join("walk")).unwrap();
+        let text = std::fs::read_to_string(dir.join("walk.json")).unwrap();
+        let meta: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(meta["frames"].as_object().unwrap().len(), 2);
+        assert!(meta["frames"]["walk_001.png"]["frame"]["w"] == 2);
+        assert_eq!(meta["meta"]["frameTags"][0]["name"], "walk");
+        assert_eq!(meta["meta"]["layers"].as_array().unwrap().len(), 1);
+        assert_eq!(meta["meta"]["slices"][0]["name"], "head");
+
+        let mut array_cfg = cfg.clone();
+        array_cfg.atlas = AtlasFormat::JsonArray;
+        export_config(&s, &array_cfg, &dir.join("walk_array")).unwrap();
+        let meta: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("walk_array.json")).unwrap())
+                .unwrap();
+        assert_eq!(meta["frames"].as_array().unwrap().len(), 2);
+        assert_eq!(meta["frames"][0]["filename"], "walk_array_001.png");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gif_quantize_limits_colours_and_keeps_alpha_threshold() {
+        let mut img = image::RgbaImage::new(8, 8);
+        for y in 0..8 {
+            for x in 0..8 {
+                img.put_pixel(
+                    x,
+                    y,
+                    image::Rgba([
+                        (x * 31) as u8,
+                        (y * 31) as u8,
+                        128,
+                        if x == 0 { 0 } else { 255 },
+                    ]),
+                );
+            }
+        }
+        let out = gif_quantize(&img, 8, true);
+        let unique: std::collections::BTreeSet<[u8; 3]> = out
+            .pixels()
+            .filter(|p| p.0[3] > 0)
+            .map(|p| [p.0[0], p.0[1], p.0[2]])
+            .collect();
+        assert!(unique.len() <= 8, "{unique:?}");
+        assert_eq!(out.get_pixel(0, 0).0[3], 0, "transparent stays out");
+        let dir = std::env::temp_dir().join(format!("vixel-gifopt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("anim.gif");
+        let mut s = Sprite::new(2, 2);
+        s.add_frame_after(0);
+        export_gif_configured(&s, &path, 1, 2, true, 8).unwrap();
+        assert!(path.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn sheet_layout_applies_padding_and_extrusion() {

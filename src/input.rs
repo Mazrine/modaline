@@ -1704,6 +1704,19 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         Some(n) => cfg.extrude = n.min(64),
                         None => bad = true,
                     },
+                    "--atlas" => match it.next().and_then(crate::io::AtlasFormat::parse) {
+                        Some(a) => cfg.atlas = a,
+                        None => bad = true,
+                    },
+                    "--gif-loop" => match it.next().and_then(|v| v.parse::<u16>().ok()) {
+                        Some(n) => cfg.gif_loop = n,
+                        None => bad = true,
+                    },
+                    "--gif-dither" => cfg.gif_dither = true,
+                    "--gif-colors" => match it.next().and_then(|v| v.parse::<u16>().ok()) {
+                        Some(n) => cfg.gif_colors = n.clamp(2, 256),
+                        None => bad = true,
+                    },
                     _ => bad = true,
                 }
             }
@@ -1739,7 +1752,8 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         [--trim] [--scale n] [--padding n] [--no-sheet] [--no-gif] \
                         [--no-meta] [--sequence] [--per-layer] [--pattern <tpl>] \
                         [--layout h|v|rows|columns|packed] [--columns n] [--rows n] \
-                        [--border n] [--shape n] [--inner n] [--extrude n]"
+                        [--border n] [--shape n] [--inner n] [--extrude n] \
+                        [--atlas vixel|hash|array] [--gif-loop n] [--gif-dither] [--gif-colors n]"
                         .into();
                 }
             }

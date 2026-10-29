@@ -178,8 +178,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | PNG frame / sprite export | Covered | — |
 | Sprite sheet export | Covered | P5-41 |
 | Sheet layouts + padding/trim/extrude/crop | Covered (packed = row grid for uniform frames) | P5-41 |
-| JSON atlas metadata (hash/array) | Partial (vixel meta) | P5-42 |
-| GIF export | Partial (loop always infinite) | P5-42 |
+| JSON atlas metadata (hash/array) | Covered | P5-42 |
+| GIF export | Covered (loop count, palette size, dither) | P5-42 |
 | Tag / layer / frame-range filters on export | Covered | P5-39 |
 | Export config (ignore empty, merge, trim, padding, toggles) | Covered | P5-39 |
 | Export scale | Covered | — |

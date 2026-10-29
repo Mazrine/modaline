@@ -534,9 +534,15 @@ met; blocked tasks are marked with the reason.
   --border n --shape n --inner n --extrude n`; dialog exposes the same.
   2 new tests (211 total): horizontal padding/extrude placement and
   vertical/columns grids.
-- [ ] **P5-42 — Atlas metadata + GIF options** (M) — deps: P5-41.
-  json-hash/json-array, layers/tags/slices, filename formats; GIF loop, palette
-  and dither.
+- [x] **P5-42 — Atlas metadata + GIF options** (M) — deps: P5-41.
+  Landed 2026-10-28. Atlas metadata supports vixel, JSON-hash and JSON-array
+  formats with per-frame rects/timing, `frameTags`, layers and slices; filenames
+  reuse the sequence template. GIF export takes a repeat count (0 = forever),
+  palette-size (RGB cube) and ordered-dither toggle via
+  `export_gif_configured`. Commands: `--atlas vixel|hash|array`,
+  `--gif-loop n`, `--gif-colors n`, `--gif-dither`; dialog controls too.
+  2 new tests (213 total): hash/array metadata with tags/layers/slices and GIF
+  quantization/alpha/loop output.
 - [ ] **P5-43 — Extra image formats** (M) — deps: P5-40.
   JPG/BMP/TGA/WebP; evaluate FLC/FLI/PCX and document any deliberate gap.
 - [ ] **P5-44 — Import parity** (L) — deps: P5-39.
