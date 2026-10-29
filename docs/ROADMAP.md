@@ -602,10 +602,15 @@ met; blocked tasks are marked with the reason.
   and `app.activeFrame`. A whole script is one snapshot undo step.
   `:script <file.lua>`, `:lua <code>` and CLI `--script` are wired. 5 unit tests
   + CLI integration (256 total). Xvfb/headless verified.
-- [ ] **P5-50 — Scripting API coverage** (L) — deps: P5-49.
-  Aseprite API compatibility matrix; run representative scripts.
-- [ ] **P5-51 — Extensions** (L) — deps: P5-49, P5-50, P5-53. **Blocked** by
-  P5-50 (not started).
+- [x] **P5-50 — Scripting API coverage** (L) — deps: P5-49.
+  Landed 2026-10-29. Added `app.pixelColor` (rgba/rgb/gray/grayA/channel
+  getters), `Color`, `app.transaction`, `app.command` (Undo/Redo/NewLayer/
+  NewFrame), sprite `flatten`/`crop`/`newTag`/frame-duration API. The full
+  Aseprite compatibility matrix (supported/partial/missing) is in
+  `docs/SCRIPTING.md`; representative scripts run in unit tests and the CLI.
+  Remaining gaps are documented (Image/Cel/Selection objects, Dialog/events/
+  fs, newLayer/newFrame return indices). 2 new tests (258 total).
+- [ ] **P5-51 — Extensions** (L) — deps: P5-49, P5-50, P5-53.
   `.aseprite-extension` zip/manifest, install/remove, scripts/themes.
 
 ### Epic 10 — App shell and UX

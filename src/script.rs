@@ -230,8 +230,199 @@ fn execute(host: HostRef<'_>, source: &str, name: &str) -> Result<(), mlua::Erro
             })?,
         )?;
 
+        let flatten_host = host.clone();
+        sprite.set(
+            "flatten",
+            scope.create_function_mut(move |_, _t: Table| {
+                flatten_host.borrow_mut().editor.flatten();
+                Ok(())
+            })?,
+        )?;
+        let crop_host = host.clone();
+        sprite.set(
+            "crop",
+            scope.create_function_mut(
+                move |_, (_t, x, y, w, h): (Table, u32, u32, u32, u32)| {
+                    if w == 0 || h == 0 {
+                        return Err(mlua::Error::RuntimeError(
+                            "crop dimensions must be positive".into(),
+                        ));
+                    }
+                    crop_host.borrow_mut().editor.crop_to(x, y, w, h);
+                    Ok(())
+                },
+            )?,
+        )?;
+        let tag_host = host.clone();
+        sprite.set(
+            "newTag",
+            scope.create_function_mut(
+                move |lua, (_t, name, from, to): (Table, String, i64, i64)| {
+                    let mut host = tag_host.borrow_mut();
+                    let last = host.editor.sprite.frames.len().max(1) as i64;
+                    let from = (from - 1).clamp(0, last - 1) as usize;
+                    let to = (to - 1).clamp(0, last - 1) as usize;
+                    let (from, to) = (from.min(to), from.max(to));
+                    host.editor.sprite.tags.push(crate::sprite::Tag {
+                        name: name.clone(),
+                        from,
+                        to,
+                        color: Rgba::rgb(1, 2, 3),
+                        direction: crate::sprite::PlayDirection::Forward,
+                        repeat: 0,
+                        user_data: None,
+                    });
+                    host.editor.touch();
+                    host.editor.dirty = true;
+                    let t = lua.create_table()?;
+                    t.set("name", name)?;
+                    t.set("from", from as i64 + 1)?;
+                    t.set("to", to as i64 + 1)?;
+                    Ok(t)
+                },
+            )?,
+        )?;
+        let duration_set_host = host.clone();
+        sprite.set(
+            "setFrameDuration",
+            scope.create_function_mut(move |_, (_t, frame, ms): (Table, i64, u32)| {
+                let mut host = duration_set_host.borrow_mut();
+                let idx = frame.clamp(1, host.editor.sprite.frames.len() as i64) as usize - 1;
+                host.editor.sprite.frames[idx].duration_ms = ms.clamp(1, u16::MAX as u32) as u16;
+                host.editor.touch();
+                host.editor.dirty = true;
+                Ok(())
+            })?,
+        )?;
+        let duration_get_host = host.clone();
+        sprite.set(
+            "frameDuration",
+            scope.create_function_mut(move |_, (_t, frame): (Table, i64)| {
+                let host = duration_get_host.borrow();
+                let idx = frame.clamp(1, host.editor.sprite.frames.len() as i64) as usize - 1;
+                Ok(host.editor.sprite.frames[idx].duration_ms)
+            })?,
+        )?;
+
         sprite.set_metatable(Some(sprite_meta))?;
         app.set("activeSprite", sprite)?;
+
+        let pixel_color = lua.create_table()?;
+        pixel_color.set(
+            "rgba",
+            scope.create_function(|lua, (r, g, b, a): (u8, u8, u8, Option<u8>)| {
+                color_table(lua, Rgba(r, g, b, a.unwrap_or(255)))
+            })?,
+        )?;
+        pixel_color.set(
+            "rgb",
+            scope.create_function(|lua, (r, g, b): (u8, u8, u8)| {
+                color_table(lua, Rgba(r, g, b, 255))
+            })?,
+        )?;
+        pixel_color.set(
+            "gray",
+            scope.create_function(|lua, v: u8| color_table(lua, Rgba(v, v, v, 255)))?,
+        )?;
+        pixel_color.set(
+            "grayA",
+            scope.create_function(|lua, (v, a): (u8, u8)| color_table(lua, Rgba(v, v, v, a)))?,
+        )?;
+        for (name, channel) in [("rgbaR", 0usize), ("rgbaG", 1), ("rgbaB", 2), ("rgbaA", 3)] {
+            pixel_color.set(
+                name,
+                scope.create_function(move |_, value: Value| {
+                    let key = ["r", "g", "b", "a"][channel];
+                    match value {
+                        Value::Table(t) => Ok(t
+                            .get::<Option<i64>>(key)?
+                            .unwrap_or(if channel == 3 { 255 } else { 0 })
+                            .clamp(0, 255) as u8),
+                        Value::Integer(packed) => Ok(((packed >> (24 - channel * 8)) & 0xff) as u8),
+                        _ => Err(mlua::Error::RuntimeError(
+                            "pixelColor channel expects a color table".into(),
+                        )),
+                    }
+                })?,
+            )?;
+        }
+        app.set("pixelColor", pixel_color)?;
+
+        let transaction = scope.create_function_mut(|_lua, (a, b): (Value, Value)| {
+            let func = match (a, b) {
+                (Value::Function(f), _) => f,
+                (_, Value::Function(f)) => f,
+                _ => {
+                    return Err(mlua::Error::RuntimeError(
+                        "app.transaction expects a function".into(),
+                    ));
+                }
+            };
+            func.call::<Value>(())
+        })?;
+        app.set("transaction", transaction)?;
+
+        let command = lua.create_table()?;
+        let undo_host = host.clone();
+        command.set(
+            "Undo",
+            scope.create_function_mut(move |_, ()| {
+                undo_host.borrow_mut().editor.undo();
+                Ok(())
+            })?,
+        )?;
+        let redo_host = host.clone();
+        command.set(
+            "Redo",
+            scope.create_function_mut(move |_, ()| {
+                redo_host.borrow_mut().editor.redo();
+                Ok(())
+            })?,
+        )?;
+        let layer_cmd_host = host.clone();
+        command.set(
+            "NewLayer",
+            scope.create_function_mut(move |_, ()| {
+                Ok(layer_cmd_host.borrow_mut().editor.script_add_layer() + 1)
+            })?,
+        )?;
+        let frame_cmd_host = host.clone();
+        command.set(
+            "NewFrame",
+            scope.create_function_mut(move |_, ()| {
+                Ok(frame_cmd_host.borrow_mut().editor.script_add_frame() + 1)
+            })?,
+        )?;
+        app.set("command", command)?;
+
+        let color_ctor = scope.create_function(|lua, args: mlua::MultiValue| {
+            let t = lua.create_table()?;
+            if args.len() == 1
+                && let Some(table) = args.front().cloned().and_then(|v| v.as_table().cloned())
+            {
+                for key in ["r", "g", "b", "a"] {
+                    let v: Option<i64> = table.get(key)?;
+                    t.set(key, v.unwrap_or(if key == "a" { 255 } else { 0 }))?;
+                }
+            } else {
+                let vals: Vec<i64> = args
+                    .iter()
+                    .map(|v| match v {
+                        Value::Integer(i) => Ok(*i),
+                        Value::Number(n) => Ok(*n as i64),
+                        _ => Err(mlua::Error::RuntimeError(
+                            "Color channels must be numbers".into(),
+                        )),
+                    })
+                    .collect::<Result<_, _>>()?;
+                t.set("r", vals.first().copied().unwrap_or(0))?;
+                t.set("g", vals.get(1).copied().unwrap_or(0))?;
+                t.set("b", vals.get(2).copied().unwrap_or(0))?;
+                t.set("a", vals.get(3).copied().unwrap_or(255))?;
+            }
+            Ok(t)
+        })?;
+        lua.globals().set("Color", color_ctor)?;
 
         let layer = lua.create_table()?;
         let layer_meta = lua.create_table()?;
@@ -411,6 +602,59 @@ mod tests {
         .unwrap();
         assert_eq!(e.sprite.layers.len(), 2);
         assert_eq!(e.sprite.frames.len(), 2);
+    }
+
+    #[test]
+    fn pixel_color_transaction_and_command_are_available() {
+        let mut e = Editor::new(3, 3);
+        run(
+            &mut e,
+            r#"
+            local c = app.pixelColor.rgba(10, 20, 30, 40)
+            assert(app.pixelColor.rgbaR(c) == 10)
+            assert(app.pixelColor.rgbaG(c) == 20)
+            assert(app.pixelColor.rgbaB(c) == 30)
+            assert(app.pixelColor.rgbaA(c) == 40)
+            local d = Color{r=5, g=6, b=7, a=8}
+            app.activeSprite:setPixel(0, 0, d)
+            local got = app.activeSprite:getPixel(0, 0)
+            assert(got.r == 5 and got.g == 6 and got.b == 7 and got.a == 8)
+            local n = app.transaction("add layer", function()
+                app.command.NewLayer()
+                return 7
+            end)
+            assert(n == 7)
+            "#,
+            "api.lua",
+        )
+        .unwrap();
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba(5, 6, 7, 8));
+        assert_eq!(e.sprite.layers.len(), 2);
+    }
+
+    #[test]
+    fn tags_durations_crop_and_flatten_are_available() {
+        let mut e = Editor::new(4, 4);
+        run(
+            &mut e,
+            r#"
+            local s = app.activeSprite
+            s:newFrame()
+            s:setFrameDuration(2, 120)
+            assert(s:frameDuration(2) == 120)
+            local t = s:newTag("walk", 1, 2)
+            assert(t.name == "walk" and t.from == 1 and t.to == 2)
+            s:crop(0, 0, 2, 2)
+            s:newLayer()
+            s:flatten()
+            "#,
+            "anim.lua",
+        )
+        .unwrap();
+        assert_eq!(e.sprite.frames.len(), 2);
+        assert_eq!(e.sprite.frames[1].duration_ms, 120);
+        assert_eq!(e.sprite.tags[0].name, "walk");
+        assert_eq!((e.sprite.width, e.sprite.height), (2, 2));
     }
 
     #[test]

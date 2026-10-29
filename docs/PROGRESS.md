@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **256 tests green** (222 lib + 28 bin + 6 CLI; 1 ignored benchmark)
+- `cargo test` → **258 tests green** (224 lib + 28 bin + 6 CLI; 1 ignored benchmark)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-49 scripting MVP** (see batch 95).
+- Last completed batch: **P5-50 scripting API** (see batch 96).
 
 ## How to resume
 
@@ -478,6 +478,9 @@ Read, in order:
 95. **P5-49 — scripting MVP** — `mlua` 0.12 (Lua 5.4 vendored), sandboxed
   execution, core `app`/sprite/layer/pixel API, one-step script undo,
   `:script`/`:lua`/`--script`. 5 unit + 1 CLI test (256 total).
+96. **P5-50 — scripting API coverage** — pixelColor/Color, transaction,
+  command Undo/Redo/NewLayer/NewFrame, flatten/crop/newTag/durations; full
+  compatibility matrix in `docs/SCRIPTING.md`. 2 tests (258 total).
 
 ## Next step (exact)
 
@@ -486,9 +489,10 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-50** — scripting API coverage (first open task; `mlua` is now available),
-  then P5-51 extensions. Remaining documented Partial rows: scripting coverage,
-  localization strings, async filtering and CPU dirty compositing.
+- **P5-51** — extensions (first open task; scripting dependencies now met),
+  then the unblocked programme is complete. Remaining documented Partial rows:
+  scripting object coverage, localization strings, async filtering and CPU dirty
+  compositing.
 
 ## Known limitations (do not forget)
 

@@ -51,6 +51,24 @@ Secondary requirements:
   (palette cycling, layer export, tilemap inspection, selection fill) against
   every documented method.
 
+## API compatibility matrix (P5-50, 2026-10-29)
+
+Representative scripts are covered by `src/script.rs` tests and the CLI
+integration test.
+
+| Area | Supported | Status / gaps |
+|---|---|---|
+| Lua language | Lua 5.4, base/table/string/math/utf8 | Covered; no io/os/package/debug/dofile/loadfile/require (sandbox) |
+| `app` | `version`, `alert`, `activeSprite`, `activeLayer`, `activeFrame` | Covered (active objects are live views where documented) |
+| `app.pixelColor` | `rgba`, `rgb`, `gray`, `grayA`, `rgbaR/G/B/A` | Covered; color tables (integer packed also accepted by channel getters) |
+| `app.transaction(fn)` | Runs the callback and returns its value | Covered (undo is still one script step) |
+| `app.command` | `Undo`, `Redo`, `NewLayer`, `NewFrame` | Covered; broader command set missing |
+| `Sprite` | width/height/frameCount/layerCount/activeLayer/activeFrame | Covered (read-only) |
+| `Sprite` methods | `resize`, `newLayer`, `newFrame`, `getPixel`, `setPixel`, `save`, `saveAs`, `flatten`, `crop`, `newTag`, `setFrameDuration`, `frameDuration` | Partial: `newLayer`/`newFrame` return a 1-based index, not Aseprite userdata; pixel methods are a vixel extension to the sprite |
+| `Layer` | name/visible/opacity/editable/isBackground/isReference | Partial: no `cel`, `newCel`, groups or blend setters |
+| `Image`/`Cel`/`Selection`/`Slice`/`Tileset` objects | — | Missing |
+| Dialog, events, `app.fs`, plugin commands | — | Missing (sandbox/product choice) |
+
 ## Availability check (2026-10-28)
 
 `mlua`, `rhai`, `rlua`, `quickjs`, `pyo3` and RustPython are absent from both
