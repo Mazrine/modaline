@@ -28,6 +28,8 @@ pub struct Config {
     /// UI font file (`.ttf`/`.otf`), or `default`.
     pub ui_font: String,
     pub ui_font_size: f32,
+    /// Docked panels and their sizes.
+    pub layout: crate::layout::Layout,
     /// The renderer asked for at startup: "glow" (default) or "wgpu". The
     /// request is honoured only by a build with the `wgpu` feature; otherwise
     /// vixel says so and falls back to glow.
@@ -106,6 +108,7 @@ impl Default for Config {
             theme: "dark".into(),
             ui_font: "default".into(),
             ui_font_size: 13.0,
+            layout: crate::layout::Layout::default(),
             renderer: "glow".into(),
             recent: Vec::new(),
             favourites: Vec::new(),

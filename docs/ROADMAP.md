@@ -621,8 +621,16 @@ met; blocked tasks are marked with the reason.
   UI font and size, persisted in `config.json`; themes/fonts are per-tab and
   restored on switch. 2 theme tests + old-config defaults; 230 total. Xvfb
   smoke: midnight theme rendered, Noto font at 20 pt, saved JSON re-read.
-- [ ] **P5-54 — Workspace layouts** (M) — deps: P5-52.
-  Saved/shared panel layouts; reset.
+- [x] **P5-54 — Workspace layouts** (M) — deps: P5-52.
+  Landed 2026-10-28. `src/layout.rs` (library) defines a serde JSON layout
+  (toolbar/timeline/side visibility, side width, timeline height) with four
+  built-ins (`default`, `drawing`, `animation`, `compact`). `:layout <name|json>`
+  applies, `:layout reset` restores defaults, `:layout save <file>` exports;
+  current layout and dragged sizes persist in `config.json` and are per-tab.
+  Panels now fill their allocated rect so saved sizes and drags hold; loading a
+  layout seeds egui's `PanelState` to override remembered sizes. 3 tests + old
+  config defaults (233 total). Xvfb smoke: animation (side hidden, 210 px
+  timeline), JSON export, reset.
 - [ ] **P5-55 — Keymap customization** (M) — deps: none.
   Action layer, key/wheel bindings, conflicts, persisted map.
 - [ ] **P5-56 — Localization infrastructure** (M) — deps: none.

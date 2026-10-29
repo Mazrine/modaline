@@ -63,6 +63,11 @@ pub struct View {
     /// UI font file (`.ttf`/`.otf`) or `default`, and its point size.
     pub ui_font: String,
     pub ui_font_size: f32,
+    /// Docked panels and their sizes (`:layout`).
+    pub layout: crate::layout::Layout,
+    /// Apply the saved sizes on the next frame, overriding egui's remembered
+    /// panel size after a layout/tab change.
+    pub layout_pending: bool,
     /// Mirrored from the editor each frame: 0 = no snapping.
     pub snap_grid: u32,
     pub onion: Onion,
@@ -134,6 +139,8 @@ impl View {
             theme: "dark".into(),
             ui_font: "default".into(),
             ui_font_size: 13.0,
+            layout: crate::layout::Layout::default(),
+            layout_pending: true,
             snap_grid: 0,
             onion: Onion::default(),
             drag_frame: None,
@@ -287,9 +294,42 @@ pub fn draw(
     // Remember the window size for the config file.
     let screen = ui.ctx().content_rect().size();
     view.window = (screen.x, screen.y);
-    egui::Panel::top("toolbar").show(ui, |ui| toolbar(ui, editor, view));
-    egui::Panel::bottom("timeline").show(ui, |ui| timeline(ui, editor, playing, view));
-    egui::Panel::right("side").show(ui, |ui| side(ui, editor, view));
+    if view.layout.show_toolbar {
+        egui::Panel::top("toolbar").show(ui, |ui| toolbar(ui, editor, view));
+    }
+    if view.layout_pending {
+        if view.layout.show_timeline {
+            force_panel_size(
+                ui,
+                "timeline",
+                egui::Vec2::new(0.0, view.layout.timeline_height),
+            );
+        }
+        if view.layout.show_side {
+            force_panel_size(ui, "side", egui::Vec2::new(view.layout.side_width, 0.0));
+        }
+        view.layout_pending = false;
+    }
+    if view.layout.show_timeline {
+        let r = egui::Panel::bottom("timeline")
+            .resizable(true)
+            .default_size(view.layout.timeline_height)
+            .show(ui, |ui| {
+                ui.set_min_height(ui.max_rect().height());
+                timeline(ui, editor, playing, view);
+            });
+        view.layout.timeline_height = r.response.rect.height();
+    }
+    if view.layout.show_side {
+        let r = egui::Panel::right("side")
+            .resizable(true)
+            .default_size(view.layout.side_width)
+            .show(ui, |ui| {
+                ui.set_min_width(ui.max_rect().width());
+                side(ui, editor, view);
+            });
+        view.layout.side_width = r.response.rect.width();
+    }
     egui::CentralPanel::default().show(ui, |ui| {
         canvas(ui, editor, view, texture, onion_prev, onion_next)
     });
@@ -1404,6 +1444,16 @@ fn tag_editor(ui: &mut egui::Ui, editor: &mut Editor) {
 }
 
 // ---- right side panel ----
+
+/// Replace egui's remembered size for one panel, so a loaded layout applies
+/// immediately even though `PanelState` normally wins over `default_size`.
+fn force_panel_size(ui: &egui::Ui, salt: &str, size: egui::Vec2) {
+    let id = ui.scope_id().with_salt(egui::IdSalt::new(salt));
+    let state = egui::PanelState {
+        outer_rect: egui::Rect::from_min_size(egui::Pos2::ZERO, size),
+    };
+    ui.ctx().data_mut(|data| data.insert_persisted(id, state));
+}
 
 /// The side panel scrolls: the settings, the palette, the layers and the sprite
 /// tools together are taller than any window, and a layer list below the fold
@@ -3198,6 +3248,7 @@ const HELP: &[&str] = &[
     "  :renderer glow|wgpu    (wgpu also needs a build with --features wgpu)",
     "  :theme [dark|light|midnight|paper|file.json]   :theme save <file>",
     "  :uifont <font.ttf|default> [8-32]   (UI font and size, saved in config)",
+    "  :layout [default|drawing|animation|compact|file.json]   :layout reset|save <file>",
     "  :slices [<dir> [cols rows|named]]   (list, grid export, or named slices)",
     "  :grad linear|radial   :contour   :textobj <text>   (editable text object)",
     "  :textfont vixel   :textsize <8-64>   :textalign left|center|right",

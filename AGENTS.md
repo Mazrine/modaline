@@ -43,6 +43,7 @@ thin shells:
 | `gui.rs` | `View` (zoom/pan), canvas drawing, panels, help overlay |
 | `app.rs` | `eframe::App` + `Doc` tabs: event loop, per-doc view/textures, playback, session persistence |
 | `theme.rs` | JSON themes + built-ins, egui visuals application, UI font/size loading |
+| `layout.rs` (lib) | JSON workspace layouts, built-ins and size clamping |
 | `lib.rs` | The **model** half as a library (`ase`, `color`, `editor`, `io`, `ops`, `palette`, `sprite`) with no GUI dependency, so another tool can read/composite/write a `.vpx` without launching the editor |
 | `main.rs` | `run_native` + shell module wiring; takes an optional file path argument |
 
@@ -153,6 +154,9 @@ thin shells:
   `Editor::save_path`; browser favourites persist in Config.
 - Theme files are JSON (`src/theme.rs`); keep `Default` literal (never call
   `builtin` from it) and map new colors through `apply`.
+- Timeline/side panel content must fill `ui.max_rect()`; the unified egui Panel
+  sizes to content otherwise. Loading a layout seeds `PanelState` via
+  `force_panel_size` so remembered sizes do not win.
 - Scripting engine decisions live in `docs/SCRIPTING.md` (Lua/mlua chosen;
   P5-49/50/51 blocked on offline dependency). Do not substitute another engine
   without updating that document.

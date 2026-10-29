@@ -10,6 +10,7 @@ pub mod brush;
 pub mod color;
 pub mod editor;
 pub mod io;
+pub mod layout;
 pub mod ops;
 pub mod palette;
 pub mod properties;

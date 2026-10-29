@@ -464,6 +464,38 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
         }
         return;
     }
+    if let Some(rest) = cmd.strip_prefix("layout")
+        && (rest.is_empty() || rest.starts_with(char::is_whitespace))
+    {
+        let rest = rest.trim();
+        if let Some(path) = rest.strip_prefix("save ") {
+            match crate::layout::save(&view.layout, std::path::Path::new(path.trim())) {
+                Ok(()) => editor.msg = format!("layout saved: {}", path.trim()),
+                Err(e) => editor.msg = format!("layout save failed: {e}"),
+            }
+        } else if rest == "reset" {
+            view.layout = crate::layout::Layout::default();
+            view.layout_pending = true;
+            editor.msg = "layout: default (reset)".into();
+        } else if rest.is_empty() {
+            editor.msg = format!(
+                "layout: {} (built-ins: {}; use :layout <name|file.json> | reset)",
+                view.layout.name,
+                crate::layout::names().join(", ")
+            );
+        } else {
+            match crate::layout::resolve(rest) {
+                Ok(mut layout) => {
+                    crate::layout::clamp_sizes(&mut layout);
+                    view.layout = layout;
+                    view.layout_pending = true;
+                    editor.msg = format!("layout: {}", view.layout.name);
+                }
+                Err(e) => editor.msg = format!("layout: {e}"),
+            }
+        }
+        return;
+    }
     if let Some(rest) = cmd.strip_prefix("uifont")
         && (rest.is_empty() || rest.starts_with(char::is_whitespace))
     {

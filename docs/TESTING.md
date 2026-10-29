@@ -67,6 +67,7 @@ Rules that cost me a run each:
 | playback | click `play` | the canvas content changes between screenshots at 0.4 s and 0.9 s |
 | config | `:renderer wgpu`, quit, relaunch | `config.json` has `"renderer": "wgpu"`; a glow-only build logs `built without the wgpu feature; using glow`, a `--features wgpu` build initialises EGL instead |
 | tabs | `Ctrl-t`, screenshot; `Ctrl-Tab`, screenshot | two `untitled` tabs, active marker moves; the strip shows `×` and `+`; `Ctrl-w` closes (dirty tabs refuse) |
+| layouts | `:layout animation`, screenshot; `:layout reset`, screenshot | animation hides the side panel and gives a 210 px timeline; reset restores side + 120 px; `:layout save` writes JSON |
 
 ## Checking a screenshot
 

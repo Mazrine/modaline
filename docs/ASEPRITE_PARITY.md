@@ -217,7 +217,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Themes + font customization | Covered (4 built-ins, JSON themes, UI font/size) | P5-53 |
 | Keyboard shortcut customization | Missing | P5-55 |
 | Mouse-wheel customization | Missing | P5-55 |
-| Workspace layouts | Missing | P5-54 |
+| Workspace layouts | Covered (4 built-ins, JSON layouts, reset, drag sizes) | P5-54 |
 | Localization | Missing | P5-56 |
 
 ## Editors, workspace, undo, performance

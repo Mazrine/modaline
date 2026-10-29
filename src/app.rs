@@ -39,6 +39,7 @@ impl Doc {
         view.theme = config.theme.clone();
         view.ui_font = config.ui_font.clone();
         view.ui_font_size = config.ui_font_size;
+        view.layout = config.layout.clone();
         view.browser_favourites = config.favourites.iter().map(PathBuf::from).collect();
         if let Some(path) = path
             && let Err(e) = editor.open_path(&path)
@@ -149,6 +150,7 @@ impl VixelApp {
         self.docs.remove(index);
         if self.active >= self.docs.len() {
             self.active = self.docs.len() - 1;
+            self.docs[self.active].view.layout_pending = true;
         }
     }
 
@@ -183,6 +185,7 @@ impl VixelApp {
         self.config.theme = doc.view.theme.clone();
         self.config.ui_font = doc.view.ui_font.clone();
         self.config.ui_font_size = doc.view.ui_font_size;
+        self.config.layout = doc.view.layout.clone();
         self.config.renderer = doc.editor.renderer.clone();
         self.config.recent = doc
             .editor
@@ -224,6 +227,7 @@ impl VixelApp {
             }
         });
         if let Some(i) = switch {
+            self.docs[i].view.layout_pending = true;
             self.active = i;
         }
         if add {
@@ -284,9 +288,11 @@ impl eframe::App for VixelApp {
         });
         if next_tab {
             self.active = (self.active + 1) % self.docs.len();
+            self.docs[self.active].view.layout_pending = true;
         }
         if prev_tab {
             self.active = (self.active + self.docs.len() - 1) % self.docs.len();
+            self.docs[self.active].view.layout_pending = true;
         }
         if new_tab {
             self.new_doc();
