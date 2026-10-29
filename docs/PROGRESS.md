@@ -480,10 +480,10 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-59 is the last unblocked task.** P5-49/P5-50/P5-51 remain Blocked on an
-  offline `mlua` dependency; no other P5 tasks are open. The programme is
-  complete except for those blocked scripting tasks and the documented Partial
-  rows (localization strings, async filtering, CPU dirty compositing).
+- **P5-60** — sprite background colour property (deps P5-14 met), then the
+  unblocked programme is complete. P5-49/P5-50/P5-51 remain Blocked on an
+  offline `mlua` dependency; documented Partial rows remain (localization
+  strings, async filtering, CPU dirty compositing).
 
 ## Known limitations (do not forget)
 
