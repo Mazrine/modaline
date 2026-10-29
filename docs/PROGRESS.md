@@ -537,6 +537,11 @@ Read, in order:
   status and cel opacity checked. Docs: `PEN.md`, `UX_AUDIT.md`, `KEYMAPS.md`,
   ROADMAP P7. Hardware pressure path is untested in CI.
 
+107. **Open-source licensing** — GPL-3.0-or-later (`LICENSE`, Cargo metadata,
+  README section); MIT attribution for the four `.ase` fixtures; `THIRD_PARTY.md`
+  for Sweetie 16 (CC0), font8x8 (MIT), egui fonts (OFL/UFL) and dependency
+  licenses; Aseprite trademark disclaimer. No code changes.
+
 ## Next step (exact)
 
 **P6 is complete (7/7); P7 is open (1/5).** P7-00 (pen pressure) landed with

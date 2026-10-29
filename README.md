@@ -312,6 +312,19 @@ Aseprite scripting (Lua 5.4 via `mlua`) and `.aseprite-extension` packages are
 documented in `docs/SCRIPTING.md`; JSON `Op` replay remains available.
 
 Aseprite-parity programme: `docs/ASEPRITE_PARITY.md` tracks every capability
-against the task that closes it. P5 is complete; `docs/ROADMAP.md` P6 is the
-open backlog for the documented Partial/unsupported rows. Out-of-scope by
-product choice: Web/Wasm and custom GPU shaders.
+against the task that closes it. P5 and P6 are complete; `docs/ROADMAP.md` P7
+is the open input/UX backlog. Out-of-scope by product choice: Web/Wasm and
+custom GPU shaders.
+
+## License
+
+vixel is free software under the **GNU General Public License v3.0 or later**
+(`GPL-3.0-or-later`). See [`LICENSE`](LICENSE) for the full text. There is no
+warranty; use at your own risk.
+
+- Test fixtures in `tests/fixtures/ase/` are MIT-licensed third-party data;
+  see [`tests/fixtures/README.md`](tests/fixtures/README.md).
+- Palettes, fonts and dependency notices are listed in
+  [`THIRD_PARTY.md`](THIRD_PARTY.md).
+- Aseprite is a trademark of Igara Studio S.A.; vixel is an independent
+  project, not affiliated with or endorsed by Aseprite.

@@ -30,7 +30,7 @@ sudo usermod -aG input "$USER"   # log out/in afterwards
 On NixOS:
 
 ```nix
-users.users.mazrine.extraGroups = [ "input" ];
+users.users.youruser.extraGroups = [ "input" ];
 # OpenTabletDriver (also installs its udev rules):
 hardware.opentabletdriver.enable = true;
 ```

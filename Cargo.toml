@@ -3,6 +3,8 @@ name = "vixel"
 version = "0.1.0"
 edition = "2024"
 description = "A keyboard-first, vim-style pixel art editor with Aseprite-grade rendering"
+license = "GPL-3.0-or-later"
+readme = "README.md"
 
 [features]
 default = []
