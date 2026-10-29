@@ -106,6 +106,185 @@ pub fn load_any(path: &Path) -> Result<Sprite> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExportLayers {
+    Visible,
+    All,
+    Indices,
+}
+
+/// Options shared by every export path. Frame indices are 0-based inclusive.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExportConfig {
+    pub frames: Option<(usize, usize)>,
+    pub tag: Option<String>,
+    pub layers: ExportLayers,
+    pub layer_indices: Vec<usize>,
+    pub ignore_empty: bool,
+    pub merge_duplicates: bool,
+    pub scale: u32,
+    pub trim: bool,
+    pub padding: u32,
+    pub sheet: bool,
+    pub gif: bool,
+    pub meta: bool,
+}
+
+impl Default for ExportConfig {
+    fn default() -> Self {
+        ExportConfig {
+            frames: None,
+            tag: None,
+            layers: ExportLayers::Visible,
+            layer_indices: Vec::new(),
+            ignore_empty: false,
+            merge_duplicates: false,
+            scale: 1,
+            trim: false,
+            padding: 0,
+            sheet: true,
+            gif: true,
+            meta: true,
+        }
+    }
+}
+
+impl ExportConfig {
+    fn selected_frames(&self, sprite: &Sprite) -> Vec<usize> {
+        let n = sprite.frames.len();
+        if n == 0 {
+            return Vec::new();
+        }
+        let mut frames: Vec<usize> = match &self.tag {
+            Some(name) => sprite
+                .tags
+                .iter()
+                .find(|t| &t.name == name)
+                .map(|t| (t.from.min(t.to)..=t.from.max(t.to)).collect())
+                .unwrap_or_else(|| (0..n).collect()),
+            None => (0..n).collect(),
+        };
+        if let Some((a, b)) = self.frames {
+            let (a, b) = (a.min(b).min(n - 1), a.max(b).min(n - 1));
+            frames.retain(|f| (a..=b).contains(f));
+        }
+        frames
+    }
+
+    fn selected_layers(&self, sprite: &Sprite) -> Vec<usize> {
+        match self.layers {
+            ExportLayers::All => (0..sprite.layers.len()).collect(),
+            ExportLayers::Visible => (0..sprite.layers.len())
+                .filter(|i| sprite.layers[*i].visible)
+                .collect(),
+            ExportLayers::Indices => self
+                .layer_indices
+                .iter()
+                .copied()
+                .filter(|i| *i < sprite.layers.len())
+                .collect(),
+        }
+    }
+}
+
+/// Build the export view: selected frames/layers, optional empty/duplicate
+/// removal, and optional global trim.
+pub fn configured_sprite(sprite: &Sprite, cfg: &ExportConfig) -> Result<Sprite> {
+    let frames = cfg.selected_frames(sprite);
+    let layers = cfg.selected_layers(sprite);
+    if frames.is_empty() || layers.is_empty() {
+        bail!("export selection is empty");
+    }
+    let mut out = sprite.clone();
+    out.frames = frames.iter().map(|&f| sprite.frames[f]).collect();
+    out.layers = layers.iter().map(|&l| sprite.layers[l].clone()).collect();
+    out.cels = layers
+        .iter()
+        .map(|&l| frames.iter().map(|&f| sprite.cels[l][f].clone()).collect())
+        .collect();
+    out.tags.clear();
+    out.slices.clear();
+    out.raw_chunks.clear();
+
+    let mut keep: Vec<usize> = Vec::new();
+    let mut seen: Vec<Vec<Rgba>> = Vec::new();
+    for frame in 0..out.frames.len() {
+        let comp = out.export_composite(frame);
+        if cfg.ignore_empty && comp.iter().all(|p| p.3 == 0) {
+            continue;
+        }
+        if cfg.merge_duplicates && seen.iter().any(|prev| prev == &comp) {
+            continue;
+        }
+        seen.push(comp);
+        keep.push(frame);
+    }
+    if keep.is_empty() {
+        bail!("export selection is empty after filtering");
+    }
+    if keep.len() != out.frames.len() {
+        out.frames = keep.iter().map(|&f| out.frames[f]).collect();
+        for row in &mut out.cels {
+            *row = keep.iter().map(|&f| row[f].clone()).collect();
+        }
+    }
+
+    if cfg.trim {
+        let (w, h) = (out.width, out.height);
+        let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
+        let mut any = false;
+        for frame in 0..out.frames.len() {
+            let comp = out.export_composite(frame);
+            for y in 0..h {
+                for x in 0..w {
+                    if comp[(y * w + x) as usize].3 > 0 {
+                        x0 = x0.min(x);
+                        y0 = y0.min(y);
+                        x1 = x1.max(x + 1);
+                        y1 = y1.max(y + 1);
+                        any = true;
+                    }
+                }
+            }
+        }
+        if any {
+            out.crop(x0, y0, x1 - x0, y1 - y0);
+        }
+    }
+    Ok(out)
+}
+
+/// Export a configured sheet/GIF/meta bundle to `<stem>.*`.
+pub fn export_config(sprite: &Sprite, cfg: &ExportConfig, stem: &Path) -> Result<Vec<PathBuf>> {
+    let view = configured_sprite(sprite, cfg)?;
+    let scale = cfg.scale.clamp(1, 16);
+    let padding = cfg.padding.min(64);
+    let mut paths = Vec::new();
+    if cfg.sheet {
+        let sheet_path = with_suffix(stem, ".sheet.png");
+        let sheet = export_sheet_scaled_padded(&view, &sheet_path, None, scale, padding)?;
+        paths.push(sheet_path.clone());
+        if cfg.meta {
+            let meta_path = with_suffix(stem, ".json");
+            let image = sheet_path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            export_meta(&view, sheet, &image, &meta_path)?;
+            paths.push(meta_path);
+        }
+    }
+    if cfg.gif {
+        let gif_path = with_suffix(stem, ".gif");
+        export_gif_scaled(&view, &gif_path, scale)?;
+        paths.push(gif_path);
+    }
+    if paths.is_empty() {
+        bail!("export config has no output enabled");
+    }
+    Ok(paths)
+}
+
 /// The composite of one frame as an image, the unit every export shares.
 fn frame_image(sprite: &Sprite, frame: usize) -> image::RgbaImage {
     let (w, h) = (sprite.width, sprite.height);
@@ -154,6 +333,8 @@ pub struct Sheet {
     pub frame_h: u32,
     pub columns: u32,
     pub rows: u32,
+    #[serde(default)]
+    pub padding: u32,
 }
 
 /// Sheet columns for `frames` cells: roughly a 3:2 grid, so 24 frames pack 6x4
@@ -179,14 +360,32 @@ pub fn export_sheet_scaled(
     columns: Option<u32>,
     scale: u32,
 ) -> Result<Sheet> {
+    export_sheet_scaled_padded(sprite, path, columns, scale, 0)
+}
+
+/// `export_sheet_scaled` with `padding` pixels around every frame, including
+/// the outer border.
+pub fn export_sheet_scaled_padded(
+    sprite: &Sprite,
+    path: &Path,
+    columns: Option<u32>,
+    scale: u32,
+    padding: u32,
+) -> Result<Sheet> {
     let n = sprite.frames.len().max(1);
     let columns = columns.unwrap_or_else(|| columns_for(n)).clamp(1, n as u32);
     let rows = (n as u32).div_ceil(columns);
-    let (fw, fh) = (sprite.width * scale.max(1), sprite.height * scale.max(1));
-    let mut sheet = image::RgbaImage::new(fw * columns, fh * rows);
+    let scale = scale.max(1);
+    let pad = padding.min(64);
+    let (fw, fh) = (sprite.width * scale, sprite.height * scale);
+    let (cw, ch) = (fw + pad * 2, fh + pad * 2);
+    let mut sheet = image::RgbaImage::new(cw * columns, ch * rows);
     for frame in 0..n {
         let cell = scaled(frame_image(sprite, frame), scale);
-        let (ox, oy) = (frame as u32 % columns * fw, frame as u32 / columns * fh);
+        let (ox, oy) = (
+            frame as u32 % columns * cw + pad,
+            frame as u32 / columns * ch + pad,
+        );
         image::imageops::overlay(&mut sheet, &cell, ox as i64, oy as i64);
     }
     sheet
@@ -197,6 +396,7 @@ pub fn export_sheet_scaled(
         frame_h: fh,
         columns,
         rows,
+        padding: pad,
     })
 }
 
@@ -245,6 +445,7 @@ pub fn export_meta(sprite: &Sprite, sheet: Sheet, image: &str, path: &Path) -> R
         "frame_h": sheet.frame_h,
         "columns": sheet.columns,
         "rows": sheet.rows,
+        "padding": sheet.padding,
         "fps": (fps * 100.0).round() / 100.0,
         "profile": sprite.color_profile.name(),
         "color_mode": sprite.color_mode.name(),
@@ -583,6 +784,67 @@ pub fn import_sheet(path: &Path, cols: u32, rows: u32) -> Result<Sprite> {
 mod tests {
     use super::*;
     use crate::color::Rgba;
+
+    #[test]
+    fn export_config_filters_merges_trims_and_layers() {
+        let mut s = Sprite::new(4, 4);
+        s.add_frame_after(0);
+        s.add_frame_after(1);
+        let red = Rgba::rgb(200, 0, 0);
+        s.set(0, 0, 1, 1, red);
+        s.set(0, 1, 1, 1, red);
+        s.set(0, 2, 2, 2, Rgba::rgb(0, 0, 200));
+        s.add_layer_after(0);
+        let hidden = s.layers.len() - 1;
+        s.layers[hidden].visible = false;
+        s.set(hidden, 0, 0, 0, Rgba::rgb(0, 200, 0));
+
+        let cfg = ExportConfig {
+            frames: Some((0, 1)),
+            merge_duplicates: true,
+            trim: true,
+            ..Default::default()
+        };
+        let out = configured_sprite(&s, &cfg).unwrap();
+        assert_eq!(out.frames.len(), 1, "duplicate merged");
+        assert_eq!(out.layers.len(), 1, "hidden layer filtered");
+        assert_eq!((out.width, out.height), (1, 1), "trimmed to content");
+        assert_eq!(out.get(0, 0, 0, 0), red);
+
+        s.set(0, 2, 2, 2, Rgba::TRANSPARENT);
+        let cfg = ExportConfig {
+            ignore_empty: true,
+            ..Default::default()
+        };
+        let out = configured_sprite(&s, &cfg).unwrap();
+        assert_eq!(out.frames.len(), 2, "empty frame skipped");
+    }
+
+    #[test]
+    fn export_config_writes_sheet_gif_and_meta() {
+        let mut s = Sprite::new(2, 2);
+        s.add_frame_after(0);
+        s.set(0, 0, 0, 0, Rgba::rgb(255, 0, 0));
+        s.set(0, 1, 1, 1, Rgba::rgb(0, 255, 0));
+        let dir = std::env::temp_dir().join(format!("vixel-exportcfg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let stem = dir.join("anim");
+        let cfg = ExportConfig {
+            scale: 2,
+            padding: 1,
+            ..Default::default()
+        };
+        let paths = export_config(&s, &cfg, &stem).unwrap();
+        assert_eq!(paths.len(), 3);
+        let img = image::open(dir.join("anim.sheet.png")).unwrap().to_rgba8();
+        assert_eq!(img.dimensions(), (12, 6), "two 4x4 cells + 1px padding");
+        let meta: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("anim.json")).unwrap()).unwrap();
+        assert_eq!(meta["padding"], 1);
+        assert_eq!(meta["frame_w"], 4);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn tileset_export_writes_the_atlas() {

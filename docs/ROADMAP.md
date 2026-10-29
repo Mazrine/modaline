@@ -507,9 +507,15 @@ met; blocked tasks are marked with the reason.
 
 ### Epic 8 — Export/import pipeline
 
-- [ ] **P5-39 — Export config core** (M) — deps: none.
-  Frame range/tag/layer filters, ignore-empty, merge duplicates, scale, trim,
-  padding, meta/GIF switches; command + dialog.
+- [x] **P5-39 — Export config core** (M) — deps: none.
+  Landed 2026-10-28. `ExportConfig` (frame range, tag, visible/all/indices
+  layers, ignore-empty, merge duplicates, scale, global trim, padding,
+  sheet/GIF/meta toggles) with `configured_sprite` deriving the export view and
+  `export_config` writing the bundle. Padded sheets report `padding` in the
+  meta. `:exportcfg <stem> [--frames a b] [--tag name] [--layers ...]
+  [--ignore-empty] [--merge] [--trim] [--scale n] [--padding n] [--no-*]` plus
+  a side-panel export dialog. 2 new tests (207 total): filter/merge/trim/layer
+  derivation and the sheet/GIF/meta bundle. Dialog is manual-check only.
 - [ ] **P5-40 — PNG sequence + filename templates** (M) — deps: P5-39.
   `{frame}`, `{layer}`, `{tag}`, `{title}`, `{duration}`; per-frame files.
 - [ ] **P5-41 — Sheet layouts** (L) — deps: P5-39.

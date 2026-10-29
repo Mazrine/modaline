@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **205 tests green** (192 lib + 13 bin)
+- `cargo test` → **207 tests green** (194 lib + 13 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-38 undo history** (see batch 75).
+- Last completed batch: **P5-39 export config** (see batch 76).
 
 ## How to resume
 
@@ -406,6 +406,10 @@ Read, in order:
 75. **P5-38 — undo history** — labelled history window with click/jump to any
   undo/redo position; linear stack retained and branching rationale documented.
   1 new test (205 total): labels and jump/redo navigation.
+76. **P5-39 — export config core** — ExportConfig with frame/tag/layer filters,
+  ignore-empty, merge dup, scale, trim, padding, sheet/GIF/meta toggles;
+  configured sprite derivation, padded sheets, `:exportcfg` and export dialog.
+  2 new tests (207 total): derivation and bundle output.
 
 ## Next step (exact)
 
@@ -414,8 +418,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-39** — export config core (first open task), then continue down the P5
-  roadmap in dependency order.
+- **P5-40** — PNG sequence + filename templates (first open task), then
+  continue down the P5 roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

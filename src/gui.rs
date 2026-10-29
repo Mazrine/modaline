@@ -100,6 +100,8 @@ pub struct View {
     cel_thumbs_revision: u64,
     pub cel_drag_anchor: Option<(usize, usize)>,
     pub history_open: bool,
+    pub export_open: bool,
+    pub export_path: String,
 }
 
 impl View {
@@ -146,6 +148,8 @@ impl View {
             cel_thumbs_revision: u64::MAX,
             cel_drag_anchor: None,
             history_open: false,
+            export_open: false,
+            export_path: String::new(),
         }
     }
 
@@ -267,6 +271,7 @@ pub fn draw(
     preview_window(ui.ctx(), editor, view);
     preview_viewport(ui.ctx(), editor, view);
     history_window(ui.ctx(), editor, view);
+    export_window(ui.ctx(), editor, view);
 
     if editor.mode == Mode::Help {
         help(ui.ctx());
@@ -301,6 +306,119 @@ impl View {
             _ => {}
         }
     }
+}
+
+fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
+    if !view.export_open {
+        return;
+    }
+    let mut open = view.export_open;
+    egui::Window::new("export")
+        .open(&mut open)
+        .default_size([320.0, 300.0])
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("stem");
+                ui.add(egui::TextEdit::singleline(&mut view.export_path).desired_width(200.0));
+            });
+            let cfg = &mut editor.export_config;
+            ui.horizontal(|ui| {
+                let mut ranged = cfg.frames.is_some();
+                if ui.checkbox(&mut ranged, "frames").changed() {
+                    cfg.frames =
+                        ranged.then_some((0, editor.sprite.frames.len().saturating_sub(1)));
+                }
+                if let Some((a, b)) = &mut cfg.frames {
+                    ui.add(egui::DragValue::new(a).range(0..=editor.sprite.frames.len() - 1));
+                    ui.label("-");
+                    ui.add(egui::DragValue::new(b).range(0..=editor.sprite.frames.len() - 1));
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label("tag");
+                egui::ComboBox::from_id_salt("export_tag")
+                    .selected_text(cfg.tag.as_deref().unwrap_or("all"))
+                    .show_ui(ui, |ui| {
+                        if ui.selectable_label(cfg.tag.is_none(), "all").clicked() {
+                            cfg.tag = None;
+                        }
+                        for tag in &editor.sprite.tags {
+                            if ui
+                                .selectable_label(cfg.tag.as_deref() == Some(&tag.name), &tag.name)
+                                .clicked()
+                            {
+                                cfg.tag = Some(tag.name.clone());
+                            }
+                        }
+                    });
+            });
+            ui.horizontal(|ui| {
+                ui.label("layers");
+                egui::ComboBox::from_id_salt("export_layers")
+                    .selected_text(match cfg.layers {
+                        crate::io::ExportLayers::Visible => "visible",
+                        crate::io::ExportLayers::All => "all",
+                        crate::io::ExportLayers::Indices => "indices",
+                    })
+                    .show_ui(ui, |ui| {
+                        for (mode, name) in [
+                            (crate::io::ExportLayers::Visible, "visible"),
+                            (crate::io::ExportLayers::All, "all"),
+                            (crate::io::ExportLayers::Indices, "indices"),
+                        ] {
+                            if ui.selectable_label(cfg.layers == mode, name).clicked() {
+                                cfg.layers = mode;
+                            }
+                        }
+                    });
+                if cfg.layers == crate::io::ExportLayers::Indices {
+                    ui.label(
+                        cfg.layer_indices
+                            .iter()
+                            .map(|i| (i + 1).to_string())
+                            .collect::<Vec<_>>()
+                            .join(","),
+                    );
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut cfg.ignore_empty, "ignore empty");
+                ui.checkbox(&mut cfg.merge_duplicates, "merge dup");
+                ui.checkbox(&mut cfg.trim, "trim");
+            });
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut cfg.sheet, "sheet");
+                ui.checkbox(&mut cfg.gif, "gif");
+                ui.checkbox(&mut cfg.meta, "meta");
+            });
+            ui.horizontal(|ui| {
+                ui.label("scale");
+                ui.add(egui::DragValue::new(&mut cfg.scale).range(1..=16));
+                ui.label("padding");
+                ui.add(egui::DragValue::new(&mut cfg.padding).range(0..=64));
+            });
+            if ui.button("export").clicked() {
+                let stem = if view.export_path.trim().is_empty() {
+                    editor
+                        .path
+                        .as_ref()
+                        .and_then(|p| {
+                            let stem = p.file_stem()?.to_string_lossy().into_owned();
+                            Some(p.with_file_name(stem))
+                        })
+                        .unwrap_or_else(|| std::path::PathBuf::from("vixel"))
+                } else {
+                    std::path::PathBuf::from(view.export_path.trim())
+                };
+                match crate::io::export_config(&editor.sprite, cfg, &stem) {
+                    Ok(paths) => {
+                        editor.msg = format!("exported {} files", paths.len());
+                    }
+                    Err(e) => editor.msg = format!("export failed: {e:#}"),
+                }
+            }
+        });
+    view.export_open = open;
 }
 
 fn history_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
@@ -1097,6 +1215,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.checkbox(&mut view.preview_os, "preview OS")
         .on_hover_text("preview in a separate OS viewport");
     ui.checkbox(&mut view.history_open, "history");
+    ui.checkbox(&mut view.export_open, "export");
     ui.checkbox(&mut view.onion.enabled, "onion skin");
     if view.onion.enabled {
         ui.horizontal(|ui| {
@@ -2718,6 +2837,7 @@ const HELP: &[&str] = &[
     "  :celselect <layer> <frame>   :celclear   :exportcels <dir>",
     "  :celcopy   :celcut   :celpaste   :celdel (empty cel)   :celinfo",
     "  Ctrl/Cmd-click toggles a cel; Shift-click selects a timeline range",
+    "  :exportcfg <stem> [--frames a b] [--tag n] [--layers ...] [--merge] [--trim] [--padding n]",
     "  t                  toggle filled shapes (rect / ellipse)",
     "  , / .              prev / next color",
     "  < / >              prev / next layer",

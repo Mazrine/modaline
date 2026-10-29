@@ -148,6 +148,9 @@ L-shaped corners for the 1 px pencil/eraser.
   OS viewport.
 - **design grid** (1-64 px, its own tone) with **snap**: the cursor steps one
   cell and every canvas pick rounds down to the cell.
+- **export config**: frame range/tag/layer filters, ignore-empty, merge
+  duplicates, scale, global trim, padding and sheet/GIF/meta switches, shared by
+  `:exportcfg` and the export dialog; padded sheets record `padding` in metadata.
 - **filters** (panel + `:filter`): invert, brightness, contrast, hue,
   saturation, desaturate, curves, levels, colour balance, posterize, outline,
   blur, sharpen, median, 3×3 convolution (custom kernel/divisor/bias) and

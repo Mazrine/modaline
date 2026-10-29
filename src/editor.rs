@@ -437,6 +437,8 @@ pub struct Editor {
     pub clipboard: Option<Clipboard>,
     /// Whole-cel clipboard for copy/paste across layers and frames.
     pub cel_clipboard: Option<Cel>,
+    /// Persistent export options (command and dialog share it).
+    pub export_config: crate::io::ExportConfig,
     pub paste_pos: Option<(u32, u32)>,
     pub cmdline: String,
     pub msg: String,
@@ -552,6 +554,7 @@ impl Editor {
             selection: None,
             clipboard: None,
             cel_clipboard: None,
+            export_config: crate::io::ExportConfig::default(),
             paste_pos: None,
             cmdline: String::new(),
             msg: "press ? for help".into(),

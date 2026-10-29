@@ -1617,6 +1617,86 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 }
             }
         }
+        "exportcfg" | "exportconfig" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            let stem = it.next().map(std::path::PathBuf::from);
+            let mut cfg = crate::io::ExportConfig::default();
+            let mut bad = false;
+            while let Some(tok) = it.next() {
+                match tok {
+                    "--frames" => {
+                        let a = it.next().and_then(|v| v.parse::<usize>().ok());
+                        let b = it.next().and_then(|v| v.parse::<usize>().ok());
+                        match (a, b) {
+                            (Some(a), Some(b)) if a > 0 && b > 0 => {
+                                cfg.frames = Some((a - 1, b - 1));
+                            }
+                            _ => bad = true,
+                        }
+                    }
+                    "--tag" => cfg.tag = it.next().map(str::to_string),
+                    "--layers" => match it.next() {
+                        Some("all") => cfg.layers = crate::io::ExportLayers::All,
+                        Some("visible") => cfg.layers = crate::io::ExportLayers::Visible,
+                        Some("indices") => {
+                            cfg.layers = crate::io::ExportLayers::Indices;
+                            cfg.layer_indices = it
+                                .next()
+                                .unwrap_or("")
+                                .split(',')
+                                .filter_map(|v| v.parse::<usize>().ok())
+                                .map(|v| v.saturating_sub(1))
+                                .collect();
+                        }
+                        _ => bad = true,
+                    },
+                    "--ignore-empty" => cfg.ignore_empty = true,
+                    "--merge" => cfg.merge_duplicates = true,
+                    "--trim" => cfg.trim = true,
+                    "--scale" => match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                        Some(n) => cfg.scale = n.clamp(1, 16),
+                        None => bad = true,
+                    },
+                    "--padding" => match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                        Some(n) => cfg.padding = n.min(64),
+                        None => bad = true,
+                    },
+                    "--sheet" => cfg.sheet = true,
+                    "--no-sheet" => cfg.sheet = false,
+                    "--gif" => cfg.gif = true,
+                    "--no-gif" => cfg.gif = false,
+                    "--meta" => cfg.meta = true,
+                    "--no-meta" => cfg.meta = false,
+                    _ => bad = true,
+                }
+            }
+            match (bad, stem) {
+                (false, Some(stem)) => {
+                    editor.export_config = cfg.clone();
+                    match crate::io::export_config(&editor.sprite, &cfg, &stem) {
+                        Ok(paths) => {
+                            editor.msg = format!(
+                                "exported {}",
+                                paths
+                                    .iter()
+                                    .filter_map(|p| p.file_name())
+                                    .map(|n| n.to_string_lossy().into_owned())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            );
+                        }
+                        Err(e) => editor.msg = format!("export failed: {e:#}"),
+                    }
+                }
+                _ => {
+                    editor.msg = "usage: :exportcfg <stem> [--frames a b] [--tag name] \
+                        [--layers all|visible|indices i,j] [--ignore-empty] [--merge] \
+                        [--trim] [--scale n] [--padding n] [--no-sheet] [--no-gif] \
+                        [--no-meta]"
+                        .into();
+                }
+            }
+        }
         "export" => {
             let mut it = arg.unwrap_or("").split_whitespace();
             let target = it.next().unwrap_or("");

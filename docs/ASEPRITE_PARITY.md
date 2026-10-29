@@ -179,7 +179,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Sheet layouts + padding/trim/extrude/crop | Missing | P5-41 |
 | JSON atlas metadata (hash/array) | Partial (vixel meta) | P5-42 |
 | GIF export | Partial (loop always infinite) | P5-42 |
-| Tag / layer / frame-range filters on export | Missing | P5-39 |
+| Tag / layer / frame-range filters on export | Covered | P5-39 |
+| Export config (ignore empty, merge, trim, padding, toggles) | Covered | P5-39 |
 | Export scale | Covered | — |
 | Import sheet (own sidecar/grid) | Covered | — |
 | Import Aseprite JSON/XML atlas | Missing | P5-44 |
