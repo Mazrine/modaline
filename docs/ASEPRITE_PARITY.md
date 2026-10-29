@@ -40,7 +40,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Capability | Status | Task |
 |---|---|---|
 | Normal, group, background, reference layers | Covered | — |
-| Tilemap layers | Missing | P5-30 |
+| Tilemap layers | Covered (retained TileRefs, editing, tile seam preview, `.ase` chunks) | P5-30/P5-31 |
 | Visibility, opacity, rename, add/remove, reorder | Covered | — |
 | Nested groups + group opacity/blend | Covered | — |
 | Blend modes | Covered (19) | P5-05 |
@@ -93,7 +93,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Alpha-lock painting flag | Covered | P5-18 |
 | Pressure/tablet sensitivity | Covered (manual + device force where reported) | P5-20 |
 | Tiled mode | Covered (configurable repeats, opacity, preview) | P5-27 |
-| Move layer/cel content tool | Partial | P5-24 |
+| Move layer/cel content tool | Partial (selection/cel move; no layer-content drag tool) | P5-24 |
 | Text tool (editable, fonts, sizes) | Covered (bitmap font) | P5-28 |
 
 ## Transformations
