@@ -145,6 +145,8 @@ pub struct View {
     pub playing: bool,
     /// Playback change requested by the command line.
     pub play_request: Option<bool>,
+    /// Dotted grain for the Arcane panels (created on first use).
+    pub arcane_dots: Option<TextureHandle>,
     /// Pen pressure backend, mirrored from the app each frame.
     pub pen_enabled: bool,
     pub pen_status: pen::PenStatus,
@@ -192,9 +194,9 @@ impl View {
             show_aspect: true,
             pixel_scale: (1, 1),
             window: (1280.0, 800.0),
-            theme: "dark".into(),
-            ui_font: "default".into(),
-            ui_font_size: 13.0,
+            theme: "arcane".into(),
+            ui_font: "silkscreen".into(),
+            ui_font_size: 12.0,
             layout: crate::layout::Layout::default(),
             layout_pending: true,
             keymap: crate::keymap::Keymap::default(),
@@ -250,6 +252,7 @@ impl View {
             tips_open: false,
             playing: false,
             play_request: None,
+            arcane_dots: None,
             pen_enabled: true,
             pen_status: pen::PenStatus::NoDevice,
             pen_pressure: None,
@@ -364,8 +367,35 @@ pub fn draw(
     // Remember the window size for the config file.
     let screen = ui.ctx().content_rect().size();
     view.window = (screen.x, screen.y);
+    let arcane = view.theme == "arcane";
+    let dots = if arcane {
+        Some(
+            view.arcane_dots
+                .get_or_insert_with(|| crate::arcane::dot_texture(ui.ctx()))
+                .clone(),
+        )
+    } else {
+        None
+    };
+    let panel_frame = if arcane {
+        crate::arcane::panel_frame(6.0)
+    } else {
+        egui::Frame::NONE
+    };
     if view.layout.show_toolbar {
-        egui::Panel::top("toolbar").show(ui, |ui| toolbar(ui, editor, view));
+        egui::Panel::top("toolbar")
+            .frame(panel_frame)
+            .show(ui, |ui| {
+                if let Some(d) = &dots {
+                    crate::arcane::panel(
+                        ui.painter(),
+                        ui.max_rect(),
+                        Some(d),
+                        crate::arcane::palette(),
+                    );
+                }
+                toolbar(ui, editor, view);
+            });
     }
     if view.layout_pending {
         if view.layout.show_timeline {
@@ -384,7 +414,16 @@ pub fn draw(
         let r = egui::Panel::bottom("timeline")
             .resizable(true)
             .default_size(view.layout.timeline_height)
+            .frame(panel_frame)
             .show(ui, |ui| {
+                if let Some(d) = &dots {
+                    crate::arcane::panel(
+                        ui.painter(),
+                        ui.max_rect(),
+                        Some(d),
+                        crate::arcane::palette(),
+                    );
+                }
                 ui.set_min_height(ui.max_rect().height());
                 timeline(ui, editor, playing, view);
             });
@@ -394,15 +433,32 @@ pub fn draw(
         let r = egui::Panel::right("side")
             .resizable(true)
             .default_size(view.layout.side_width)
+            .frame(panel_frame)
             .show(ui, |ui| {
+                if let Some(d) = &dots {
+                    crate::arcane::panel(
+                        ui.painter(),
+                        ui.max_rect(),
+                        Some(d),
+                        crate::arcane::palette(),
+                    );
+                }
                 ui.set_min_width(ui.max_rect().width());
                 side(ui, editor, view);
             });
         view.layout.side_width = r.response.rect.width();
     }
-    egui::CentralPanel::default().show(ui, |ui| {
-        canvas(ui, editor, view, texture, onion_prev, onion_next)
-    });
+    egui::CentralPanel::default()
+        .frame(if arcane {
+            egui::Frame::NONE
+                .fill(crate::arcane::VOID)
+                .inner_margin(0.0)
+        } else {
+            egui::Frame::NONE
+        })
+        .show(ui, |ui| {
+            canvas(ui, editor, view, texture, onion_prev, onion_next)
+        });
 
     preview_window(ui.ctx(), editor, view);
     preview_viewport(ui.ctx(), editor, view);
@@ -1269,10 +1325,35 @@ fn tool_shortcut(tool: Tool) -> &'static str {
 }
 
 fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("modaline").strong());
+    let arcane = view.theme == "arcane";
+    // Silkscreen is wider than egui's default font; wrapping keeps every
+    // control reachable at 1280 px instead of clipping the right edge.
+    ui.horizontal_wrapped(|ui| {
+        if arcane {
+            ui.label(
+                egui::RichText::new("MODALINE")
+                    .strong()
+                    .color(crate::arcane::ACCENT_HI),
+            );
+        } else {
+            ui.label(egui::RichText::new("modaline").strong());
+        }
         ui.separator();
-        ui.label(format!("[{}]", view.value("mode", mode_name(editor.mode))));
+        let mode = view.value("mode", mode_name(editor.mode)).to_uppercase();
+        if arcane {
+            let p = crate::arcane::palette();
+            let color = match editor.mode {
+                Mode::Normal => p.accent_hi,
+                Mode::Draw => p.good,
+                Mode::Visual => p.focus,
+                Mode::Paste => p.warn,
+                Mode::Command => p.dim,
+                Mode::Help => p.accent,
+            };
+            crate::arcane::mode_chip(ui, &mode, color);
+        } else {
+            ui.label(format!("[{mode}]"));
+        }
         ui.separator();
 
         for (tool, key) in [
@@ -1293,6 +1374,9 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             (Tool::Tile, "tool.tile"),
             (Tool::Move, "tool.move"),
         ] {
+            if matches!(tool, Tool::Line | Tool::Lasso | Tool::Text) {
+                ui.separator();
+            }
             let label = view.tr(key);
             let hint = format!("{label} ({})", tool_shortcut(tool));
             if ui
@@ -1433,18 +1517,28 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     });
 
-    // The status line gets its own row: appended to the tool row it was pushed
-    // off the right edge at any normal window width, so every message (palette
-    // lock refusals included) was invisible.
+    // The status line gets its own row, sunk into the panel so it reads as a
+    // HUD band rather than another toolbar.
+    if view.theme == "arcane" {
+        let p = crate::arcane::palette();
+        egui::Frame::NONE
+            .fill(p.sunken)
+            .stroke(egui::Stroke::new(1.0, p.line))
+            .inner_margin(egui::Margin::symmetric(6, 3))
+            .show(ui, |ui| status_row(ui, editor, view));
+    } else {
+        status_row(ui, editor, view);
+    }
+}
+
+fn status_row(ui: &mut egui::Ui, editor: &Editor, view: &View) {
     ui.horizontal(|ui| {
         if editor.mode == Mode::Command {
             ui.label(egui::RichText::new(format!(":{}", editor.cmdline)).strong());
             ui.label(egui::RichText::new("▏").weak());
         } else if let Some((name, progress)) = editor.filter_progress() {
-            {
-                let line = modaline::status!("filter: {name} {progress}%");
-                ui.label(line.render(&view.i18n));
-            }
+            let line = modaline::status!("filter: {name} {progress}%");
+            ui.label(line.render(&view.i18n));
         } else {
             ui.label(editor.msg.render(&view.i18n));
         }
@@ -1755,6 +1849,13 @@ fn timeline_grid(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                         }
                         if let Some(tex) = &view.cel_thumbs[idx] {
                             ui.painter().image(tex.id(), rect, uv, Color32::WHITE);
+                            if view.theme == "arcane" {
+                                crate::arcane::brackets(
+                                    ui.painter(),
+                                    rect,
+                                    crate::arcane::palette(),
+                                );
+                            }
                         }
                         let stroke = if editor.cel_selected(layer, frame) {
                             Stroke::new(2.0, Color32::from_rgb(120, 190, 255))
@@ -1873,6 +1974,31 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         .show(ui, |ui| side_body(ui, editor, view));
 }
 
+fn section_header(ui: &mut egui::Ui, view: &View, key: &str) {
+    if view.theme != "arcane" {
+        ui.separator();
+        return;
+    }
+    ui.add_space(crate::arcane::SPACE_4);
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(view.tr(key))
+                .size(crate::arcane::TYPE_LABEL)
+                .strong()
+                .color(crate::arcane::ACCENT_HI),
+        );
+        let y = ui.cursor().top() + 7.0;
+        let rect = ui.available_rect_before_wrap();
+        ui.painter().line_segment(
+            [
+                egui::pos2(rect.left() + 6.0, y),
+                egui::pos2(rect.right(), y),
+            ],
+            egui::Stroke::new(1.0, crate::arcane::LINE_HI),
+        );
+    });
+}
+
 fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.horizontal(|ui| {
         let light = !crate::theme::resolve(&view.theme).map_or(true, |t| t.dark);
@@ -1912,6 +2038,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             editor.set_background_color(None);
         }
     });
+    section_header(ui, view, "ui.sec_brush");
     ui.horizontal(|ui| {
         ui.label(view.tr("brush"));
         ui.add(egui::Slider::new(&mut editor.brush_size, 1..=64));
@@ -2128,6 +2255,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             ui.label(view.tr("ui.right_click_picks"));
         });
     }
+    section_header(ui, view, "ui.sec_text");
     ui.horizontal(|ui| {
         ui.label(view.tr("text"));
         let edit = ui.add(
@@ -2221,6 +2349,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         ui.add(egui::Slider::new(&mut editor.grid, 1..=64));
         ui.checkbox(&mut editor.snap, view.tr("ui.snap"));
     });
+    section_header(ui, view, "ui.sec_symmetry");
     ui.horizontal(|ui| {
         ui.label(view.tr("symmetry"));
         for (label, mode) in [
@@ -2266,6 +2395,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.checkbox(&mut editor.wand_all_layers, view.tr("ui.wand_all_layers"));
     ui.separator();
 
+    section_header(ui, view, "ui.sec_colour");
     let mut fg = editor.fg;
     color_editor(ui, "fg", &mut fg, &mut view.fg_hex);
     if fg != editor.fg {
@@ -3001,6 +3131,9 @@ fn canvas(
     }
 
     ui.painter().image(tex.id(), rect, uv, Color32::WHITE);
+    if view.theme == "arcane" {
+        crate::arcane::brackets(ui.painter(), rect, crate::arcane::palette());
+    }
     if editor.tile_mode {
         ui.painter().rect_stroke(
             rect.expand(1.0),
@@ -3791,11 +3924,17 @@ fn pixel_at(editor: &Editor, view: &View, pos: Pos2, w: u32, h: u32) -> Option<(
 fn help(ctx: &egui::Context, view: &View) {
     egui::Window::new(view.tr("help.title"))
         .collapsible(false)
-        .resizable(false)
+        .resizable(true)
+        .default_width(1000.0)
         .show(ctx, |ui| {
-            for line in view.i18n.tr("help.text").lines() {
-                ui.label(line);
-            }
+            // The help is a monospaced cheat sheet. Silkscreen is wider than
+            // egui's default font, so let long lines scroll instead of wrapping.
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            egui::ScrollArea::both().show(ui, |ui| {
+                for line in view.i18n.tr("help.text").lines() {
+                    ui.label(egui::RichText::new(line).size(10.0).monospace());
+                }
+            });
         });
 }
 

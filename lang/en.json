@@ -309,7 +309,14 @@
     "hint.pen": "pen: tip pressure active · :pen device · Ctrl-hjkl pan",
     "hint.default": "? help · :tips tips · M move · Ctrl-hjkl pan",
     "tips.title": "Tips & keys",
-    "tips.text": "Everything works from the keyboard, the mouse and a pen.\n  Tools: b pencil · e eraser · f bucket · c picker · d line · R rect · o ellipse\n  Move: hjkl / HJKL (8 px) · 0 $ gg G · Ctrl-hjkl pans the canvas\n  Brush: { } smaller/bigger · :brush <n> · pressure manual/auto with :pressure\n  Select: v, move, y copy · x cut · p paste · Esc clear · w magic wand\n  Files: :w · :open · :recent · Ctrl-Cmd-O browser · :reopen last closed tab\n  Look: :prefs · :theme · :layout · :lang · :grid · :snap\n\nPen and tablet\n  Wacom Intuos Pro and OpenTabletDriver tablets are detected through evdev.\n  Position and clicks come from the OS pointer; the tip pressure is added by\n  Modaline while the pen touches the tablet. :pen shows the device, :pen off\n  ignores it. If it says permission denied, join the \"input\" group.\n\nWhich key style?\n  The default is vim-style because it is everywhere. Helix is friendlier for\n  newcomers: select first, then act. On a canvas that maps naturally to\n  v then y/x/p, so the planned Helix preset keeps the canvas keys and changes\n  undo/leader/motion details instead of hiding actions behind extra modes.\n  Start with mouse or pen, learn one tool key per session, and read ? help."
+    "tips.text": "Everything works from the keyboard, the mouse and a pen.\n  Tools: b pencil · e eraser · f bucket · c picker · d line · R rect · o ellipse\n  Move: hjkl / HJKL (8 px) · 0 $ gg G · Ctrl-hjkl pans the canvas\n  Brush: { } smaller/bigger · :brush <n> · pressure manual/auto with :pressure\n  Select: v, move, y copy · x cut · p paste · Esc clear · w magic wand\n  Files: :w · :open · :recent · Ctrl-Cmd-O browser · :reopen last closed tab\n  Look: :prefs · :theme · :layout · :lang · :grid · :snap\n\nPen and tablet\n  Wacom Intuos Pro and OpenTabletDriver tablets are detected through evdev.\n  Position and clicks come from the OS pointer; the tip pressure is added by\n  Modaline while the pen touches the tablet. :pen shows the device, :pen off\n  ignores it. If it says permission denied, join the \"input\" group.\n\nWhich key style?\n  The default is vim-style because it is everywhere. Helix is friendlier for\n  newcomers: select first, then act. On a canvas that maps naturally to\n  v then y/x/p, so the planned Helix preset keeps the canvas keys and changes\n  undo/leader/motion details instead of hiding actions behind extra modes.\n  Start with mouse or pen, learn one tool key per session, and read ? help.",
+    "ui.sec_brush": "BRUSH",
+    "ui.sec_canvas": "CANVAS",
+    "ui.sec_animation": "ANIMATION",
+    "ui.sec_text": "TEXT",
+    "ui.sec_symmetry": "SYMMETRY",
+    "ui.sec_selection": "SELECTION",
+    "ui.sec_colour": "COLOUR"
   },
   "messages": {
     "alpha lock off": "alpha lock off",

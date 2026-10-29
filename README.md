@@ -192,7 +192,7 @@ implemented; and the UX audit lists the rough edges I still want to fix
 corners). Linux is the tested platform.
 
 The model is a GUI-free Rust library, so another tool can read, composite or
-write a project without opening the window. `cargo test` covers it (292 tests),
+write a project without opening the window. `cargo test` covers it (295 tests),
 and `cargo clippy --all-targets` is clean.
 
 ## Docs

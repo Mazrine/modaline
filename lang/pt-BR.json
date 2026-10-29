@@ -309,7 +309,14 @@
     "hint.pen": "caneta: pressão ativa · :pen dispositivo · Ctrl-hjkl move a tela",
     "hint.default": "? ajuda · :tips dicas · M mover · Ctrl-hjkl move a tela",
     "tips.title": "Dicas e teclas",
-    "tips.text": "Tudo funciona pelo teclado, mouse e caneta.\n  Ferramentas: b lápis · e borracha · f balde · c conta-gotas · d linha · R retângulo · o elipse\n  Mover: hjkl / HJKL (8 px) · 0 $ gg G · Ctrl-hjkl move a tela\n  Pincel: { } menor/maior · :brush <n> · pressão manual/auto com :pressure\n  Seleção: v, mova, y copia · x recorta · p cola · Esc limpa · w varinha\n  Arquivos: :w · :open · :recent · Ctrl-Cmd-O navegador · :reopen última aba\n  Aparência: :prefs · :theme · :layout · :lang · :grid · :snap\n\nCaneta e mesa\n  Wacom Intuos Pro e mesas do OpenTabletDriver são detectadas via evdev.\n  Posição e cliques vêm do ponteiro do sistema; a pressão da ponta é somada\n  pelo Modaline enquanto a caneta toca a mesa. :pen mostra o dispositivo e\n  :pen off ignora. Se disser permissão negada, entre no grupo \"input\".\n\nQual estilo de teclas?\n  O padrão é estilo vim porque está em todo lugar. O Helix é mais amigável\n  para quem começa: selecione primeiro, depois aja. Em uma tela isso vira\n  v + y/x/p naturalmente, então o preset Helix planejado mantém as teclas da\n  tela e muda desfazer/leader/movimentos, sem esconder ações em mais modos.\n  Comece com mouse ou caneta, aprenda uma tecla de ferramenta por sessão e\n  leia a ajuda com ?."
+    "tips.text": "Tudo funciona pelo teclado, mouse e caneta.\n  Ferramentas: b lápis · e borracha · f balde · c conta-gotas · d linha · R retângulo · o elipse\n  Mover: hjkl / HJKL (8 px) · 0 $ gg G · Ctrl-hjkl move a tela\n  Pincel: { } menor/maior · :brush <n> · pressão manual/auto com :pressure\n  Seleção: v, mova, y copia · x recorta · p cola · Esc limpa · w varinha\n  Arquivos: :w · :open · :recent · Ctrl-Cmd-O navegador · :reopen última aba\n  Aparência: :prefs · :theme · :layout · :lang · :grid · :snap\n\nCaneta e mesa\n  Wacom Intuos Pro e mesas do OpenTabletDriver são detectadas via evdev.\n  Posição e cliques vêm do ponteiro do sistema; a pressão da ponta é somada\n  pelo Modaline enquanto a caneta toca a mesa. :pen mostra o dispositivo e\n  :pen off ignora. Se disser permissão negada, entre no grupo \"input\".\n\nQual estilo de teclas?\n  O padrão é estilo vim porque está em todo lugar. O Helix é mais amigável\n  para quem começa: selecione primeiro, depois aja. Em uma tela isso vira\n  v + y/x/p naturalmente, então o preset Helix planejado mantém as teclas da\n  tela e muda desfazer/leader/movimentos, sem esconder ações em mais modos.\n  Comece com mouse ou caneta, aprenda uma tecla de ferramenta por sessão e\n  leia a ajuda com ?.",
+    "ui.sec_brush": "PINCEL",
+    "ui.sec_canvas": "TELA",
+    "ui.sec_animation": "ANIMAÇÃO",
+    "ui.sec_text": "TEXTO",
+    "ui.sec_symmetry": "SIMETRIA",
+    "ui.sec_selection": "SELEÇÃO",
+    "ui.sec_colour": "COR"
   },
   "messages": {
     "alpha lock off": "bloqueio alfa desligado",

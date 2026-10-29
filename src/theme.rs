@@ -64,6 +64,14 @@ pub fn builtin(name: &str) -> Option<Theme> {
             theme.grid = [48, 58, 104];
             theme.checker = [28, 34, 62];
         }
+        "arcane" => {
+            theme.bg = [8, 6, 12];
+            theme.panel = [18, 13, 27];
+            theme.text = [236, 228, 246];
+            theme.accent = [181, 108, 255];
+            theme.grid = [43, 32, 56];
+            theme.checker = [26, 19, 39];
+        }
         "paper" => {
             theme.dark = false;
             theme.bg = [238, 232, 213];
@@ -79,7 +87,7 @@ pub fn builtin(name: &str) -> Option<Theme> {
 }
 
 pub fn names() -> &'static [&'static str] {
-    &["dark", "light", "midnight", "paper"]
+    &["arcane", "dark", "light", "midnight", "paper"]
 }
 
 /// Resolve a built-in name or a path to a `.json` theme file.
@@ -108,6 +116,10 @@ pub fn save(theme: &Theme, path: &Path) -> Result<()> {
 
 /// Apply a theme to the whole egui context (panels, widgets, text, selection).
 pub fn apply(ctx: &egui::Context, theme: &Theme) {
+    if theme.name == "arcane" {
+        crate::arcane::apply(ctx);
+        return;
+    }
     let mut v = if theme.dark {
         egui::Visuals::dark()
     } else {
@@ -134,7 +146,26 @@ pub fn apply(ctx: &egui::Context, theme: &Theme) {
 pub fn install_font(ctx: &egui::Context, spec: &str, size: f32) -> Result<()> {
     let mut fonts = egui::FontDefinitions::default();
     let spec = spec.trim();
-    if !spec.is_empty() && !spec.eq_ignore_ascii_case("default") {
+    let pixel = spec.eq_ignore_ascii_case("silkscreen") || spec.eq_ignore_ascii_case("pixel");
+    if pixel {
+        fonts.font_data.insert(
+            "pixel".into(),
+            Arc::new(egui::FontData::from_static(include_bytes!(
+                "../assets/fonts/Silkscreen-Regular.ttf"
+            ))),
+        );
+        fonts.font_data.insert(
+            "symbols".into(),
+            Arc::new(egui::FontData::from_static(include_bytes!(
+                "../assets/fonts/NotoSansSymbols2-Regular.otf"
+            ))),
+        );
+        for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+            let list = fonts.families.entry(family).or_default();
+            list.insert(0, "pixel".into());
+            list.push("symbols".into());
+        }
+    } else if !spec.is_empty() && !spec.eq_ignore_ascii_case("default") {
         let bytes = std::fs::read(spec).with_context(|| format!("read font {spec}"))?;
         fonts.font_data.insert(
             "modaline-ui".into(),
@@ -153,6 +184,9 @@ pub fn install_font(ctx: &egui::Context, spec: &str, size: f32) -> Result<()> {
     ctx.all_styles_mut(|style| {
         for font in style.text_styles.values_mut() {
             font.size = size;
+            if pixel {
+                font.family = egui::FontFamily::Monospace;
+            }
         }
     });
     Ok(())
@@ -169,8 +203,18 @@ mod tests {
         assert!(dark.dark);
         assert!(!paper.dark);
         assert_ne!(dark.bg, paper.bg);
+        let arcane = builtin("arcane").unwrap();
+        assert_eq!(arcane.accent, [181, 108, 255]);
+        assert!(names().contains(&"arcane"));
         assert_eq!(resolve("MIDNIGHT").unwrap().name, "midnight");
         assert!(resolve("nope").unwrap_err().to_string().contains("unknown"));
+    }
+
+    #[test]
+    fn the_bundled_pixel_font_installs() {
+        let ctx = egui::Context::default();
+        install_font(&ctx, "silkscreen", 12.0).unwrap();
+        install_font(&ctx, "default", 13.0).unwrap();
     }
 
     #[test]
