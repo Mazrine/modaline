@@ -235,9 +235,15 @@ pub struct Sprite {
     #[serde(default)]
     pub tags: Vec<Tag>,
     /// Declared colour mode. `Rgba` keeps colour; `Grayscale` is applied to the
-    /// pixels when chosen, and `Indexed` asks the exporter for an indexed file.
+    /// pixels when chosen, and `Indexed` resolves every pixel to `palette`.
     #[serde(default)]
     pub color_mode: ColorMode,
+    /// Document palette. Indexed sprites only paint colours from here; the
+    /// entry at `transparent_index` means transparent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub palette: Vec<Rgba>,
+    #[serde(default)]
+    pub transparent_index: u8,
     /// Pixel aspect ratio (width:height). Aseprite calls it the pixel ratio;
     /// it is metadata, the pixels are not resampled.
     #[serde(default = "unit_pixel_ratio")]
@@ -295,7 +301,7 @@ pub enum ColorMode {
     Rgba,
     /// Force 16-bit grayscale (and convert the pixels when the mode is chosen).
     Grayscale,
-    /// Force an 8-bit indexed file.
+    /// Quantize to a ≤256 document palette and resolve paint to its entries.
     Indexed,
 }
 
@@ -341,10 +347,98 @@ impl Sprite {
             cels,
             tags: Vec::new(),
             color_mode: ColorMode::Auto,
+            palette: Vec::new(),
+            transparent_index: 0,
             pixel_aspect: (1, 1),
             grid: (0, 0),
             color_profile: ColorProfile::Srgb,
             raw_chunks: Vec::new(),
+        }
+    }
+
+    pub fn is_indexed(&self) -> bool {
+        self.color_mode == ColorMode::Indexed
+    }
+
+    /// The palette slot that means transparent. Prefers the stored index when
+    /// it really is a transparent entry, then any transparent entry, then the
+    /// first free slot (the caller writes the transparent colour there).
+    pub fn transparent_slot(&self) -> u8 {
+        let ti = self.transparent_index as usize;
+        if self.palette.get(ti).is_some_and(|p| p.3 == 0) {
+            return self.transparent_index;
+        }
+        if let Some(i) = self.palette.iter().position(|p| p.3 == 0) {
+            return i as u8;
+        }
+        if self.palette.len() < 256 {
+            self.palette.len() as u8
+        } else {
+            255
+        }
+    }
+
+    /// Snap a paint colour to the indexed palette. Transparent paint stays
+    /// transparent; everything else becomes the nearest opaque entry.
+    pub fn indexed_color(&self, c: Rgba) -> Rgba {
+        if !self.is_indexed() || self.palette.is_empty() {
+            return c;
+        }
+        if c.3 == 0 {
+            return Rgba::TRANSPARENT;
+        }
+        let ti = self.transparent_slot();
+        let idx = nearest_palette_index(&self.palette, ti, c);
+        self.palette[idx as usize]
+    }
+
+    /// Build a palette from the sprite's pixels and snap every cel to it.
+    /// Up to 255 opaque colours are kept exactly; more go through median cut.
+    /// The transparent slot is index 0.
+    pub fn quantize_to_palette(&mut self) {
+        let mut seen = std::collections::HashSet::new();
+        let mut colors = Vec::new();
+        for cel in self.cels.iter().flatten() {
+            for p in &cel.pixels {
+                if p.3 == 0 {
+                    continue;
+                }
+                if seen.insert((p.0, p.1, p.2)) {
+                    colors.push(Rgba(p.0, p.1, p.2, 255));
+                }
+            }
+        }
+        colors.sort_by_key(|c| (c.0, c.1, c.2));
+        colors.dedup();
+        let chosen = if colors.len() <= 255 {
+            colors
+        } else {
+            median_cut(colors, 255)
+        };
+        self.palette = Vec::with_capacity(chosen.len() + 1);
+        self.palette.push(Rgba::TRANSPARENT);
+        self.palette.extend(chosen);
+        self.transparent_index = 0;
+        self.color_mode = ColorMode::Indexed;
+        self.remap_to_palette();
+    }
+
+    /// Snap every cel pixel to the current palette (transparent pixels become
+    /// fully transparent). Idempotent once the pixels are palette entries.
+    pub fn remap_to_palette(&mut self) {
+        if self.palette.is_empty() {
+            return;
+        }
+        let palette = self.palette.clone();
+        let ti = self.transparent_slot();
+        for cel in self.cels.iter_mut().flatten() {
+            for p in cel.pixels.iter_mut() {
+                *p = if p.3 == 0 {
+                    Rgba::TRANSPARENT
+                } else {
+                    palette[nearest_palette_index(&palette, ti, *p) as usize]
+                };
+            }
         }
     }
 
@@ -393,6 +487,7 @@ impl Sprite {
     }
 
     pub fn set(&mut self, layer: usize, frame: usize, x: u32, y: u32, c: Rgba) {
+        let c = self.indexed_color(c);
         let w = self.width;
         self.cels[layer][frame].pixels[(y * w + x) as usize] = c;
     }
@@ -1027,6 +1122,113 @@ fn set_sat(mut c: [f32; 3], s: f32) -> [f32; 3] {
     c
 }
 
+/// Nearest opaque palette entry to `c`, skipping the transparent slot. Shared
+/// with the `.ase` writer so both snap identically.
+pub(crate) fn nearest_palette_index(palette: &[Rgba], transparent: u8, c: Rgba) -> u8 {
+    let mut best = transparent;
+    let mut best_d = u32::MAX;
+    for (i, p) in palette.iter().enumerate() {
+        if i == transparent as usize || p.3 == 0 {
+            continue;
+        }
+        let dr = i32::from(p.0) - i32::from(c.0);
+        let dg = i32::from(p.1) - i32::from(c.1);
+        let db = i32::from(p.2) - i32::from(c.2);
+        let d = (dr * dr + dg * dg + db * db) as u32;
+        if d == 0 {
+            return i as u8;
+        }
+        if d < best_d {
+            best_d = d;
+            best = i as u8;
+        }
+    }
+    if best_d == u32::MAX && !palette.is_empty() {
+        (palette.len() - 1) as u8
+    } else {
+        best
+    }
+}
+
+/// Median-cut quantizer: split the widest box until there are `max` boxes,
+/// then average each one. Colours are pre-sorted so the result is stable.
+fn median_cut(colors: Vec<Rgba>, max: usize) -> Vec<Rgba> {
+    let mut boxes = vec![colors];
+    while boxes.len() < max {
+        let mut pick = None;
+        let mut widest = 0;
+        for (i, b) in boxes.iter().enumerate() {
+            if b.len() < 2 {
+                continue;
+            }
+            let r = channel_ranges(b);
+            let range = r[0].max(r[1]).max(r[2]);
+            if range > widest {
+                widest = range;
+                pick = Some(i);
+            }
+        }
+        let Some(i) = pick else { break };
+        let mut b = boxes.swap_remove(i);
+        let r = channel_ranges(&b);
+        let ch = if r[0] >= r[1] && r[0] >= r[2] {
+            0
+        } else if r[1] >= r[2] {
+            1
+        } else {
+            2
+        };
+        b.sort_by_key(|c| match ch {
+            0 => c.0,
+            1 => c.1,
+            _ => c.2,
+        });
+        let right = b.split_off(b.len() / 2);
+        boxes.push(b);
+        boxes.push(right);
+    }
+    let mut out: Vec<Rgba> = boxes.iter().map(|b| average_color(b)).collect();
+    out.sort_by_key(|c| (c.0, c.1, c.2));
+    out.dedup();
+    out
+}
+
+fn channel_ranges(boxes: &[Rgba]) -> [u32; 3] {
+    let mut min = [255u8; 3];
+    let mut max = [0u8; 3];
+    for c in boxes {
+        let v = [c.0, c.1, c.2];
+        for i in 0..3 {
+            min[i] = min[i].min(v[i]);
+            max[i] = max[i].max(v[i]);
+        }
+    }
+    [
+        u32::from(max[0] - min[0]),
+        u32::from(max[1] - min[1]),
+        u32::from(max[2] - min[2]),
+    ]
+}
+
+fn average_color(boxes: &[Rgba]) -> Rgba {
+    let n = boxes.len() as u32;
+    if n == 0 {
+        return Rgba::TRANSPARENT;
+    }
+    let mut sum = [0u32; 3];
+    for c in boxes {
+        sum[0] += u32::from(c.0);
+        sum[1] += u32::from(c.1);
+        sum[2] += u32::from(c.2);
+    }
+    Rgba(
+        ((sum[0] + n / 2) / n) as u8,
+        ((sum[1] + n / 2) / n) as u8,
+        ((sum[2] + n / 2) / n) as u8,
+        255,
+    )
+}
+
 fn set_px(
     s: &mut Sprite,
     l: usize,
@@ -1360,6 +1562,57 @@ mod tests {
             assert_eq!([got.0, got.1, got.2], want, "{mode:?} at alpha 128");
             assert_eq!(got.3, 255, "{mode:?} alpha");
         }
+    }
+
+    #[test]
+    fn indexed_paint_snaps_to_palette_entries() {
+        let mut s = Sprite::new(2, 1);
+        s.set(0, 0, 0, 0, Rgba(255, 0, 0, 255));
+        s.set(0, 0, 1, 0, Rgba(0, 0, 255, 255));
+        s.quantize_to_palette();
+
+        let red = s.palette[1..]
+            .iter()
+            .copied()
+            .find(|c| (c.0, c.1, c.2) == (255, 0, 0))
+            .expect("red in palette");
+        s.set(0, 0, 0, 0, Rgba(250, 8, 4, 255));
+        assert_eq!(s.get(0, 0, 0, 0), red, "near red snaps to the entry");
+        s.set(0, 0, 0, 0, Rgba(0, 0, 0, 0));
+        assert_eq!(s.get(0, 0, 0, 0), Rgba::TRANSPARENT);
+        s.set(0, 0, 0, 0, Rgba(0, 0, 240, 255));
+        assert_eq!(s.get(0, 0, 0, 0), Rgba(0, 0, 255, 255));
+    }
+
+    #[test]
+    fn indexed_quantizer_handles_more_than_256_colours() {
+        let mut s = Sprite::new(300, 1);
+        for x in 0..300u32 {
+            s.set(
+                0,
+                0,
+                x,
+                0,
+                Rgba(x as u8, (x / 256) as u8, (x * 7 % 256) as u8, 255),
+            );
+        }
+        let original = s.clone();
+        s.quantize_to_palette();
+        assert_eq!(s.color_mode, ColorMode::Indexed);
+        assert_eq!(s.palette.len(), 256, "transparent + 255 quantized");
+        assert_eq!(s.palette[0], Rgba::TRANSPARENT);
+        for p in &s.cels[0][0].pixels {
+            assert!(s.palette.contains(p), "{p:?} is not a palette entry");
+        }
+        let once = s.cels[0][0].pixels.clone();
+        s.quantize_to_palette();
+        assert_eq!(s.cels[0][0].pixels, once, "re-quantizing keeps pixels");
+
+        let mut a = original.clone();
+        let mut b = original;
+        a.quantize_to_palette();
+        b.quantize_to_palette();
+        assert_eq!(a.palette, b.palette, "independent runs agree");
     }
 
     #[test]

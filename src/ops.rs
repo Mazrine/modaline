@@ -147,6 +147,11 @@ impl Editor {
             self.msg = "layer is locked or hidden".into();
             return;
         }
+        let color = if self.sprite.is_indexed() {
+            self.sprite.indexed_color(color)
+        } else {
+            color
+        };
         if self.palette_lock && !color.is_transparent() && !self.palette.contains(&color) {
             self.msg = "palette locked: that colour is not in it".into();
             return;

@@ -33,8 +33,12 @@ const CHUNK_PALETTE_RGBA: u16 = 0x0011;
 enum OutDepth {
     Rgba,
     Gray,
-    /// `palette[0]` is transparent; pixels map to entries by exact RGBA match.
-    Indexed(Vec<Rgba>),
+    /// 8-bit indices into `palette`; `transparent` is the header's transparent
+    /// colour index and pixels are matched by RGB.
+    Indexed {
+        palette: Vec<Rgba>,
+        transparent: u8,
+    },
 }
 
 /// Pick the smallest depth that represents every pixel exactly. Grayscale wins
@@ -48,17 +52,42 @@ fn out_depth(sprite: &Sprite) -> OutDepth {
         crate::sprite::ColorMode::Rgba => return OutDepth::Rgba,
         crate::sprite::ColorMode::Grayscale => return OutDepth::Gray,
         crate::sprite::ColorMode::Indexed => {
-            let mut colors: Vec<Rgba> = vec![Rgba::TRANSPARENT];
-            for p in sprite.cels.iter().flatten().flat_map(|c| &c.pixels) {
-                if p.3 == 0 || colors.contains(p) {
-                    continue;
+            let (mut palette, mut transparent) = if sprite.palette.is_empty() {
+                let mut colors: Vec<Rgba> = vec![Rgba::TRANSPARENT];
+                for p in sprite.cels.iter().flatten().flat_map(|c| &c.pixels) {
+                    if p.3 == 0 {
+                        continue;
+                    }
+                    let c = Rgba(p.0, p.1, p.2, 255);
+                    if !colors.contains(&c) {
+                        if colors.len() == 256 {
+                            break;
+                        }
+                        colors.push(c);
+                    }
                 }
-                if colors.len() == 256 {
-                    return auto_depth(sprite);
+                (colors, 0)
+            } else {
+                (
+                    sprite.palette.iter().copied().take(256).collect(),
+                    sprite.transparent_slot(),
+                )
+            };
+            if palette.get(transparent as usize).is_none_or(|p| p.3 != 0) {
+                if let Some(i) = palette.iter().position(|p| p.3 == 0) {
+                    transparent = i as u8;
+                } else if palette.len() < 256 {
+                    palette.push(Rgba::TRANSPARENT);
+                    transparent = (palette.len() - 1) as u8;
+                } else {
+                    palette[255] = Rgba::TRANSPARENT;
+                    transparent = 255;
                 }
-                colors.push(*p);
             }
-            return OutDepth::Indexed(colors);
+            return OutDepth::Indexed {
+                palette,
+                transparent,
+            };
         }
     }
     auto_depth(sprite)
@@ -84,7 +113,10 @@ fn auto_depth(sprite: &Sprite) -> OutDepth {
     if all_gray {
         OutDepth::Gray
     } else {
-        OutDepth::Indexed(colors)
+        OutDepth::Indexed {
+            palette: colors,
+            transparent: 0,
+        }
     }
 }
 
@@ -111,7 +143,7 @@ fn write_header(out: &mut Vec<u8>, s: &Sprite, depth: &OutDepth) {
     let bits: u16 = match depth {
         OutDepth::Rgba => 32,
         OutDepth::Gray => 16,
-        OutDepth::Indexed(_) => 8,
+        OutDepth::Indexed { .. } => 8,
     };
     h[12..14].copy_from_slice(&bits.to_le_bytes());
     let mut flags: u32 = 1; // layer opacity is valid
@@ -120,9 +152,13 @@ fn write_header(out: &mut Vec<u8>, s: &Sprite, depth: &OutDepth) {
     }
     h[14..18].copy_from_slice(&flags.to_le_bytes());
     h[18..20].copy_from_slice(&0u16.to_le_bytes()); // speed (deprecated)
-    if let OutDepth::Indexed(pal) = depth {
-        h[28] = 0; // transparent color index
-        h[32..34].copy_from_slice(&(pal.len() as u16).to_le_bytes());
+    if let OutDepth::Indexed {
+        palette,
+        transparent,
+    } = depth
+    {
+        h[28] = *transparent;
+        h[32..34].copy_from_slice(&(palette.len() as u16).to_le_bytes());
     }
     h[34] = s.pixel_aspect.0.clamp(1, 255) as u8; // pixel width
     h[35] = s.pixel_aspect.1.clamp(1, 255) as u8; // pixel height
@@ -145,8 +181,8 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
 
     emit_raw(&mut body, &mut count, ChunkAnchor::FrameStart);
     if frame == 0 {
-        if let OutDepth::Indexed(pal) = depth {
-            write_palette_chunk(&mut body, pal);
+        if let OutDepth::Indexed { palette, .. } = depth {
+            write_palette_chunk(&mut body, palette);
             count += 1;
             emit_raw(&mut body, &mut count, ChunkAnchor::Palette);
         }
@@ -288,14 +324,23 @@ fn write_cel_chunk(
                 b.extend_from_slice(&[p.0, p.3]);
             }
         }
-        OutDepth::Indexed(pal) => {
+        OutDepth::Indexed {
+            palette,
+            transparent,
+        } => {
             for p in &cel.pixels {
                 let idx = if p.3 == 0 {
-                    0
+                    *transparent
                 } else {
-                    pal.iter().position(|c| c == p).unwrap_or(0)
+                    palette
+                        .iter()
+                        .position(|c| c == p)
+                        .map(|i| i as u8)
+                        .unwrap_or_else(|| {
+                            crate::sprite::nearest_palette_index(palette, *transparent, *p)
+                        })
                 };
-                b.push(idx as u8);
+                b.push(idx);
             }
         }
     }
@@ -364,6 +409,7 @@ struct Import {
     height: u32,
     frames: usize,
     palette: Vec<Rgba>,
+    transparent_index: u8,
     /// `[layer][frame]`; `None` means an empty cel.
     cels: Vec<Vec<Option<Cel>>>,
     layer_tilesets: Vec<u32>,
@@ -389,7 +435,15 @@ impl Import {
             0 => {
                 let cw = u16_at(body, 16) as u32;
                 let ch = u16_at(body, 18) as u32;
-                let px = decode_pixels(&body[20..], self.depth, cw, ch, &self.palette).2;
+                let px = decode_pixels(
+                    &body[20..],
+                    self.depth,
+                    cw,
+                    ch,
+                    &self.palette,
+                    self.transparent_index,
+                )
+                .2;
                 self.place((li, frame), (ox, oy), (cw, ch), &px, opacity);
             }
             1 => {
@@ -405,7 +459,15 @@ impl Import {
                 let ch = u16_at(body, 18) as u32;
                 let mut raw = Vec::new();
                 flate2::read::ZlibDecoder::new(&body[20..]).read_to_end(&mut raw)?;
-                let px = decode_pixels(&raw, self.depth, cw, ch, &self.palette).2;
+                let px = decode_pixels(
+                    &raw,
+                    self.depth,
+                    cw,
+                    ch,
+                    &self.palette,
+                    self.transparent_index,
+                )
+                .2;
                 self.place((li, frame), (ox, oy), (cw, ch), &px, opacity);
             }
             3 => {
@@ -550,7 +612,10 @@ pub fn load(path: &Path) -> Result<Sprite> {
         width,
         height,
         frames: frames_count.max(1),
-        palette: vec![Rgba::TRANSPARENT; 256],
+        // Undeclared indexed slots are opaque black, matching Aseprite's
+        // padded palette; the transparent index overrides its own slot.
+        palette: vec![Rgba(0, 0, 0, 255); 256],
+        transparent_index: data[28],
         cels: Vec::new(),
         layer_tilesets: Vec::new(),
         tilesets: Vec::new(),
@@ -605,7 +670,12 @@ pub fn load(path: &Path) -> Result<Sprite> {
                 }
                 CHUNK_TILESET => {
                     let ti = im.tilesets.len() as u16;
-                    im.tilesets.push(parse_tileset(body, depth, &im.palette)?);
+                    im.tilesets.push(parse_tileset(
+                        body,
+                        depth,
+                        &im.palette,
+                        im.transparent_index,
+                    )?);
                     anchor = ChunkAnchor::Tileset(ti);
                 }
                 CHUNK_PALETTE => {
@@ -666,6 +736,21 @@ pub fn load(path: &Path) -> Result<Sprite> {
         })
         .collect();
 
+    // Header byte 32 is the palette size (0 means 256 for indexed files). The
+    // transparent index entry is transparent regardless of its stored RGB.
+    let palette_size = u16_at(&data, 32) as usize;
+    let palette_len = if depth == 8 {
+        256
+    } else {
+        palette_size.min(256)
+    };
+    let mut palette: Vec<Rgba> = im.palette[..palette_len.min(im.palette.len())].to_vec();
+    if depth == 8
+        && let Some(slot) = palette.get_mut(im.transparent_index as usize)
+    {
+        *slot = Rgba::TRANSPARENT;
+    }
+
     let mut sprite = Sprite {
         width,
         height,
@@ -673,6 +758,8 @@ pub fn load(path: &Path) -> Result<Sprite> {
         frames,
         cels,
         tags: im.tags,
+        palette,
+        transparent_index: im.transparent_index,
         color_mode: match depth {
             32 => crate::sprite::ColorMode::Rgba,
             8 => crate::sprite::ColorMode::Indexed,
@@ -723,7 +810,7 @@ fn parse_tags(body: &[u8]) -> Vec<Tag> {
     tags
 }
 
-fn parse_tileset(body: &[u8], depth: u16, palette: &[Rgba]) -> Result<Tileset> {
+fn parse_tileset(body: &[u8], depth: u16, palette: &[Rgba], transparent: u8) -> Result<Tileset> {
     let flags = u32_at(body, 4);
     let num_tiles = u32_at(body, 8);
     let tile_w = u16_at(body, 12) as u32;
@@ -740,7 +827,15 @@ fn parse_tileset(body: &[u8], depth: u16, palette: &[Rgba]) -> Result<Tileset> {
         if let Some(compressed) = body.get(p..p + len) {
             let mut raw = Vec::new();
             flate2::read::ZlibDecoder::new(compressed).read_to_end(&mut raw)?;
-            image = decode_pixels(&raw, depth, tile_w, tile_h * num_tiles, palette).2;
+            image = decode_pixels(
+                &raw,
+                depth,
+                tile_w,
+                tile_h * num_tiles,
+                palette,
+                transparent,
+            )
+            .2;
         }
     }
     Ok(Tileset {
@@ -818,6 +913,7 @@ fn decode_pixels(
     cw: u32,
     ch: u32,
     palette: &[Rgba],
+    transparent: u8,
 ) -> (u32, u32, Vec<Rgba>) {
     let mut out = Vec::with_capacity((cw * ch) as usize);
     let mut i = 0usize;
@@ -826,7 +922,11 @@ fn decode_pixels(
             8 => {
                 let idx = *raw.get(i).unwrap_or(&0) as usize;
                 i += 1;
-                palette[idx.min(255)]
+                if idx == transparent as usize {
+                    Rgba::TRANSPARENT
+                } else {
+                    palette[idx.min(255)]
+                }
             }
             16 => {
                 let v = *raw.get(i).unwrap_or(&0);
@@ -1441,6 +1541,47 @@ mod tests {
             raw_b.sort();
             assert_eq!(raw_b, raw_a, "{name} unknown chunks");
         }
+    }
+
+    #[test]
+    fn indexed_fixture_edits_keep_indices_and_transparency() {
+        use crate::sprite::ColorMode;
+        let src =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ase/test_paletted.ase");
+        let mut s = load(&src).unwrap();
+        assert_eq!(s.color_mode, ColorMode::Indexed);
+        assert_eq!(s.palette.len(), 256);
+        let ti = s.transparent_index;
+        let want = (1..s.palette.len())
+            .find(|&i| i != ti as usize && s.palette[i].3 > 0)
+            .expect("an opaque palette slot");
+        let color = s.palette[want];
+        // Layer 2's cel starts at (10, 8); layer 0 is a group and layer 1 is
+        // the tilemap, so edit the image layer.
+        s.set(2, 0, 10, 8, color);
+        s.set(2, 0, 11, 8, Rgba::TRANSPARENT);
+
+        let out = tmp("vixel_ase_indexed_edit.ase");
+        save(&s, &out).unwrap();
+        let data = std::fs::read(&out).unwrap();
+        assert_eq!(data[28], ti, "header transparent index");
+        assert_eq!(u16_at(&data, 32) as usize, s.palette.len());
+        let body = walk_chunks(&data)
+            .into_iter()
+            .find(|(f, k, body)| *f == 0 && *k == CHUNK_CEL && u16_at(body, 0) == 2)
+            .expect("layer 2 cel")
+            .2;
+        assert_eq!(u16_at(&body, 7), 0, "raw cel");
+        let w = u16_at(&body, 16) as usize;
+        let i = 20 + 8 * w + 10; // sprite (10, 8) in the full-canvas cel
+        assert_eq!((body[i], body[i + 1]), (want as u8, ti));
+
+        let back = load(&out).unwrap();
+        let _ = std::fs::remove_file(&out);
+        assert_eq!(back.palette, s.palette);
+        assert_eq!(back.transparent_index, ti);
+        assert_eq!(back.get(2, 0, 10, 8), color);
+        assert_eq!(back.get(2, 0, 11, 8), Rgba::TRANSPARENT);
     }
 
     #[test]

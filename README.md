@@ -177,8 +177,10 @@ the flattened composite of all visible layers.
 - **`.ase` / `.aseprite`** — the native Aseprite format (read + write): raw,
   zlib, linked and compressed-tilemap cels; RGBA, grayscale and indexed pixels;
   layer groups, cel opacity and frame durations. Export picks the smallest
-  lossless depth (gray, indexed, or 32-bit RGBA). Unknown chunks (slices, user
-  data, ICC) are preserved on save.
+  lossless depth (gray, indexed, or 32-bit RGBA). Indexed sprites carry a
+  document palette and transparent index (header byte 28), and paint snaps to
+  palette entries. Unknown chunks (slices, user data, ICC) are preserved on
+  save.
 - **`.vpx`** — project file: JSON with size, layers, frames, and every cel.
 - **PNG** — single-frame import/export with full alpha.
 

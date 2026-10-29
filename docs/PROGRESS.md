@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **109 tests green** (101 lib + 8 bin)
+- `cargo test` → **115 tests green** (107 lib + 8 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-05 all 19 blend modes** (see batch 41).
+- Last completed batch: **P5-03 real indexed colour** (see batch 42).
 
 ## How to resume
 
@@ -234,6 +234,14 @@ Read, in order:
     reference table at α=255 and α=128 for every mode, plus a save→load round
     trip of every word. UI not screenshotted; the combo is generated from
     `ALL_BLENDS` (manual check: count the 19 entries).
+42. **P5-03 — real indexed colour** — `Sprite.palette` and
+    `transparent_index`; `:mode indexed` quantizes (exact ≤255, median cut
+    above) with a transparent slot as one undo step and snaps paint/fill to
+    entries. `.ase` writes/reads header byte 28 and the palette; undeclared
+    slots pad opaque black and indices match by RGBA. `.vpx` keeps the palette;
+    opening an indexed file syncs the picker. 6 new tests (115 total), including
+    a fixture edit→save→open that asserts the exact cel index bytes and
+    transparency.
 
 ## Next step (exact)
 
@@ -242,8 +250,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-03** — real indexed colour (first open task), then continue down the
-  P5 roadmap in dependency order.
+- **P5-04** — dithering engine (first open task), then continue down the P5
+  roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

@@ -474,6 +474,11 @@ impl Editor {
             self.msg = "layer is locked or hidden".into();
             return;
         }
+        let color = if self.sprite.is_indexed() {
+            self.sprite.indexed_color(color)
+        } else {
+            color
+        };
         if self.palette_lock && !color.is_transparent() && !self.palette.contains(&color) {
             self.msg = "palette locked: that colour is not in it".into();
             return;
@@ -1118,9 +1123,21 @@ impl Editor {
 
     // ---- palette ----
 
-    pub fn load_palette(&mut self, colors: Vec<Rgba>) {
+    pub fn load_palette(&mut self, mut colors: Vec<Rgba>) {
         if colors.is_empty() {
             return;
+        }
+        if self.sprite.is_indexed() {
+            if !colors.iter().any(|c| c.3 == 0) {
+                colors.insert(0, Rgba::TRANSPARENT);
+            }
+            colors.truncate(256);
+            self.sprite.palette = colors.clone();
+            let ti = self.sprite.transparent_slot();
+            self.sprite.transparent_index = ti;
+            self.sprite.remap_to_palette();
+            self.dirty = true;
+            self.touch();
         }
         self.palette = colors;
         self.fg_idx = self.fg_idx.min(self.palette.len() - 1);
@@ -1598,12 +1615,13 @@ impl Editor {
 
     // ---- sprite properties ----
 
-    /// Set the declared colour mode. `Grayscale` converts the pixels (one undo
-    /// step); `Indexed` also locks painting to the palette, because a colour
-    /// that cannot be indexed is not paintable in that mode.
+    /// Set the declared colour mode. `Grayscale` converts the pixels and
+    /// `Indexed` quantizes to a document palette; both are one undo step.
+    /// Indexed painting snaps to the nearest palette entry.
     pub fn set_color_mode(&mut self, mode: crate::sprite::ColorMode) {
         use crate::sprite::ColorMode;
-        if mode == self.sprite.color_mode {
+        let needs_palette = mode == ColorMode::Indexed && self.sprite.palette.is_empty();
+        if mode == self.sprite.color_mode && !needs_palette {
             self.msg = format!("mode: {}", mode.name());
             return;
         }
@@ -1624,8 +1642,16 @@ impl Editor {
                 self.palette_lock = false;
             }
             ColorMode::Indexed => {
-                self.sprite.color_mode = mode;
-                self.palette_lock = true;
+                let before = self.sprite.clone();
+                self.sprite.quantize_to_palette();
+                let after = self.sprite.clone();
+                self.undo.push(UndoStep::Snapshot {
+                    before: Box::new(before),
+                    after: Box::new(after),
+                });
+                self.redo.clear();
+                self.palette_lock = false;
+                self.load_palette(self.sprite.palette.clone());
             }
         }
         self.dirty = true;
@@ -2781,6 +2807,11 @@ impl Editor {
         self.lasso_points.clear();
         self.dirty = false;
         self.bundle_stage = None;
+        self.palette_lock = false;
+        if self.sprite.is_indexed() && !self.sprite.palette.is_empty() {
+            self.load_palette(self.sprite.palette.clone());
+        }
+        self.dirty = false;
         self.touch();
     }
 
@@ -3233,6 +3264,51 @@ mod tests {
         let once = e.sprite.get(l, f, 0, 0);
         e.set_color_profile(ColorProfile::Linear);
         assert_eq!(e.sprite.get(l, f, 0, 0), once);
+    }
+
+    #[test]
+    fn indexed_mode_quantizes_and_snaps_painting() {
+        use crate::sprite::ColorMode;
+        let mut e = Editor::new(2, 1);
+        e.paint_pixel(0, 0, Rgba(255, 0, 0, 255));
+        e.paint_pixel(1, 0, Rgba(0, 0, 255, 255));
+
+        e.set_color_mode(ColorMode::Indexed);
+        assert!(e.sprite.is_indexed());
+        assert!(!e.palette_lock, "indexed mode snaps instead of refusing");
+        assert_eq!(e.palette, e.sprite.palette);
+        let red = e.sprite.palette[1..]
+            .iter()
+            .copied()
+            .find(|c| (c.0, c.1, c.2) == (255, 0, 0))
+            .expect("red in palette");
+        let blue = e.sprite.palette[1..]
+            .iter()
+            .copied()
+            .find(|c| (c.0, c.1, c.2) == (0, 0, 255))
+            .expect("blue in palette");
+
+        e.paint_pixel(0, 0, Rgba(2, 3, 250, 255));
+        assert_eq!(e.sprite.get(0, 0, 0, 0), blue, "paint resolves to entry");
+        e.undo();
+        assert_eq!(e.sprite.get(0, 0, 0, 0), red);
+
+        let (l, f) = (e.active_layer, e.active_frame);
+        e.undo(); // undo the mode switch
+        assert_eq!(e.sprite.color_mode, ColorMode::Auto);
+        assert_eq!(e.sprite.get(l, f, 0, 0), Rgba(255, 0, 0, 255));
+        assert_eq!(e.sprite.get(l, f, 1, 0), Rgba(0, 0, 255, 255));
+    }
+
+    #[test]
+    fn opening_an_indexed_sprite_syncs_its_palette() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/ase/test_paletted.ase");
+        let mut e = Editor::new(1, 1);
+        e.open_path(&path).unwrap();
+        assert!(e.sprite.is_indexed());
+        assert_eq!(e.palette, e.sprite.palette);
+        assert!(!e.palette_lock);
     }
 
     #[test]

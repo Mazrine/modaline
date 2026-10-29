@@ -18,6 +18,10 @@ pub fn load_project(path: &Path) -> Result<Sprite> {
     let json = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     let mut sprite: Sprite = serde_json::from_str(&json).context("parse project")?;
     sprite.normalize_levels();
+    if sprite.color_mode == crate::sprite::ColorMode::Indexed && sprite.palette.is_empty() {
+        // Projects written before indexed mode had a document palette.
+        sprite.quantize_to_palette();
+    }
     Ok(sprite)
 }
 
@@ -660,6 +664,25 @@ mod tests {
         let ms = n as f64 / d.max(1) as f64;
         assert!((30.0..=50.0).contains(&ms), "{ms} ms");
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn indexed_palette_survives_a_project_round_trip() {
+        let mut s = Sprite::new(2, 1);
+        s.set(0, 0, 0, 0, Rgba(255, 0, 0, 255));
+        s.set(0, 0, 1, 0, Rgba(0, 0, 255, 255));
+        s.quantize_to_palette();
+        let path = std::env::temp_dir().join(format!(
+            "vixel_palette_roundtrip_{}.vpx",
+            std::process::id()
+        ));
+        save_project(&s, &path).unwrap();
+        let back = load_project(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.color_mode, crate::sprite::ColorMode::Indexed);
+        assert_eq!(back.palette, s.palette);
+        assert_eq!(back.transparent_index, s.transparent_index);
+        assert_eq!(back.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
     }
 
     #[test]

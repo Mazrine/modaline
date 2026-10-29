@@ -197,12 +197,16 @@ met; blocked tasks are marked with the reason.
 
 ### Epic 2 — Colour depth
 
-- [ ] **P5-03 — Real indexed colour** (L) — deps: P5-01.
-  Palette on `Sprite` + transparent index; quantize on `:mode indexed`; resolve
-  paint to palette entries; read/write header byte 28; indexed `.ase` round
-  trip.
-  Gate: indexed fixture open→edit→save→open keeps indices/transparency; >256
-  colours pick a palette; palette survives `.vpx`/`.ase`.
+- [x] **P5-03 — Real indexed colour** (L) — deps: P5-01.
+  Landed 2026-10-28. `Sprite.palette` + `transparent_index`; `:mode indexed`
+  quantizes to ≤255 opaque colours (median cut above that) plus a transparent
+  slot, as one undo step; `Sprite::set`, paint and fill snap to the nearest
+  entry. `.ase` reads/writes header byte 28 and the palette, matches indices by
+  RGBA and pads undeclared slots with opaque black; `.vpx` stores the palette.
+  6 new tests (115 total): >256 quantize + determinism, paint snapping, editor
+  mode/undo/palette sync, opening an indexed fixture syncs the picker, `.vpx`
+  palette round trip, and fixture edit→save→open checking header byte 28 and
+  exact cel indices. Dithering stays P5-04; palette editing/names stay P5-06.
 - [ ] **P5-04 — Dithering engine** (M) — deps: P5-03.
   Bayer 2/4/8 ordered + Floyd–Steinberg; RGB→indexed and gradients; `:dither`.
   Gate: deterministic matrix tests; indexed export honours the mode.

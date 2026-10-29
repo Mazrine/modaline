@@ -86,6 +86,9 @@ thin shells:
 - Opaque `.ase` chunks live in `Sprite.raw_chunks` with a `ChunkAnchor`; keep
   them when adding or removing chunks so open→save never destroys data this
   build does not parse yet.
+- Indexed sprites keep every pixel on `Sprite.palette`; write through
+  `Sprite::set` or `indexed_color` so nearest-entry snapping happens, and keep
+  `transparent_index` pointing at the transparent entry.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not

@@ -132,6 +132,10 @@ L-shaped corners for the 1 px pencil/eraser.
 - **sprite properties**: colour mode (auto / rgba / grayscale / indexed — the
   declared mode drives the .ase depth; grayscale also converts the pixels),
   pixel ratio (written to and read from the .ase header) and the sprite grid.
+- **indexed mode**: `:mode indexed` builds a document palette from the pixels
+  (exact up to 255 opaque colours, median cut above that), keeps a transparent
+  slot, and snaps painting/fills to palette entries. The palette and
+  transparent index survive `.vpx` and `.ase`; entries may carry alpha.
 - **colour profile**: sRGB or linear light. Converting rewrites every pixel and
   the palette together with the real transfer function (`:profile`).
 

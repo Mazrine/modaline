@@ -59,15 +59,15 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 |---|---|---|
 | RGBA mode | Covered | — |
 | Grayscale mode + conversion | Covered | — |
-| Indexed mode (real indices, conversion) | Partial | P5-03 |
-| Transparent palette index | Missing | P5-03 |
+| Indexed mode (real indices, conversion) | Covered | P5-03 |
+| Transparent palette index | Covered | P5-03 |
 | RGB→indexed dithering | Missing | P5-04 |
 | Palette import/export (`.gpl`, `.hex`, `.pal`) | Covered | — |
 | Palette editor: insert/delete/sort/presets/names | Partial | P5-06 |
 | Colour picker wheel + recent colours | Missing | P5-06 |
 | sRGB/linear working profiles | Covered (vixel) | — |
 | ICC embedding (`.ase` 0x2007) | Missing | P5-09 |
-| Background colour / transparent-index sprite properties | Missing | P5-03/P5-08 |
+| Background colour sprite property | Missing | P5-08 |
 | Wide pixels rendering (pixel ratio) | Partial (metadata) | P5-26 |
 
 ## Drawing and tools
