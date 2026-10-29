@@ -958,14 +958,15 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             None => editor.msg = "usage: :skew <degrees>".into(),
         },
         "filter" | "fx" => {
-            let mut it = arg.unwrap_or("").split_whitespace();
-            let name = it.next().unwrap_or("");
-            let amount = it.next();
-            match crate::editor::Filter::parse(name, amount) {
+            let args: Vec<&str> = arg.unwrap_or("").split_whitespace().collect();
+            match crate::editor::Filter::parse_args(&args) {
                 Some(f) => editor.filter(f),
                 None => {
                     editor.msg =
-                        "usage: :filter invert|brightness|contrast|hue|saturation|outline|blur|sharpen [amount]"
+                        "usage: :filter invert|brightness|contrast|hue|saturation|desaturate|\
+                         curves <s> <m> <h>|levels <in_b> <in_w> <gamma> [out_b] [out_w]|\
+                         balance <r> <g> <b>|posterize <levels>|outline <r>|blur <r>|\
+                         sharpen <k>|median <r>|convolve <k0..k8> [div] [bias]|emboss"
                             .into()
                 }
             }

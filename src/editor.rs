@@ -4002,15 +4002,23 @@ fn lerp_rgba(a: Rgba, b: Rgba, t: f32) -> Rgba {
 /// contrast 0..3 as a factor, hue in degrees, saturation as a factor, outline
 /// and blur as a pixel radius, sharpen as a strength.
 /// The filter names, in the order the combo box lists them.
-pub const FILTERS: [&str; 8] = [
+pub const FILTERS: [&str; 16] = [
     "invert",
     "brightness",
     "contrast",
     "hue",
     "saturation",
+    "desaturate",
+    "curves",
+    "levels",
+    "balance",
+    "posterize",
     "outline",
     "blur",
     "sharpen",
+    "median",
+    "convolve",
+    "emboss",
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -4023,6 +4031,32 @@ pub enum Filter {
     Outline(u32),
     Blur(u32),
     Sharpen(f32),
+    Curves {
+        shadows: u8,
+        midtones: u8,
+        highlights: u8,
+    },
+    Levels {
+        in_black: u8,
+        in_white: u8,
+        gamma: f32,
+        out_black: u8,
+        out_white: u8,
+    },
+    Balance {
+        r: i16,
+        g: i16,
+        b: i16,
+    },
+    Desaturate,
+    Median(u32),
+    Convolve {
+        kernel: [i16; 9],
+        divisor: f32,
+        bias: i32,
+    },
+    Emboss,
+    Posterize(u32),
 }
 
 impl Filter {
@@ -4036,21 +4070,101 @@ impl Filter {
             Filter::Outline(v) => format!("outline {v}"),
             Filter::Blur(v) => format!("blur {v}"),
             Filter::Sharpen(v) => format!("sharpen {v:.2}"),
+            Filter::Curves {
+                shadows,
+                midtones,
+                highlights,
+            } => format!("curves {shadows} {midtones} {highlights}"),
+            Filter::Levels {
+                in_black,
+                in_white,
+                gamma,
+                out_black,
+                out_white,
+            } => format!("levels {in_black} {in_white} {gamma:.2} {out_black} {out_white}"),
+            Filter::Balance { r, g, b } => format!("balance {r} {g} {b}"),
+            Filter::Desaturate => "desaturate".into(),
+            Filter::Median(v) => format!("median {v}"),
+            Filter::Convolve {
+                kernel,
+                divisor,
+                bias,
+            } => format!("convolve {kernel:?} /{divisor:.2} {bias:+}"),
+            Filter::Emboss => "emboss".into(),
+            Filter::Posterize(v) => format!("posterize {v}"),
         }
     }
 
     /// Parse `name [amount]`, the same table the `:filter` command uses.
     pub fn parse(name: &str, amount: Option<&str>) -> Option<Filter> {
-        let a = amount.and_then(|v| v.parse::<f32>().ok());
+        let mut args = vec![name];
+        if let Some(a) = amount {
+            args.push(a);
+        }
+        Filter::parse_args(&args)
+    }
+
+    /// Argument-aware parser for the multi-parameter filters.
+    pub fn parse_args(args: &[&str]) -> Option<Filter> {
+        let name = *args.first()?;
+        let n = |i: usize| args.get(i).and_then(|v| v.parse::<f32>().ok());
+        let u = |i: usize, default: u32| {
+            args.get(i)
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(default)
+        };
         Some(match name {
             "invert" | "inv" => Filter::Invert,
-            "brightness" | "bri" => Filter::Brightness(a.unwrap_or(24.0) as i32),
-            "contrast" | "con" => Filter::Contrast(a.unwrap_or(1.2)),
-            "hue" => Filter::Hue(a.unwrap_or(30.0)),
-            "saturation" | "sat" => Filter::Saturation(a.unwrap_or(1.3)),
-            "outline" | "out" => Filter::Outline(a.unwrap_or(1.0).max(1.0) as u32),
-            "blur" => Filter::Blur(a.unwrap_or(1.0).max(1.0) as u32),
-            "sharpen" | "sharp" => Filter::Sharpen(a.unwrap_or(1.0)),
+            "brightness" | "bri" => Filter::Brightness(n(1).unwrap_or(24.0) as i32),
+            "contrast" | "con" => Filter::Contrast(n(1).unwrap_or(1.2)),
+            "hue" => Filter::Hue(n(1).unwrap_or(30.0)),
+            "saturation" | "sat" => Filter::Saturation(n(1).unwrap_or(1.3)),
+            "outline" | "out" => Filter::Outline(n(1).unwrap_or(1.0).max(1.0) as u32),
+            "blur" => Filter::Blur(n(1).unwrap_or(1.0).max(1.0) as u32),
+            "sharpen" | "sharp" => Filter::Sharpen(n(1).unwrap_or(1.0)),
+            "desaturate" | "desat" | "gray" => Filter::Desaturate,
+            "curves" | "curve" => Filter::Curves {
+                shadows: u(1, 0).min(255) as u8,
+                midtones: u(2, 128).min(255) as u8,
+                highlights: u(3, 255).min(255) as u8,
+            },
+            "levels" | "level" => Filter::Levels {
+                in_black: u(1, 0).min(255) as u8,
+                in_white: u(2, 255).min(255) as u8,
+                gamma: n(3).unwrap_or(1.0).clamp(0.1, 10.0),
+                out_black: u(4, 0).min(255) as u8,
+                out_white: u(5, 255).min(255) as u8,
+            },
+            "balance" | "colorbalance" | "cb" => Filter::Balance {
+                r: n(1).unwrap_or(0.0).clamp(-100.0, 100.0) as i16,
+                g: n(2).unwrap_or(0.0).clamp(-100.0, 100.0) as i16,
+                b: n(3).unwrap_or(0.0).clamp(-100.0, 100.0) as i16,
+            },
+            "median" => Filter::Median(u(1, 1).clamp(1, 8)),
+            "posterize" | "poster" => Filter::Posterize(u(1, 4).clamp(2, 32)),
+            "emboss" => Filter::Emboss,
+            "convolve" | "conv" => {
+                let mut kernel = [0i16; 9];
+                for (i, slot) in kernel.iter_mut().enumerate() {
+                    *slot = args
+                        .get(i + 1)
+                        .and_then(|v| v.parse::<i16>().ok())
+                        .unwrap_or(0);
+                }
+                let divisor = args
+                    .get(10)
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .unwrap_or(1.0);
+                let bias = args
+                    .get(11)
+                    .and_then(|v| v.parse::<i32>().ok())
+                    .unwrap_or(0);
+                Filter::Convolve {
+                    kernel,
+                    divisor: if divisor == 0.0 { 1.0 } else { divisor },
+                    bias,
+                }
+            }
             _ => return None,
         })
     }
@@ -4126,9 +4240,179 @@ fn apply_filter(src: &[Rgba], w: u32, h: u32, f: Filter, fg: Rgba) -> Vec<Rgba> 
                 out[i] = Rgba(f(p.0, b.0), f(p.1, b.1), f(p.2, b.2), p.3);
             }
         }
+        Filter::Curves {
+            shadows,
+            midtones,
+            highlights,
+        } => {
+            let lut = curve_lut(shadows, midtones, highlights);
+            for (i, p) in src.iter().enumerate() {
+                if p.3 > 0 {
+                    out[i] = Rgba(lut[p.0 as usize], lut[p.1 as usize], lut[p.2 as usize], p.3);
+                }
+            }
+        }
+        Filter::Levels {
+            in_black,
+            in_white,
+            gamma,
+            out_black,
+            out_white,
+        } => {
+            let span = (i32::from(in_white) - i32::from(in_black)).max(1) as f32;
+            let gamma = gamma.clamp(0.1, 10.0);
+            let level = |c: u8| {
+                let v = ((f32::from(c) - f32::from(in_black)) / span).clamp(0.0, 1.0);
+                let g = v.powf(1.0 / gamma);
+                (f32::from(out_black) + g * f32::from(out_white) - g * f32::from(out_black))
+                    .round()
+                    .clamp(0.0, 255.0) as u8
+            };
+            for (i, p) in src.iter().enumerate() {
+                if p.3 > 0 {
+                    out[i] = Rgba(level(p.0), level(p.1), level(p.2), p.3);
+                }
+            }
+        }
+        Filter::Balance { r, g, b } => {
+            let shift =
+                |c: u8, d: i16| (i32::from(c) + i32::from(d) * 255 / 100).clamp(0, 255) as u8;
+            for (i, p) in src.iter().enumerate() {
+                if p.3 > 0 {
+                    out[i] = Rgba(shift(p.0, r), shift(p.1, g), shift(p.2, b), p.3);
+                }
+            }
+        }
+        Filter::Desaturate => {
+            for (i, p) in src.iter().enumerate() {
+                if p.3 > 0 {
+                    let y = ((299 * u32::from(p.0) + 587 * u32::from(p.1) + 114 * u32::from(p.2))
+                        / 1000) as u8;
+                    out[i] = Rgba(y, y, y, p.3);
+                }
+            }
+        }
+        Filter::Median(radius) => {
+            let r = radius.clamp(1, 8) as i32;
+            for y in 0..h as i32 {
+                for x in 0..w as i32 {
+                    let p = src[idx(x as u32, y as u32)];
+                    if p.3 == 0 {
+                        continue;
+                    }
+                    let (mut rs, mut gs, mut bs) = (Vec::new(), Vec::new(), Vec::new());
+                    for dy in -r..=r {
+                        for dx in -r..=r {
+                            let (nx, ny) = (x + dx, y + dy);
+                            if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                                continue;
+                            }
+                            let q = src[(ny as u32 * w + nx as u32) as usize];
+                            if q.3 > 0 {
+                                rs.push(q.0);
+                                gs.push(q.1);
+                                bs.push(q.2);
+                            }
+                        }
+                    }
+                    if rs.is_empty() {
+                        continue;
+                    }
+                    let pick = |v: &mut Vec<u8>| {
+                        v.sort_unstable();
+                        v[v.len() / 2]
+                    };
+                    out[(y as u32 * w + x as u32) as usize] =
+                        Rgba(pick(&mut rs), pick(&mut gs), pick(&mut bs), p.3);
+                }
+            }
+        }
+        Filter::Posterize(levels) => {
+            let levels = f32::from(levels.clamp(2, 32) as u8 - 1);
+            let q = |c: u8| {
+                ((f32::from(c) / 255.0 * levels).round() / levels * 255.0)
+                    .round()
+                    .clamp(0.0, 255.0) as u8
+            };
+            for (i, p) in src.iter().enumerate() {
+                if p.3 > 0 {
+                    out[i] = Rgba(q(p.0), q(p.1), q(p.2), p.3);
+                }
+            }
+        }
+        Filter::Convolve {
+            kernel,
+            divisor,
+            bias,
+        } => {
+            let divisor = if divisor == 0.0 { 1.0 } else { divisor };
+            for y in 0..h as i32 {
+                for x in 0..w as i32 {
+                    let p = src[idx(x as u32, y as u32)];
+                    if p.3 == 0 {
+                        continue;
+                    }
+                    let (mut sr, mut sg, mut sb) = (0f32, 0f32, 0f32);
+                    for (k, slot) in kernel.iter().enumerate() {
+                        let (dx, dy) = (k as i32 % 3 - 1, k as i32 / 3 - 1);
+                        let (nx, ny) = (x + dx, y + dy);
+                        if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                            continue;
+                        }
+                        let q = src[(ny as u32 * w + nx as u32) as usize];
+                        let k = f32::from(*slot);
+                        sr += f32::from(q.0) * k;
+                        sg += f32::from(q.1) * k;
+                        sb += f32::from(q.2) * k;
+                    }
+                    let ch = |v: f32| (v / divisor + bias as f32).round().clamp(0.0, 255.0) as u8;
+                    out[(y as u32 * w + x as u32) as usize] = Rgba(ch(sr), ch(sg), ch(sb), p.3);
+                }
+            }
+        }
+        Filter::Emboss => {
+            const K: [i16; 9] = [-2, -1, 0, -1, 0, 1, 0, 1, 2];
+            for y in 0..h as i32 {
+                for x in 0..w as i32 {
+                    let p = src[idx(x as u32, y as u32)];
+                    if p.3 == 0 {
+                        continue;
+                    }
+                    let mut sum = 0i32;
+                    for (k, weight) in K.iter().enumerate() {
+                        let (dx, dy) = (k as i32 % 3 - 1, k as i32 / 3 - 1);
+                        let (nx, ny) = (x + dx, y + dy);
+                        if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                            continue;
+                        }
+                        let q = src[(ny as u32 * w + nx as u32) as usize];
+                        sum += (luma(q) as i32 / 1000) * i32::from(*weight);
+                    }
+                    let v = (128 + sum).clamp(0, 255) as u8;
+                    out[(y as u32 * w + x as u32) as usize] = Rgba(v, v, v, p.3);
+                }
+            }
+        }
     }
     let _ = idx;
     out
+}
+
+/// Piecewise-linear 0..255 LUT through (0, shadows), (128, midtones),
+/// (255, highlights).
+fn curve_lut(shadows: u8, midtones: u8, highlights: u8) -> [u8; 256] {
+    let mut lut = [0u8; 256];
+    for (x, slot) in lut.iter_mut().enumerate() {
+        let v = if x <= 128 {
+            let t = x as f32 / 128.0;
+            f32::from(shadows) + (f32::from(midtones) - f32::from(shadows)) * t
+        } else {
+            let t = (x - 128) as f32 / 127.0;
+            f32::from(midtones) + (f32::from(highlights) - f32::from(midtones)) * t
+        };
+        *slot = v.round().clamp(0.0, 255.0) as u8;
+    }
+    lut
 }
 
 /// Box blur over alpha-weighted colour, so a blur softens the edge instead of
@@ -4493,6 +4777,138 @@ mod tests {
         assert_eq!(back.pixel_aspect, (2, 1));
         assert_eq!(back.grid, (8, 8));
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn curves_levels_balance_desaturate_and_posterize() {
+        let fg = Rgba::TRANSPARENT;
+        let one = [Rgba(128, 64, 32, 255)];
+        let out = apply_filter(
+            &one,
+            1,
+            1,
+            Filter::Curves {
+                shadows: 0,
+                midtones: 200,
+                highlights: 255,
+            },
+            fg,
+        );
+        assert_eq!(out[0], Rgba(200, 100, 50, 255));
+
+        let out = apply_filter(
+            &one,
+            1,
+            1,
+            Filter::Levels {
+                in_black: 0,
+                in_white: 255,
+                gamma: 2.0,
+                out_black: 0,
+                out_white: 255,
+            },
+            fg,
+        );
+        assert!((out[0].0 as i32 - 181).abs() <= 1, "{:?}", out[0]);
+
+        let out = apply_filter(
+            &one,
+            1,
+            1,
+            Filter::Balance {
+                r: 100,
+                g: -100,
+                b: 0,
+            },
+            fg,
+        );
+        assert_eq!(out[0], Rgba(255, 0, 32, 255));
+
+        let out = apply_filter(&one, 1, 1, Filter::Desaturate, fg);
+        assert_eq!(out[0], Rgba(79, 79, 79, 255));
+
+        let dark = [Rgba(100, 64, 32, 255)];
+        let out = apply_filter(&dark, 1, 1, Filter::Posterize(2), fg);
+        assert_eq!(out[0], Rgba(0, 0, 0, 255));
+    }
+
+    #[test]
+    fn median_convolve_and_emboss() {
+        let fg = Rgba::TRANSPARENT;
+        let mut cells = [Rgba(0, 0, 0, 255); 9];
+        cells[4] = Rgba(255, 255, 255, 255);
+        let out = apply_filter(&cells, 3, 3, Filter::Median(1), fg);
+        assert_eq!(out[4], Rgba(0, 0, 0, 255), "median rejects the lone white");
+
+        let one = [Rgba(12, 34, 56, 255)];
+        let identity = Filter::Convolve {
+            kernel: [0, 0, 0, 0, 1, 0, 0, 0, 0],
+            divisor: 1.0,
+            bias: 0,
+        };
+        assert_eq!(apply_filter(&one, 1, 1, identity, fg)[0], one[0]);
+
+        let flat = [Rgba(100, 100, 100, 255); 9];
+        let out = apply_filter(&flat, 3, 3, Filter::Emboss, fg);
+        assert_eq!(out[4], Rgba(128, 128, 128, 255), "flat surface is neutral");
+    }
+
+    #[test]
+    fn new_filters_are_selection_aware_and_one_undo_step() {
+        let mut e = Editor::new(3, 1);
+        let (l, f) = (e.active_layer, e.active_frame);
+        e.paint_pixel(0, 0, Rgba::rgb(200, 0, 0));
+        e.paint_pixel(1, 0, Rgba::rgb(0, 200, 0));
+        e.paint_pixel(2, 0, Rgba::rgb(0, 0, 200));
+        e.selection = Some(Selection::rect(1, 0, 1, 1));
+        e.undo.clear();
+        e.filter(Filter::Desaturate);
+        assert_eq!(e.sprite.get(l, f, 0, 0), Rgba::rgb(200, 0, 0));
+        assert_eq!(e.sprite.get(l, f, 1, 0), Rgba::rgb(117, 117, 117));
+        assert_eq!(e.sprite.get(l, f, 2, 0), Rgba::rgb(0, 0, 200));
+        assert_eq!(e.undo.len(), 1, "filter is one undo step");
+        e.undo();
+        assert_eq!(e.sprite.get(l, f, 1, 0), Rgba::rgb(0, 200, 0));
+    }
+
+    #[test]
+    fn filter_parser_covers_new_parameters() {
+        assert_eq!(
+            Filter::parse_args(&["curves", "10", "200", "240"]),
+            Some(Filter::Curves {
+                shadows: 10,
+                midtones: 200,
+                highlights: 240
+            })
+        );
+        assert_eq!(
+            Filter::parse_args(&["levels", "10", "240", "1.5"]),
+            Some(Filter::Levels {
+                in_black: 10,
+                in_white: 240,
+                gamma: 1.5,
+                out_black: 0,
+                out_white: 255
+            })
+        );
+        assert_eq!(
+            Filter::parse_args(&["balance", "20", "-30", "40"]),
+            Some(Filter::Balance {
+                r: 20,
+                g: -30,
+                b: 40
+            })
+        );
+        assert_eq!(
+            Filter::parse_args(&["convolve", "0", "1", "0", "1", "4", "1", "0", "1", "0"]),
+            Some(Filter::Convolve {
+                kernel: [0, 1, 0, 1, 4, 1, 0, 1, 0],
+                divisor: 1.0,
+                bias: 0
+            })
+        );
+        assert_eq!(Filter::parse("median", Some("2")), Some(Filter::Median(2)));
+        assert_eq!(Filter::parse_args(&["emboss"]), Some(Filter::Emboss));
     }
 
     #[test]

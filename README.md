@@ -122,7 +122,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:selop replace\|add\|subtract\|intersect` | how new selections combine |
 | `:sel expand\|contract\|border\|feather <n>` / `:sel invert\|none\|all` | selection shape ops |
 | `:grad linear\|radial` | gradient mode |
-| `:filter <name> [amount]` | invert, brightness, contrast, hue, saturation, outline, blur, sharpen |
+| `:filter <name> [args]` | invert, brightness, contrast, hue, saturation, desaturate, curves, levels, balance, posterize, outline, blur, sharpen, median, convolve, emboss |
 | `:rotate <deg>` / `:scale <sx> [sy]` / `:skew <deg>` | free-transform the selection (or the cel) |
 | `:text <string>` | stamp 8x8 bitmap text at the cursor |
 | `:textobj <string>` | create/edit an editable text object (stored in cel user data) |
@@ -243,7 +243,7 @@ picker, pencil/eraser/bucket/picker/line/rect/ellipse with **filled shapes**,
 **marquee + magic-wand (tolerance, contiguous/global, all-layers) + lasso +
 polygon selection**
 with **add/subtract/intersect**, **expand/contract/border/feather/invert** and
-copy/cut/paste/move, **eight filters**, **free rotate/scale/skew**, **8x8 bitmap
+copy/cut/paste/move, **sixteen filters** (curves, levels, balance, median, convolve, emboss…), **free rotate/scale/skew**, **8x8 bitmap
 text**, **brush size 1-64 + custom masks/spacing + pressure**, **pixel-perfect freehand**, **crop/trim**,
 **per-tool inks + alpha lock**, **design grid + snap**,
 **multi-stop gradients** (presets, alpha, Bayer dither), **symmetry painting**

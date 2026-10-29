@@ -126,7 +126,9 @@ L-shaped corners for the 1 px pencil/eraser.
 - **design grid** (1-64 px, its own tone) with **snap**: the cursor steps one
   cell and every canvas pick rounds down to the cell.
 - **filters** (panel + `:filter`): invert, brightness, contrast, hue,
-  saturation, outline, blur, sharpen — selection-aware, one undo step.
+  saturation, desaturate, curves, levels, colour balance, posterize, outline,
+  blur, sharpen, median, 3×3 convolution (custom kernel/divisor/bias) and
+  emboss — selection-aware, one undo step.
 - **free transform** (panel + `:rotate`/`:scale`/`:skew`): rotate, scale and
   skew the selection (or the cel) about its centre, nearest-neighbour.
 - **crop / trim**: `:crop [x y w h]` (no args = the selection) and `:trim`

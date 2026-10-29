@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **177 tests green** (168 lib + 9 bin)
+- `cargo test` → **181 tests green** (172 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-22 gradient depth** (see batch 59).
+- Last completed batch: **P5-23 filters breadth** (see batch 60).
 
 ## How to resume
 
@@ -346,6 +346,10 @@ Read, in order:
     Bayer 2/4/8 dithering, selection clipping; `:grad preset|stop|stops|clear|
     dither` and toolbar combos. 3 new tests (177 total): interpolation/presets,
     dither level reduction, selection + alpha.
+60. **P5-23 — filters breadth** — curves, levels, colour balance, desaturate,
+    posterize, median, 3×3 convolution (custom kernel/divisor/bias) and emboss;
+    selection-clipped and one undo step. 4 new tests (181 total): colour remaps,
+    median/convolution/emboss, selection + undo, parser coverage.
 
 ## Next step (exact)
 
@@ -354,7 +358,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-23** — filter breadth (first open task), then continue down the P5
+- **P5-24** — transform depth (first open task), then continue down the P5
   roadmap in dependency order.
 
 ## Known limitations (do not forget)

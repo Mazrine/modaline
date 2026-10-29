@@ -127,6 +127,9 @@ thin shells:
   tools; blur radius must keep using `box_blur`. Gradient stops live in
   `gradient_stops` (empty = fg→bg) and must stay sorted; dithering is
   gradient-local (`gradient_dither`) and must not touch conversion settings.
+- Filters are `Filter` values parsed by `parse_args` and applied by
+  `apply_filter`; keep them selection-clipped through `Editor::filter` so each
+  remains one undo step.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not

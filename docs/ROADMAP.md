@@ -277,9 +277,15 @@ met; blocked tasks are marked with the reason.
   `:grad stops`, `:grad clear`, `:grad dither <mode>`; toolbar preset/dither
   combos. 3 new tests (177 total): stop interpolation/presets, dither level
   reduction, selection + alpha. Combos not screenshotted (manual check).
-- [ ] **P5-23 — Filters breadth** (L) — deps: none.
-  Curves, levels, colour balance, desaturate, median, convolution/emboss,
-  outline options; selection-aware, one undo step.
+- [x] **P5-23 — Filters breadth** (L) — deps: none.
+  Landed 2026-10-28. Added curves (3-point LUT), levels (input/output + gamma),
+  colour balance, desaturate, posterize, median, 3×3 convolution with a custom
+  kernel/divisor/bias, and emboss. Every filter stays selection-clipped and is
+  one undo step. `:filter` now takes full arguments
+  (`curves s m h`, `levels in_b in_w gamma [out_b] [out_w]`, `balance r g b`,
+  `median r`, `convolve k0..k8 [div] [bias]`, `posterize n`, `emboss`).
+  4 new tests (181 total): colour remaps, median/convolution/emboss, selection +
+  single undo, and parser coverage.
 - [ ] **P5-24 — Transform depth** (L) — deps: P5-10.
   RotSprite rotation; interactive move/scale/rotate/skew handles with pivot;
   command/panel equivalents stay.
