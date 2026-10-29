@@ -1,1 +1,27 @@
-/target
+# Rust build output
+/target/
+
+# Nix build/develop artifacts
+/result
+/result-*
+.direnv/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and profiling
+*.log
+perf.data*
+flamegraph.svg
+*.profraw
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
