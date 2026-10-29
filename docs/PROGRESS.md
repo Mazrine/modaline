@@ -498,6 +498,13 @@ Read, in order:
   `:reopen` restores the newest in a new tab. Dirty forced closes are never
   recorded. 2 tests (265 total). Xvfb smoke: `Ctrl-W` then `:closed`/`:reopen`
   restored `b.png` as the active tab.
+101. **P6-02 — Lua object API** — `Image` tables (getPixel/setPixel/clear/
+  bounds), `sprite:cel` + `sprite:setCelImage`, `app.selection`
+  (bounds/isEmpty/add/subtract/clear), headless `Dialog` + `app.confirm`/
+  `app.prompt`, and `app.fs.read/write/exists` sandboxed to `:scriptroot` or the
+  open file's folder (absolute/`..`/symlink escapes denied). 3 tests (268
+  total). Xvfb smoke: root, fs write, cel image, selection and a denial all
+  visible in the status line.
 
 ## Next step (exact)
 
@@ -506,11 +513,12 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P6)
 
-P5 is complete; **P6 is open (2/7)** in `docs/ROADMAP.md`:
+P5 is complete; **P6 is open (3/7)** in `docs/ROADMAP.md`:
 
 - ~~**P6-00** — move layer/cel content tool~~ (done 2026-10-29).
 - ~~**P6-01** — reopen closed documents~~ (done 2026-10-29).
-- **P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects (first open task).
+- ~~**P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects~~ (done 2026-10-29).
+- **P6-03** — localization string extraction (first open task).
 - **P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects.
 - **P6-03** — localization string extraction.
 - **P6-04** — incremental dirty compositing.

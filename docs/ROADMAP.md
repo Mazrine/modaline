@@ -735,11 +735,18 @@ Partial or Not supported, so "no unexplained gap" is true again.
   offered back. 2 tests (265 total): stack order/dedup/bound and
   clean-vs-dirty close plus reopen. Xvfb smoke: opened `b.png` in a second tab,
   `Ctrl-W`, `:closed` listed it, `:reopen` restored the tab as active.
-- [ ] **P6-02 — Lua object API coverage** (L) — deps: P5-49, P5-50.
-  Add `Image` (pixel get/set, clear, bounds), `Cel` (layer/frame/image/bounds),
-  `Selection` (bounds/add/subtract), `Dialog` (alert/confirm/text) and a
-  sandboxed `app.fs` read/write limited to an explicit project root. Expand
-  `docs/SCRIPTING.md`; representative Aseprite scripts + denial tests.
+- [x] **P6-02 — Lua object API coverage** (L) — deps: P5-49, P5-50.
+  Landed 2026-10-29. `Image(w,h)` tables (packed pixels) with get/set/clear/
+  bounds; `sprite:cel(layer, frame)` returns layer/frame/bounds/image/isEmpty
+  and `sprite:setCelImage` writes a detached image back; `app.selection` exposes
+  bounds/isEmpty and `add`/`subtract`/`clear` rectangles; `Dialog{...}` with
+  label/entry/check/button plus `app.confirm`/`app.prompt` run headless and
+  return declared defaults; `app.fs.read/write/exists` is confined to
+  `:scriptroot <dir>` or the open file's folder, rejecting absolute paths, `..`
+  and symlink escapes. `docs/SCRIPTING.md` documents the matrix and limits.
+  3 tests (268 total): objects, fs denials, headless dialogs. Xvfb smoke:
+  `:scriptroot`, fs write, `Image`+cel write, selection add, absolute-path
+  denial all reported in the status line.
 - [ ] **P6-03 — Localization string extraction** (M) — deps: P5-56.
   Move status, help-overlay, window and command messages to catalog keys;
   complete `pt-BR`; add a test that the catalog covers every key used by the

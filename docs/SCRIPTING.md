@@ -59,15 +59,33 @@ integration test.
 | Area | Supported | Status / gaps |
 |---|---|---|
 | Lua language | Lua 5.4, base/table/string/math/utf8 | Covered; no io/os/package/debug/dofile/loadfile/require (sandbox) |
-| `app` | `version`, `alert`, `activeSprite`, `activeLayer`, `activeFrame` | Covered (active objects are live views where documented) |
-| `app.pixelColor` | `rgba`, `rgb`, `gray`, `grayA`, `rgbaR/G/B/A` | Covered; color tables (integer packed also accepted by channel getters) |
+| `app` | `version`, `alert`, `activeSprite`, `activeLayer`, `activeFrame` | Covered (active objects are live views where documented) || `app.pixelColor` | `rgba`, `rgb`, `gray`, `grayA`, `rgbaR/G/B/A` | Covered; color tables (integer packed also accepted by channel getters) |
 | `app.transaction(fn)` | Runs the callback and returns its value | Covered (undo is still one script step) |
 | `app.command` | `Undo`, `Redo`, `NewLayer`, `NewFrame` | Covered; broader command set missing |
 | `Sprite` | width/height/frameCount/layerCount/activeLayer/activeFrame | Covered (read-only) |
-| `Sprite` methods | `resize`, `newLayer`, `newFrame`, `getPixel`, `setPixel`, `save`, `saveAs`, `flatten`, `crop`, `newTag`, `setFrameDuration`, `frameDuration` | Partial: `newLayer`/`newFrame` return a 1-based index, not Aseprite userdata; pixel methods are a vixel extension to the sprite |
+| `Sprite` methods | `resize`, `newLayer`, `newFrame`, `getPixel`, `setPixel`, `save`, `saveAs`, `flatten`, `crop`, `newTag`, `setFrameDuration`, `frameDuration`, `cel`, `setCelImage` | Partial: `newLayer`/`newFrame` return a 1-based index, not Aseprite userdata; pixel methods are a vixel extension to the sprite |
 | `Layer` | name/visible/opacity/editable/isBackground/isReference | Partial: no `cel`, `newCel`, groups or blend setters |
-| `Image`/`Cel`/`Selection`/`Slice`/`Tileset` objects | — | Missing |
-| Dialog, events, `app.fs`, plugin commands | — | Missing (sandbox/product choice) |
+| `Image` | `Image(w,h)`, `getPixel`, `setPixel`, `clear([color])`, `width`, `height`, `bounds` | Covered (detached pixel buffer) |
+| `Cel` | `layer`, `frame`, `bounds`, `image`, `isEmpty` via `sprite:cel(l, f)` | Covered as a snapshot: `image` is a copy; write back with `sprite:setCelImage(l, f, img)` |
+| `Selection` | `app.selection.bounds`, `.isEmpty`, `:add{...}`, `:subtract{...}`, `:clear()` | Covered (axis-aligned rectangles over the sprite mask) |
+| `Dialog` | `Dialog{title=...}` with `:label/:entry/:check/:button/:show`; `app.confirm`, `app.prompt` | Covered headless: no window opens; `show` returns declared entry/check defaults, confirm is always false, prompt echoes its default |
+| `app.fs` | `read`, `write`, `exists` under the project root | Covered sandbox: root is `:scriptroot <dir>` or the open file's folder; absolute paths, `..` and symlink escapes are rejected; no root denies all access |
+
+## File access and dialogs (P6-02)
+
+`app.fs` is the only filesystem surface. The root is `:scriptroot <dir>` when
+set, otherwise the folder of the open document; a document with no path (a new
+sprite) and no explicit root denies every call. Paths must be relative and stay
+inside the root: absolute paths, `..` components and symlinks that resolve
+outside it are rejected. `:scriptroot clear` removes an explicit root (the open
+document's folder still applies).
+
+Scripts execute synchronously on the UI thread, so dialogs are headless:
+`app.alert` prints, `app.confirm` records the message and returns `false`,
+`app.prompt` records the message and returns its default, and
+`Dialog{...}:show()` returns the `:entry`/`:check` defaults while recording the
+title. A script that needs a real answer must be driven from a configured value,
+not from a modal.
 
 ## Extensions (P5-51)
 

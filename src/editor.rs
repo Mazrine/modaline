@@ -504,6 +504,9 @@ pub struct Editor {
     pub closed: Vec<PathBuf>,
     /// Path `:reopen` wants the app to open in a new tab.
     pub reopen_request: Option<PathBuf>,
+    /// Filesystem root scripts may read/write through `app.fs`; `None` falls
+    /// back to the open document's directory.
+    pub script_root: Option<PathBuf>,
     /// Set when the opened file is a another tool fix bundle: the part the strokes
     /// are for, from the sidecar. Also marks the file as one whose `ref` layer
     /// must survive a save.
@@ -632,6 +635,7 @@ impl Editor {
             recent: Vec::new(),
             closed: Vec::new(),
             reopen_request: None,
+            script_root: None,
             bundle_stage: None,
             palette_lock: false,
             dither: DitherMode::None,
@@ -2319,6 +2323,20 @@ impl Editor {
         self.active_frame
     }
 
+    /// Union (`add`) or subtract an axis-aligned rectangle from the current
+    /// selection mask. Used by `app.selection` in scripts.
+    pub fn script_selection_rect(&mut self, x: i32, y: i32, w: u32, h: u32, add: bool) {
+        let sw = self.sprite.width as i32;
+        let sh = self.sprite.height as i32;
+        let mut grid = self.selection_grid();
+        for yy in y.max(0)..(y + h as i32).min(sh) {
+            for xx in x.max(0)..(x + w as i32).min(sw) {
+                grid[(yy * sw + xx) as usize] = add;
+            }
+        }
+        self.grid_to_selection(&grid);
+    }
+
     pub fn pick_color(&mut self, x: u32, y: u32) {
         let comp = self.sprite.composite(self.active_frame);
         let c = comp[(y * self.sprite.width + x) as usize];
@@ -3477,7 +3495,7 @@ impl Editor {
     }
 
     /// Store a sprite-sized grid back as the tightest bbox selection.
-    fn grid_to_selection(&mut self, g: &[bool]) {
+    pub(crate) fn grid_to_selection(&mut self, g: &[bool]) {
         let (w, h) = (self.sprite.width, self.sprite.height);
         let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0, 0);
         for y in 0..h {

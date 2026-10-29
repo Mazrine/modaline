@@ -3637,6 +3637,7 @@ const HELP: &[&str] = &[
     "  :importatlas sheet.png [meta.json|xml]   :importseq <dir>   (atlas/sequence)",
     "  :recent [n]   (last 10 files; drop a file on the window to open it)",
     "  :closed   :reopen   (list/restore cleanly closed documents)",
+    "  :scriptroot <dir>|clear   (app.fs root; default is the open file's folder)",
 ];
 
 #[cfg(test)]

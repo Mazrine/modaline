@@ -1816,6 +1816,31 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             },
             None => editor.msg = "usage: :lua <code>".into(),
         },
+        "scriptroot" => match arg {
+            Some("clear" | "none" | "off") => {
+                editor.script_root = None;
+                editor.msg = "script root cleared (app.fs denied)".into();
+            }
+            Some(dir) => {
+                let path = PathBuf::from(dir);
+                if path.is_dir() {
+                    editor.script_root = Some(path.canonicalize().unwrap_or(path));
+                    editor.msg = format!(
+                        "script root: {}",
+                        editor.script_root.as_ref().unwrap().display()
+                    );
+                } else {
+                    editor.msg = format!("scriptroot: {dir} is not a directory");
+                }
+            }
+            None => {
+                editor.msg = match &editor.script_root {
+                    Some(p) => format!("script root: {}", p.display()),
+                    None => "script root: none (app.fs denied; default is the open file's folder)"
+                        .into(),
+                }
+            }
+        },
         "bgcolor" | "backgroundcolor" => match arg {
             Some("clear" | "none") => {
                 editor.set_background_color(None);

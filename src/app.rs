@@ -581,7 +581,10 @@ mod tests {
             editor.push_closed(PathBuf::from(format!("/tmp/d{i}.vpx")));
         }
         assert_eq!(editor.closed.len(), 10, "bounded");
-        assert_eq!(editor.closed.last().unwrap(), &PathBuf::from("/tmp/d11.vpx"));
+        assert_eq!(
+            editor.closed.last().unwrap(),
+            &PathBuf::from("/tmp/d11.vpx")
+        );
         editor.push_closed(PathBuf::from("/tmp/d5.vpx"));
         assert_eq!(editor.closed.last().unwrap(), &PathBuf::from("/tmp/d5.vpx"));
         assert_eq!(

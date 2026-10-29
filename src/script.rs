@@ -305,7 +305,7 @@ fn execute(host: HostRef<'_>, source: &str, name: &str) -> Result<(), mlua::Erro
         )?;
 
         sprite.set_metatable(Some(sprite_meta))?;
-        app.set("activeSprite", sprite)?;
+        app.set("activeSprite", sprite.clone())?;
 
         let pixel_color = lua.create_table()?;
         pixel_color.set(
@@ -495,6 +495,286 @@ fn execute(host: HostRef<'_>, source: &str, name: &str) -> Result<(), mlua::Erro
         layer.set_metatable(Some(layer_meta))?;
         app.set("activeLayer", layer)?;
 
+        // ---- Image / Cel ----
+
+        lua.globals().set(
+            "Image",
+            scope.create_function(|lua, (w, h): (u32, u32)| {
+                if w == 0 || h == 0 || w > 4096 || h > 4096 {
+                    return Err(mlua::Error::RuntimeError(
+                        "Image dimensions must be 1..4096".into(),
+                    ));
+                }
+                new_image(lua, w, h)
+            })?,
+        )?;
+
+        let cel_host = host.clone();
+        sprite.raw_set(
+            "cel",
+            scope.create_function_mut(
+                move |lua, (_t, layer, frame): (Table, Option<i64>, Option<i64>)| {
+                    let (l, f, cel) = {
+                        let h = cel_host.borrow();
+                        let l = layer
+                            .map(|v| (v - 1).max(0) as usize)
+                            .unwrap_or(h.editor.active_layer);
+                        let f = frame
+                            .map(|v| (v - 1).max(0) as usize)
+                            .unwrap_or(h.editor.active_frame);
+                        if l >= h.editor.sprite.layers.len() || f >= h.editor.sprite.frames.len() {
+                            return Err(mlua::Error::RuntimeError(
+                                "cel index is out of range".into(),
+                            ));
+                        }
+                        (l, f, h.editor.sprite.cels[l][f].clone())
+                    };
+                    let img = new_image(lua, cel.w, cel.h)?;
+                    let pixels: Table = img.get("_pixels")?;
+                    for y in 0..cel.h {
+                        for x in 0..cel.w {
+                            pixels.set(
+                                (y * cel.w + x + 1) as i64,
+                                pack_color(cel.get(cel.x + x as i32, cel.y + y as i32)),
+                            )?;
+                        }
+                    }
+                    let t = lua.create_table()?;
+                    t.set("layer", l as i64 + 1)?;
+                    t.set("frame", f as i64 + 1)?;
+                    let bounds = lua.create_table()?;
+                    bounds.set("x", cel.x)?;
+                    bounds.set("y", cel.y)?;
+                    bounds.set("width", cel.w)?;
+                    bounds.set("height", cel.h)?;
+                    t.set("bounds", bounds)?;
+                    t.set("image", img)?;
+                    t.set("isEmpty", cel.pixels.iter().all(|p| p.3 == 0))?;
+                    Ok(t)
+                },
+            )?,
+        )?;
+
+        let cel_set_host = host.clone();
+        sprite.raw_set(
+            "setCelImage",
+            scope.create_function_mut(
+                move |_, (_t, layer, frame, img): (Table, i64, i64, Table)| {
+                    let (w, h) = image_dims(&img)?;
+                    let pixels: Table = img.get("_pixels")?;
+                    let mut host = cel_set_host.borrow_mut();
+                    let l =
+                        (layer - 1).clamp(0, host.editor.sprite.layers.len() as i64 - 1) as usize;
+                    let f =
+                        (frame - 1).clamp(0, host.editor.sprite.frames.len() as i64 - 1) as usize;
+                    for y in 0..h {
+                        for x in 0..w {
+                            let v: Option<i64> = pixels.get(y * w + x + 1)?;
+                            host.editor.sprite.set(
+                                l,
+                                f,
+                                x as u32,
+                                y as u32,
+                                unpack_color(v.unwrap_or(0)),
+                            );
+                        }
+                    }
+                    host.editor.touch();
+                    host.editor.dirty = true;
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // ---- Selection ----
+
+        let selection_methods = lua.create_table()?;
+        let rect_fn = |add: bool| {
+            let h = host.clone();
+            move |_lua: &Lua, (_t, r): (Table, Table)| {
+                let x: i64 = r.get("x").unwrap_or(0);
+                let y: i64 = r.get("y").unwrap_or(0);
+                let w: u32 = r.get::<Option<u32>>("width")?.unwrap_or(0);
+                let ht: u32 = r.get::<Option<u32>>("height")?.unwrap_or(0);
+                h.borrow_mut()
+                    .editor
+                    .script_selection_rect(x as i32, y as i32, w, ht, add);
+                Ok(())
+            }
+        };
+        selection_methods.set("add", scope.create_function_mut(rect_fn(true))?)?;
+        selection_methods.set("subtract", scope.create_function_mut(rect_fn(false))?)?;
+        let sel_clear_host = host.clone();
+        selection_methods.set(
+            "clear",
+            scope.create_function_mut(move |_, _t: Table| {
+                sel_clear_host.borrow_mut().editor.clear_selection();
+                Ok(())
+            })?,
+        )?;
+        let selection = lua.create_table()?;
+        let selection_meta = lua.create_table()?;
+        let sel_methods_for_index = selection_methods.clone();
+        let sel_index_host = host.clone();
+        selection_meta.set(
+            "__index",
+            scope.create_function_mut(move |lua, (_t, key): (Table, String)| {
+                match key.as_str() {
+                    "isEmpty" => Ok(Value::Boolean(
+                        sel_index_host.borrow().editor.selection.is_none(),
+                    )),
+                    "bounds" => {
+                        let h = sel_index_host.borrow();
+                        let rect = h.editor.current_selection();
+                        let t = lua.create_table()?;
+                        let (x, y, w, ht) = match rect {
+                            Some(s) => (s.x, s.y, s.w, s.h),
+                            None => (0, 0, 0, 0),
+                        };
+                        t.set("x", x)?;
+                        t.set("y", y)?;
+                        t.set("width", w)?;
+                        t.set("height", ht)?;
+                        t.set("isEmpty", w == 0 || ht == 0)?;
+                        Ok(Value::Table(t))
+                    }
+                    _ => sel_methods_for_index.get::<Value>(key),
+                }
+            })?,
+        )?;
+        selection.set_metatable(Some(selection_meta))?;
+        app.set("selection", selection)?;
+
+        // ---- Headless dialogs ----
+        //
+        // Scripts run synchronously on the UI thread, so no modal window is
+        // opened. `confirm`/`prompt` return safe defaults and every dialog
+        // records its title in the output; `Dialog{...}:show()` returns the
+        // defaults declared through `:entry`/`:check`.
+
+        let confirm_host = host.clone();
+        app.set(
+            "confirm",
+            scope.create_function_mut(move |_, msg: String| {
+                confirm_host
+                    .borrow_mut()
+                    .out
+                    .push(format!("confirm: {msg}"));
+                Ok(false)
+            })?,
+        )?;
+        let prompt_host = host.clone();
+        app.set(
+            "prompt",
+            scope.create_function_mut(move |_, (msg, default): (String, Option<String>)| {
+                prompt_host.borrow_mut().out.push(format!("prompt: {msg}"));
+                Ok(default.unwrap_or_default())
+            })?,
+        )?;
+
+        let show_host = host.clone();
+        let show =
+            scope.create_function_mut(move |lua, (dialog, _opts): (Table, Option<Table>)| {
+                let title: String = dialog.get("title").unwrap_or_default();
+                let fields: Table = dialog.get("_fields")?;
+                let out = lua.create_table()?;
+                for pair in fields.pairs::<Value, Value>() {
+                    let (k, v) = pair?;
+                    out.set(k, v)?;
+                }
+                if !title.is_empty() {
+                    show_host.borrow_mut().out.push(format!("dialog: {title}"));
+                }
+                Ok(out)
+            })?;
+        let dialog_ctor = {
+            let show = show.clone();
+            scope.create_function(move |lua, opts: Option<Table>| {
+                let dialog = lua.create_table()?;
+                let title: String = match &opts {
+                    Some(t) => t.get::<Option<String>>("title")?.unwrap_or_default(),
+                    None => String::new(),
+                };
+                dialog.set("title", title)?;
+                dialog.set("_fields", lua.create_table()?)?;
+                dialog.set("show", show.clone())?;
+                dialog.set(
+                    "entry",
+                    lua.create_function(|_, (d, o): (Table, Table)| {
+                        let id: String = o.get("id")?;
+                        let text: String = o.get::<Option<String>>("text")?.unwrap_or_default();
+                        let fields: Table = d.get("_fields")?;
+                        fields.set(id, text)?;
+                        Ok(())
+                    })?,
+                )?;
+                dialog.set(
+                    "check",
+                    lua.create_function(|_, (d, o): (Table, Table)| {
+                        let id: String = o.get("id")?;
+                        let selected: bool = o.get::<Option<bool>>("selected")?.unwrap_or(false);
+                        let fields: Table = d.get("_fields")?;
+                        fields.set(id, selected)?;
+                        Ok(())
+                    })?,
+                )?;
+                dialog.set(
+                    "label",
+                    lua.create_function(|_, (_d, _o): (Table, Table)| Ok(()))?,
+                )?;
+                dialog.set(
+                    "button",
+                    lua.create_function(|_, (_d, _o): (Table, Table)| Ok(()))?,
+                )?;
+                Ok(dialog)
+            })?
+        };
+        lua.globals().set("Dialog", dialog_ctor)?;
+
+        // ---- app.fs (sandboxed) ----
+
+        let fs = lua.create_table()?;
+        let fs_read_host = host.clone();
+        fs.set(
+            "read",
+            scope.create_function_mut(move |_, path: String| {
+                let root = script_root(fs_read_host.borrow().editor)
+                    .map_err(mlua::Error::RuntimeError)?;
+                let full = fs_join(&root, &path).map_err(mlua::Error::RuntimeError)?;
+                std::fs::read_to_string(&full).map_err(|e| {
+                    mlua::Error::RuntimeError(format!("app.fs.read {}: {e}", full.display()))
+                })
+            })?,
+        )?;
+        let fs_write_host = host.clone();
+        fs.set(
+            "write",
+            scope.create_function_mut(move |_, (path, data): (String, String)| {
+                let root = script_root(fs_write_host.borrow().editor)
+                    .map_err(mlua::Error::RuntimeError)?;
+                let full = fs_join(&root, &path).map_err(mlua::Error::RuntimeError)?;
+                if let Some(dir) = full.parent() {
+                    std::fs::create_dir_all(dir).map_err(|e| {
+                        mlua::Error::RuntimeError(format!("app.fs.write {}: {e}", dir.display()))
+                    })?;
+                }
+                std::fs::write(&full, data).map_err(|e| {
+                    mlua::Error::RuntimeError(format!("app.fs.write {}: {e}", full.display()))
+                })
+            })?,
+        )?;
+        let fs_exists_host = host.clone();
+        fs.set(
+            "exists",
+            scope.create_function_mut(move |_, path: String| {
+                let root = script_root(fs_exists_host.borrow().editor)
+                    .map_err(mlua::Error::RuntimeError)?;
+                let full = fs_join(&root, &path).map_err(mlua::Error::RuntimeError)?;
+                Ok(full.exists())
+            })?,
+        )?;
+        app.set("fs", fs)?;
+
         lua.globals().set("app", app)?;
         lua.load(source).set_name(name).exec()?;
         Ok(())
@@ -531,6 +811,145 @@ fn parse_color(value: Value) -> Result<Rgba, mlua::Error> {
             "color must be a table {r,g,b,a}, #rrggbb, or nil".into(),
         )),
     }
+}
+
+// ---- Image objects ----
+//
+// An `Image` is a plain Lua table holding packed RGBA integers, so it can be
+// passed between objects without any Rust-side registry. `Image(w, h)` builds
+// a detached one; `sprite:cel(...).image` is a copy (see `setCelImage`).
+
+fn pack_color(c: Rgba) -> i64 {
+    ((c.0 as i64) << 24) | ((c.1 as i64) << 16) | ((c.2 as i64) << 8) | c.3 as i64
+}
+
+fn unpack_color(v: i64) -> Rgba {
+    Rgba(
+        ((v >> 24) & 0xff) as u8,
+        ((v >> 16) & 0xff) as u8,
+        ((v >> 8) & 0xff) as u8,
+        (v & 0xff) as u8,
+    )
+}
+
+fn new_image(lua: &Lua, w: u32, h: u32) -> Result<Table, mlua::Error> {
+    let img = lua.create_table()?;
+    img.set("width", w)?;
+    img.set("height", h)?;
+    let bounds = lua.create_table()?;
+    bounds.set("x", 0)?;
+    bounds.set("y", 0)?;
+    bounds.set("width", w)?;
+    bounds.set("height", h)?;
+    img.set("bounds", bounds)?;
+    img.set("_pixels", lua.create_table()?)?;
+    let meta = lua.create_table()?;
+    meta.set("__index", image_methods(lua)?)?;
+    img.set_metatable(Some(meta))?;
+    Ok(img)
+}
+
+fn image_methods(lua: &Lua) -> Result<Table, mlua::Error> {
+    let methods = lua.create_table()?;
+    methods.set(
+        "getPixel",
+        lua.create_function(|lua, (img, x, y): (Table, i64, i64)| {
+            let w: i64 = img.get("width")?;
+            let h: i64 = img.get("height")?;
+            if x < 0 || y < 0 || x >= w || y >= h {
+                return color_table(lua, Rgba::TRANSPARENT);
+            }
+            let pixels: Table = img.get("_pixels")?;
+            let v: Option<i64> = pixels.get(y * w + x + 1)?;
+            color_table(lua, unpack_color(v.unwrap_or(0)))
+        })?,
+    )?;
+    methods.set(
+        "setPixel",
+        lua.create_function(|_, (img, x, y, color): (Table, i64, i64, Value)| {
+            let w: i64 = img.get("width")?;
+            let h: i64 = img.get("height")?;
+            if x < 0 || y < 0 || x >= w || y >= h {
+                return Err(mlua::Error::RuntimeError(format!(
+                    "image pixel ({x},{y}) is out of bounds"
+                )));
+            }
+            let pixels: Table = img.get("_pixels")?;
+            pixels.set(y * w + x + 1, pack_color(parse_color(color)?))?;
+            Ok(())
+        })?,
+    )?;
+    methods.set(
+        "clear",
+        lua.create_function(|_, (img, color): (Table, Option<Value>)| {
+            let w: i64 = img.get("width")?;
+            let h: i64 = img.get("height")?;
+            let value = match color {
+                Some(c) => pack_color(parse_color(c)?),
+                None => 0,
+            };
+            let pixels: Table = img.get("_pixels")?;
+            for i in 1..=(w * h) {
+                pixels.set(i, value)?;
+            }
+            Ok(())
+        })?,
+    )?;
+    Ok(methods)
+}
+
+fn image_dims(img: &Table) -> Result<(i64, i64), mlua::Error> {
+    Ok((img.get("width")?, img.get("height")?))
+}
+
+// ---- app.fs sandbox ----
+
+/// The directory scripts may touch: an explicit `:scriptroot`, else the folder
+/// of the open document. No root means no filesystem access at all.
+fn script_root(editor: &Editor) -> Result<std::path::PathBuf, String> {
+    editor
+        .script_root
+        .clone()
+        .or_else(|| {
+            editor
+                .path
+                .as_ref()
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        })
+        .ok_or_else(|| "no project root (use :scriptroot <dir> or open a file)".into())
+}
+
+/// Join a relative path under `root`, resolving every existing component so a
+/// symlink cannot escape the sandbox.
+fn fs_join(root: &std::path::Path, rel: &str) -> Result<std::path::PathBuf, String> {
+    use std::path::Component;
+    let root = root
+        .canonicalize()
+        .map_err(|e| format!("project root {}: {e}", root.display()))?;
+    let rel = std::path::Path::new(rel);
+    if rel.is_absolute() {
+        return Err("absolute paths are not allowed".into());
+    }
+    let mut cur = root.clone();
+    for comp in rel.components() {
+        match comp {
+            Component::Normal(part) => {
+                cur.push(part);
+                if cur.exists() {
+                    let real = cur
+                        .canonicalize()
+                        .map_err(|e| format!("{}: {e}", cur.display()))?;
+                    if !real.starts_with(&root) {
+                        return Err("path escapes the project root".into());
+                    }
+                    cur = real;
+                }
+            }
+            Component::CurDir => {}
+            _ => return Err("path escapes the project root".into()),
+        }
+    }
+    Ok(cur)
 }
 
 #[cfg(test)]
@@ -655,6 +1074,105 @@ mod tests {
         assert_eq!(e.sprite.frames[1].duration_ms, 120);
         assert_eq!(e.sprite.tags[0].name, "walk");
         assert_eq!((e.sprite.width, e.sprite.height), (2, 2));
+    }
+
+    #[test]
+    fn image_cel_and_selection_objects_work() {
+        let mut e = Editor::new(4, 4);
+        run(
+            &mut e,
+            r#"
+            local img = Image(2, 2)
+            img:setPixel(0, 0, {r=9, g=8, b=7, a=255})
+            local c = img:getPixel(0, 0)
+            assert(c.r == 9 and c.g == 8 and c.b == 7)
+            assert(img.width == 2 and img.height == 2)
+            assert(img.bounds.width == 2 and img.bounds.x == 0)
+            img:clear()
+            assert(img:getPixel(0, 0).a == 0)
+            img:setPixel(1, 1, {r=1, g=2, b=3, a=255})
+
+            local s = app.activeSprite
+            s:setCelImage(1, 1, img)
+            local cel = s:cel(1, 1)
+            assert(cel.layer == 1 and cel.frame == 1)
+            assert(cel.image:getPixel(1, 1).r == 1)
+            assert(cel.bounds.width >= 2 and cel.bounds.height >= 2)
+
+            app.selection:add{ x=1, y=1, width=2, height=1 }
+            assert(not app.selection.isEmpty)
+            local b = app.selection.bounds
+            assert(b.x == 1 and b.y == 1 and b.width == 2 and b.height == 1)
+            app.selection:subtract{ x=1, y=1, width=1, height=1 }
+            b = app.selection.bounds
+            assert(b.x == 2 and b.width == 1)
+            app.selection:clear()
+            assert(app.selection.isEmpty)
+            "#,
+            "objects.lua",
+        )
+        .unwrap();
+        assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::rgb(1, 2, 3));
+        assert!(e.selection.is_none());
+    }
+
+    #[test]
+    fn app_fs_is_sandboxed_to_the_project_root() {
+        let dir = std::env::temp_dir().join(format!("vixel-fs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut e = Editor::new(2, 2);
+        e.script_root = Some(dir.clone());
+        let out = run(
+            &mut e,
+            r#"
+            app.fs.write("sub/notes.txt", "hello")
+            assert(app.fs.read("sub/notes.txt") == "hello")
+            assert(app.fs.exists("sub/notes.txt"))
+            assert(not app.fs.exists("missing.txt"))
+            "#,
+            "fs.lua",
+        )
+        .unwrap();
+        assert!(out.is_empty());
+        assert_eq!(
+            std::fs::read_to_string(dir.join("sub/notes.txt")).unwrap(),
+            "hello"
+        );
+
+        let escape = run(&mut e, r#"app.fs.read("../outside.txt")"#, "fs.lua").unwrap_err();
+        assert!(escape.contains("escapes"), "{escape}");
+        let absolute = run(&mut e, r#"app.fs.read("/etc/passwd")"#, "fs.lua").unwrap_err();
+        assert!(absolute.contains("absolute"), "{absolute}");
+
+        // Without an explicit root or an open document there is no access.
+        let mut fresh = Editor::new(2, 2);
+        let denied = run(&mut fresh, r#"app.fs.exists("x")"#, "fs.lua").unwrap_err();
+        assert!(denied.contains("no project root"), "{denied}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dialogs_are_headless_and_return_declared_defaults() {
+        let mut e = Editor::new(2, 2);
+        let out = run(
+            &mut e,
+            r#"
+            local d = Dialog{ title = "Hi" }
+            d:label{ text = "x" }
+            d:entry{ id = "name", text = "bob" }
+            d:check{ id = "ok", selected = true }
+            d:button{ text = "OK" }
+            local r = d:show{ wait = true }
+            assert(r.name == "bob" and r.ok == true)
+            assert(app.confirm("sure?") == false)
+            assert(app.prompt("name?", "x") == "x")
+            "#,
+            "dialog.lua",
+        )
+        .unwrap();
+        assert!(out.contains("dialog: Hi"), "{out}");
+        assert!(out.contains("confirm: sure?"), "{out}");
+        assert!(out.contains("prompt: name?"), "{out}");
     }
 
     #[test]
