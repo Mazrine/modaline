@@ -144,7 +144,11 @@ L-shaped corners for the 1 px pencil/eraser.
   document palette with an ordered Bayer matrix or Floyd–Steinberg error
   diffusion; `:mode indexed` uses the last choice. Gradients reuse the engine.
 - **colour profile**: sRGB or linear light. Converting rewrites every pixel and
-  the palette together with the real transfer function (`:profile`).
+  the palette together with the real transfer function (`:profile srgb|linear`).
+  The `.ase` 0x2007 chunk is read and written: `:profile` shows it, `:profile
+  icc <file>` embeds ICC bytes, `gamma <g>` sets fixed gamma and `clear` drops
+  it. Saving without an imported profile writes sRGB (linear writes fixed gamma
+  1.0); ICC pixels load as-is in sRGB.
 
 ## Undo/redo
 
@@ -167,7 +171,7 @@ L-shaped corners for the 1 px pencil/eraser.
     automatically chosen **lossless** depth: grayscale when every pixel is
     gray, indexed when the sprite uses <= 255 colors, else 32-bit RGBA. The
     pixel ratio is written to and read from the header. Unknown chunks
-    (slices, user data, ICC, external files, ...) are retained verbatim with
+    (slices, user data, external files, ...) are retained verbatim with
     their frame and anchor, and frame chunk counts are written, so an
     open→save keeps data this build does not interpret yet.
     Layer masks are `.vpx`-only (the `.ase` format has no per-layer mask);
@@ -237,7 +241,8 @@ middle-drag = pan.
 `pal sort [rgb|luma|hue]` · `pal name <i> <name>` ·
 `mode auto|rgba|grayscale|indexed` · `dither none|bayer2|bayer4|bayer8|floyd` ·
 `aspect <x> <y>` · `sgrid [x y] <w> <h>` ·
-`slices <dir> [cols rows]` · `export <file> [scale]` · `profile srgb|linear` ·
+`slices <dir> [cols rows]` · `export <file> [scale]` ·
+`profile [srgb|linear|icc <file>|gamma <g>|clear]` ·
 `renderer glow|wgpu` ·
 `ops <file.json>` · `recover [file]` · `help`.
 

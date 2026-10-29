@@ -14,7 +14,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::color::Rgba;
 use crate::sprite::{
-    BlendMode, Cel, ChunkAnchor, Frame, Layer, PlayDirection, RawChunk, Sprite, Tag,
+    AseProfile, BlendMode, Cel, ChunkAnchor, Frame, Layer, PlayDirection, RawChunk, Sprite, Tag,
 };
 
 const MAGIC: u16 = 0xA5E0;
@@ -187,6 +187,33 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
 
     emit_raw(&mut body, &mut count, ChunkAnchor::FrameStart);
     if frame == 0 {
+        // Aseprite always writes a profile chunk. An imported one wins; else
+        // describe the working space (linear sRGB is fixed gamma 1.0).
+        let fallback;
+        let profile = match &s.ase_profile {
+            Some(p) => p,
+            None => {
+                fallback = match s.color_profile {
+                    crate::sprite::ColorProfile::Srgb => AseProfile {
+                        kind: 1,
+                        flags: 0,
+                        gamma: 0.0,
+                        icc: Vec::new(),
+                    },
+                    crate::sprite::ColorProfile::Linear => AseProfile {
+                        kind: 1,
+                        flags: 1,
+                        gamma: 1.0,
+                        icc: Vec::new(),
+                    },
+                };
+                &fallback
+            }
+        };
+        write_color_profile(&mut body, profile);
+        count += 1;
+    }
+    if frame == 0 {
         if let OutDepth::Indexed { palette, .. } = depth {
             // Names describe the document palette; an auto-generated palette
             // has its own order and no names.
@@ -246,6 +273,20 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
     let size = f.len() as u32;
     f[0..4].copy_from_slice(&size.to_le_bytes());
     out.extend_from_slice(&f);
+}
+
+fn write_color_profile(out: &mut Vec<u8>, profile: &AseProfile) {
+    let mut b = Vec::new();
+    b.extend_from_slice(&profile.kind.to_le_bytes());
+    b.extend_from_slice(&profile.flags.to_le_bytes());
+    let gamma = (profile.gamma.max(0.0) * 65536.0).round() as u32;
+    b.extend_from_slice(&gamma.to_le_bytes());
+    b.extend_from_slice(&[0u8; 8]);
+    if profile.kind == 2 {
+        b.extend_from_slice(&(profile.icc.len() as u32).to_le_bytes());
+        b.extend_from_slice(&profile.icc);
+    }
+    write_chunk(out, CHUNK_PROFILE, &b);
 }
 
 fn write_palette_chunk(out: &mut Vec<u8>, palette: &[Rgba], names: &[String]) {
@@ -406,7 +447,31 @@ fn blend_word(b: BlendMode) -> u16 {
 
 // ---- import ----
 
+const CHUNK_PROFILE: u16 = 0x2007;
 const CHUNK_TILESET: u16 = 0x2023;
+
+fn parse_color_profile(body: &[u8]) -> Option<AseProfile> {
+    if body.len() < 16 {
+        return None;
+    }
+    let kind = u16_at(body, 0);
+    if kind > 2 {
+        return None;
+    }
+    let flags = u16_at(body, 2);
+    let gamma = u32_at(body, 4) as f32 / 65536.0;
+    let mut icc = Vec::new();
+    if kind == 2 {
+        let len = u32_at(body, 16) as usize;
+        icc = body.get(20..20 + len).unwrap_or(&[]).to_vec();
+    }
+    Some(AseProfile {
+        kind,
+        flags,
+        gamma,
+        icc,
+    })
+}
 
 struct Tileset {
     num_tiles: u32,
@@ -435,6 +500,7 @@ struct Import {
     frames: usize,
     palette: Vec<Rgba>,
     palette_names: Vec<String>,
+    ase_profile: Option<AseProfile>,
     transparent_index: u8,
     /// `[layer][frame]`; `None` means an empty cel.
     cels: Vec<Vec<Option<Cel>>>,
@@ -644,6 +710,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         // padded palette; the transparent index overrides its own slot.
         palette: vec![Rgba(0, 0, 0, 255); 256],
         palette_names: vec![String::new(); 256],
+        ase_profile: None,
         transparent_index: data[28],
         cels: Vec::new(),
         layer_tilesets: Vec::new(),
@@ -707,6 +774,15 @@ pub fn load(path: &Path) -> Result<Sprite> {
                     )?);
                     anchor = ChunkAnchor::Tileset(ti);
                 }
+                CHUNK_PROFILE => match parse_color_profile(body) {
+                    Some(profile) => im.ase_profile = Some(profile),
+                    None => im.raw_chunks.push(RawChunk {
+                        frame,
+                        kind: chunk_type,
+                        body: body.to_vec(),
+                        after: anchor,
+                    }),
+                },
                 CHUNK_PALETTE => {
                     parse_palette_new(body, &mut im.palette, &mut im.palette_names)?;
                     anchor = ChunkAnchor::Palette;
@@ -780,6 +856,14 @@ pub fn load(path: &Path) -> Result<Sprite> {
         *slot = Rgba::TRANSPARENT;
     }
 
+    // Linear sRGB is sRGB with fixed gamma 1.0; an embedded ICC cannot be
+    // interpreted here, so those pixels stay in the sRGB working space as-is.
+    let color_profile = match &im.ase_profile {
+        Some(p) if p.kind == 1 && p.flags & 1 != 0 && (p.gamma - 1.0).abs() < 0.001 => {
+            crate::sprite::ColorProfile::Linear
+        }
+        _ => crate::sprite::ColorProfile::Srgb,
+    };
     let mut sprite = Sprite {
         width,
         height,
@@ -798,9 +882,8 @@ pub fn load(path: &Path) -> Result<Sprite> {
         pixel_aspect: pixel_aspect.unwrap_or((1, 1)),
         grid,
         grid_origin,
-        // Aseprite files carry an optional ICC/gamma chunk; this build reads
-        // the pixels as-is, which is sRGB for anything Aseprite writes.
-        color_profile: crate::sprite::ColorProfile::Srgb,
+        color_profile,
+        ase_profile: im.ase_profile,
         raw_chunks: im.raw_chunks,
     };
     sprite.normalize_levels();
@@ -1091,6 +1174,78 @@ mod tests {
             );
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn color_profile_chunk_round_trips() {
+        let mut s = Sprite::new(1, 1);
+        s.ase_profile = Some(AseProfile {
+            kind: 2,
+            flags: 0,
+            gamma: 1.0,
+            icc: vec![0, 1, 2, 3, 4, 5],
+        });
+        let path = tmp("vixel_ase_icc.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let body = walk_chunks(&data)
+            .into_iter()
+            .find(|(_, k, _)| *k == CHUNK_PROFILE)
+            .expect("profile chunk")
+            .2;
+        assert_eq!(u16_at(&body, 0), 2, "ICC type");
+        assert_eq!(u16_at(&body, 2), 0, "flags");
+        assert_eq!(u32_at(&body, 4), 65536, "gamma 1.0");
+        assert_eq!(u32_at(&body, 16), 6, "ICC length");
+        assert_eq!(&body[20..26], &[0, 1, 2, 3, 4, 5]);
+        let back = load(&path).unwrap();
+        assert_eq!(back.ase_profile, s.ase_profile);
+
+        s.ase_profile = Some(AseProfile {
+            kind: 1,
+            flags: 1,
+            gamma: 1.0,
+            icc: Vec::new(),
+        });
+        save(&s, &path).unwrap();
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.ase_profile, s.ase_profile);
+    }
+
+    #[test]
+    fn linear_profile_is_written_as_fixed_gamma() {
+        let mut s = Sprite::new(1, 1);
+        s.color_profile = crate::sprite::ColorProfile::Linear;
+        let path = tmp("vixel_ase_linear.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let body = walk_chunks(&data)
+            .into_iter()
+            .find(|(_, k, _)| *k == CHUNK_PROFILE)
+            .expect("profile chunk")
+            .2;
+        assert_eq!(u16_at(&body, 0), 1);
+        assert_eq!(u16_at(&body, 2) & 1, 1, "fixed gamma flag");
+        assert_eq!(u32_at(&body, 4), 65536, "gamma 1.0");
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.color_profile, crate::sprite::ColorProfile::Linear);
+        assert_eq!(back.ase_profile.map(|p| p.kind), Some(1));
+    }
+
+    #[test]
+    fn icc_fixture_survives_open_save_open() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ase/prop.ase");
+        let a = load(&src).unwrap();
+        let profile = a.ase_profile.clone().expect("prop.ase has an ICC profile");
+        assert_eq!(profile.kind, 2);
+        assert_eq!(profile.icc.len(), 536);
+        let out = tmp("vixel_ase_icc_fixture.ase");
+        save(&a, &out).unwrap();
+        let b = load(&out).unwrap();
+        let _ = std::fs::remove_file(&out);
+        assert_eq!(b.ase_profile, a.ase_profile);
     }
 
     #[test]

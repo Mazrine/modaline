@@ -268,8 +268,15 @@ met; blocked tasks are marked with the reason.
 
 ### Epic 4 — `.ase` document fidelity
 
-- [ ] **P5-09 — Colour profile chunk 0x2007** (M) — deps: P5-07.
-  Read type/gamma/ICC; write sRGB; retain ICC; document linear's limit.
+- [x] **P5-09 — Colour profile chunk 0x2007** (M) — deps: P5-07.
+  Landed 2026-10-28. `AseProfile { kind, flags, gamma, icc }`; 0x2007 type,
+  gamma and ICC bytes are parsed and written in frame 0. An imported profile
+  wins; otherwise saving writes sRGB, or linear sRGB as fixed gamma 1.0.
+  `:profile` shows the embedded profile; `:profile icc <file>`, `gamma <g>` and
+  `clear` author it; `.vpx` stores it. 4 new tests (134 total): chunk bytes +
+  ICC/gamma round trip, `prop.ase`'s 536-byte ICC open→save→open, linear
+  fixed-gamma encode/decode, and summary + `.vpx`. ICC pixels load as-is into
+  the sRGB working space (no colour-managed conversion).
 - [ ] **P5-10 — Cel bounds (offset cels)** (L) — deps: P5-07.
   `Cel` bounds; stop baking into canvas-sized cels; update paint/transform/
   undo/export/composite.
@@ -389,6 +396,9 @@ met; blocked tasks are marked with the reason.
 - [ ] **P5-59 — Undo memory + filter threading** (M) — deps: P5-38.
   Compact structural undo, bounded history, filters off the UI thread where
   safe.
+- [ ] **P5-60 — Sprite background colour property** (S) — deps: P5-14.
+  Aseprite's sprite-properties background colour (user data); show it in the
+  properties panel and round-trip `.ase`/`.vpx`.
 
 ### P5 definition of done
 

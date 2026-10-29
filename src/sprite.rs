@@ -229,6 +229,20 @@ pub struct RawChunk {
     pub after: ChunkAnchor,
 }
 
+/// The `.ase` colour-profile chunk (0x2007), kept verbatim.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct AseProfile {
+    /// 0 = none, 1 = sRGB, 2 = embedded ICC.
+    pub kind: u16,
+    /// Bit 1 = the fixed gamma applies.
+    pub flags: u16,
+    /// 16.16 fixed-point gamma, decoded to a float.
+    pub gamma: f32,
+    /// ICC profile bytes when `kind == 2`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub icc: Vec<u8>,
+}
+
 /// A sprite: a grid of cels indexed `[layer][frame]`.
 ///
 /// `layers[0]` is the topmost layer (drawn last, matching Aseprite's list).
@@ -268,6 +282,9 @@ pub struct Sprite {
     /// Which transfer function the pixel values are in.
     #[serde(default)]
     pub color_profile: ColorProfile,
+    /// Embedded `.ase` colour profile (sRGB/ICC/gamma), preserved on save.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ase_profile: Option<AseProfile>,
     /// Opaque `.ase` chunks (slices, user data, ICC, ...) retained verbatim
     /// so an open→save round trip does not discard them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -410,6 +427,7 @@ impl Sprite {
             grid: (0, 0),
             grid_origin: (0, 0),
             color_profile: ColorProfile::Srgb,
+            ase_profile: None,
             raw_chunks: Vec::new(),
         }
     }

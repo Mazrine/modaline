@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **130 tests green** (121 lib + 9 bin)
+- `cargo test` → **134 tests green** (125 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-08 header and small-chunk fidelity** (see batch 45).
+- Last completed batch: **P5-09 ICC colour-profile embedding** (see batch 46).
 
 ## How to resume
 
@@ -263,6 +263,12 @@ Read, in order:
     the tag's last frame and bounces. 5 new tests (130 total): header bytes and
     round trip, `.vpx` origin + missing-field default, direction byte mapping,
     direction-3 tags chunk + round trip, reverse ping-pong playback.
+46. **P5-09 — ICC colour-profile embedding** — `AseProfile { kind, flags,
+    gamma, icc }` parses 0x2007 type/gamma/ICC and writes it in frame 0; an
+    imported profile wins, else saving writes sRGB or linear (fixed gamma 1.0).
+    `:profile` shows it; `:profile icc <file>|gamma <g>|clear` authors it;
+    `.vpx` stores it. 4 new tests (134 total), including `prop.ase`'s 536-byte
+    ICC surviving open→save→open. ICC pixels are read as-is in sRGB.
 
 ## Next step (exact)
 
@@ -271,8 +277,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-09** — ICC colour-profile embedding (first open task), then continue
-  down the P5 roadmap in dependency order.
+- **P5-10** — cel bounds / offset cels (first open task), then continue down
+  the P5 roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

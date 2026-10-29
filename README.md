@@ -127,7 +127,8 @@ keyboard-first, but the mouse is fully wired.)
 | `:perfect on\|off` | pixel-perfect freehand: drop L-shaped corner pixels |
 | `:mode auto\|rgba\|grayscale\|indexed` / `:aspect <x> <y>` / `:sgrid [x y] <w> <h>` | sprite colour mode, pixel ratio, grid size + origin |
 | `:dither none\|bayer2\|bayer4\|bayer8\|floyd` | dithering for indexed conversion |
-| `:profile srgb\|linear` / `:renderer glow\|wgpu` | colour profile / renderer (applied on next launch) |
+| `:profile srgb\|linear` / `:profile icc <file>` / `:profile gamma <g>` / `:profile clear` | working space / embedded `.ase` colour profile |
+| `:renderer glow\|wgpu` | renderer (applied on next launch) |
 | `:fg #rrggbb` / `:bg #rrggbb` | set fg / bg exactly |
 | `:pal load\|save <file>` / `:pal move <from> <to>` / `:pal from-sprite` / `:pal lock on\|off` | palette I/O, reorder, derive from the frame, lock |
 | `:pal preset <name>` / `:pal insert <i> [#hex]` / `:pal delete <i>` / `:pal sort [rgb\|luma\|hue]` / `:pal name <i> <name>` | presets, index edits, sort, names |
@@ -181,8 +182,8 @@ the flattened composite of all visible layers.
   layer groups, cel opacity and frame durations. Export picks the smallest
   lossless depth (gray, indexed, or 32-bit RGBA). Indexed sprites carry a
   document palette and transparent index (header byte 28), and paint snaps to
-  palette entries. Unknown chunks (slices, user data, ICC) are preserved on
-  save.
+  palette entries. Embedded sRGB/ICC/gamma profiles are read and written;
+  unknown chunks (slices, user data) are preserved on save.
 - **`.vpx`** — project file: JSON with size, layers, frames, and every cel.
 - **PNG** — single-frame import/export with full alpha.
 

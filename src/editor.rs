@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use crate::color::Rgba;
 use crate::sprite::{
-    DitherMode, FillOptions, Sprite, color_close, ellipse_points, flood_fill_tol, line_points,
-    rect_filled_points, rect_points,
+    AseProfile, DitherMode, FillOptions, Sprite, color_close, ellipse_points, flood_fill_tol,
+    line_points, rect_filled_points, rect_points,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1758,9 +1758,33 @@ impl Editor {
         self.select_anchor.is_some() || self.selection.is_some()
     }
 
-    /// Convert the sprite between sRGB and linear light. The palette, fg and bg
-    /// convert with it: painting an sRGB palette colour into a linear sprite
-    /// would mix spaces.
+    /// Set or remove the embedded `.ase` colour-profile chunk.
+    pub fn set_ase_profile(&mut self, profile: Option<AseProfile>) {
+        self.sprite.ase_profile = profile;
+        self.dirty = true;
+        self.touch();
+        self.msg = self.profile_summary();
+    }
+
+    /// One-line description of the embedded `.ase` colour profile.
+    pub fn profile_summary(&self) -> String {
+        match &self.sprite.ase_profile {
+            None => "profile: none (no 0x2007 chunk)".into(),
+            Some(p) => {
+                let mut s = match p.kind {
+                    0 => "profile: none".to_string(),
+                    1 => "profile: sRGB".to_string(),
+                    2 => format!("profile: ICC ({} bytes)", p.icc.len()),
+                    k => format!("profile: type {k}"),
+                };
+                if p.flags & 1 != 0 || p.gamma > 0.0 {
+                    s.push_str(&format!(", gamma {:.4}", p.gamma));
+                }
+                s
+            }
+        }
+    }
+
     pub fn set_color_profile(&mut self, to: crate::sprite::ColorProfile) {
         use crate::sprite::ColorProfile;
         if to == self.sprite.color_profile {
@@ -4103,6 +4127,38 @@ mod tests {
         assert!(e.advance_frame());
         assert_eq!(e.active_frame, 1, "bounces off the start");
         assert_eq!(e.play_dir, 1);
+    }
+
+    #[test]
+    fn ase_profile_summary_and_vpx_round_trip() {
+        let mut e = Editor::new(1, 1);
+        assert!(e.profile_summary().contains("none"));
+        let profile = AseProfile {
+            kind: 2,
+            flags: 0,
+            gamma: 0.0,
+            icc: vec![1, 2, 3, 4],
+        };
+        e.set_ase_profile(Some(profile.clone()));
+        assert!(e.profile_summary().contains("ICC (4 bytes)"));
+
+        let path =
+            std::env::temp_dir().join(format!("vixel_ase_profile_{}.vpx", std::process::id()));
+        crate::io::save_project(&e.sprite, &path).unwrap();
+        let back = crate::io::load_project(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.ase_profile, Some(profile));
+
+        e.set_ase_profile(Some(AseProfile {
+            kind: 1,
+            flags: 1,
+            gamma: 1.0,
+            icc: Vec::new(),
+        }));
+        assert!(e.profile_summary().contains("sRGB"));
+        assert!(e.profile_summary().contains("gamma 1.0000"));
+        e.set_ase_profile(None);
+        assert!(e.profile_summary().contains("none"));
     }
 
     #[test]

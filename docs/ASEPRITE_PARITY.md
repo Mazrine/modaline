@@ -66,8 +66,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Palette editor: insert/delete/sort/presets/names | Covered | P5-06 |
 | Colour picker wheel + recent colours | Covered | P5-06 |
 | sRGB/linear working profiles | Covered (vixel) | — |
-| ICC embedding (`.ase` 0x2007) | Missing | P5-09 |
-| Background colour sprite property | Missing | P5-08 |
+| ICC embedding (`.ase` 0x2007) | Covered | P5-09 |
+| Background colour sprite property | Missing | P5-60 |
 | Wide pixels rendering (pixel ratio) | Partial (metadata) | P5-26 |
 
 ## Drawing and tools
@@ -149,7 +149,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | `.ase` layer flags + UUIDs | Partial | P5-13 |
 | `.ase` user data (text/color/properties) | Missing | P5-14 |
 | `.ase` slices | Missing | P5-15 |
-| `.ase` color profile / ICC | Missing | P5-09 |
+| `.ase` color profile / ICC | Covered | P5-09 |
 | `.ase` external files chunk | Missing | P5-17 |
 | `.vpx` project JSON | Covered | — |
 | PNG import/export | Covered | — |
@@ -242,6 +242,5 @@ These are deliberate differences, not rows to close:
 |---|---|---|
 | Scripting engine | No Lua/scripting crate cached; `mlua` needs network or a vendored source | P5-48 decision confirms the dependency can be added |
 | FLC/FLI/PCX export | Obsolete formats; `image` has no codecs | A consumer requires them |
-| ICC authoring | No fixture/verifier; `linear` has no native `.ase` encoding | A real ICC fixture exists; P5-09 |
 | Custom GPU shaders | Not an Aseprite capability (vixel extra) | A shader can be verified on real hardware |
 | Web/Wasm build | Aseprite has no web build; product choice | Product requirement changes |

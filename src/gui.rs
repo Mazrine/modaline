@@ -1672,7 +1672,7 @@ const HELP: &[&str] = &[
     "  :mode auto|rgba|grayscale|indexed   :dither none|bayer2|bayer4|bayer8|floyd",
     "  :aspect <x> <y>   :sgrid [x y] <w> <h>",
     "  :pal preset <name>|insert <i> [#hex]|delete <i>|sort [rgb|luma|hue]|name <i> <name>",
-    "  :profile srgb|linear   (converts the pixels; the palette follows)",
+    "  :profile [srgb|linear|icc <file>|gamma <g>|clear]   (working space / .ase profile)",
     "  :renderer glow|wgpu    (wgpu also needs a build with --features wgpu)",
     "  :slices <dir> [cols rows]   (one png per grid cell + a slices.json)",
     "  :grad linear|radial   :contour",

@@ -679,10 +679,53 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         .into(),
             }
         }
-        "profile" | "colorspace" => match arg.and_then(crate::sprite::ColorProfile::parse) {
-            Some(p) => editor.set_color_profile(p),
-            None => editor.msg = "usage: :profile srgb|linear".into(),
-        },
+        "profile" | "colorspace" => {
+            let rest = arg.unwrap_or("");
+            let mut it = rest.split_whitespace();
+            let sub = it.next().unwrap_or("");
+            match sub {
+                "" => editor.msg = editor.profile_summary(),
+                "srgb" | "linear" => {
+                    if let Some(p) = crate::sprite::ColorProfile::parse(sub) {
+                        editor.set_color_profile(p);
+                    }
+                }
+                "icc" => match it.next() {
+                    Some(path) => match std::fs::read(path) {
+                        Ok(bytes) => editor.set_ase_profile(Some(crate::sprite::AseProfile {
+                            kind: 2,
+                            flags: 0,
+                            gamma: 0.0,
+                            icc: bytes,
+                        })),
+                        Err(e) => editor.msg = format!("profile: cannot read {path}: {e}"),
+                    },
+                    None => editor.msg = "usage: :profile icc <file>".into(),
+                },
+                "clear" | "none" => editor.set_ase_profile(None),
+                "gamma" => match it.next().and_then(|v| v.parse::<f32>().ok()) {
+                    Some(g) => {
+                        let mut p = editor.sprite.ase_profile.clone().unwrap_or(
+                            crate::sprite::AseProfile {
+                                kind: 1,
+                                ..Default::default()
+                            },
+                        );
+                        if p.kind == 0 {
+                            p.kind = 1;
+                        }
+                        p.flags |= 1;
+                        p.gamma = g.max(0.0);
+                        editor.set_ase_profile(Some(p));
+                    }
+                    None => editor.msg = "usage: :profile gamma <g>".into(),
+                },
+                _ => {
+                    editor.msg =
+                        "usage: :profile [srgb|linear | icc <file> | gamma <g> | clear]".into();
+                }
+            }
+        }
         "mode" | "colormode" => match arg.and_then(crate::sprite::ColorMode::parse) {
             Some(m) => editor.set_color_mode(m),
             None => editor.msg = "usage: :mode auto|rgba|grayscale|indexed".into(),
