@@ -171,9 +171,11 @@ per-backend code — deliberately avoided for now.)
 ## Data model
 
 A sprite is a grid of **cels** indexed `[layer][frame]`, the same shape Aseprite
-uses: `layers[0]` is the topmost layer, each cel is a row-major `Vec<Rgba>`.
-Editing writes to the active layer's cel on the active frame; the canvas shows
-the flattened composite of all visible layers.
+uses: `layers[0]` is the topmost layer, each cel is a row-major `Vec<Rgba>`
+with its own `x/y/w/h` bounds. Editing writes to the active layer's cel on the
+active frame; the canvas shows the flattened composite of all visible layers.
+Offset cels from `.ase` keep their bounds; painting outside grows a cel, while
+crop/resize canonicalize to the canvas.
 
 ## File formats
 

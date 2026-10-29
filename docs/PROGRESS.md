@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **134 tests green** (125 lib + 9 bin)
+- `cargo test` → **139 tests green** (130 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-09 ICC colour-profile embedding** (see batch 46).
+- Last completed batch: **P5-10 cel bounds / offset cels** (see batch 47).
 
 ## How to resume
 
@@ -269,6 +269,13 @@ Read, in order:
     `:profile` shows it; `:profile icc <file>|gamma <g>|clear` authors it;
     `.vpx` stores it. 4 new tests (134 total), including `prop.ase`'s 536-byte
     ICC surviving open→save→open. ICC pixels are read as-is in sRGB.
+47. **P5-10 — cel bounds / offset cels** — `Cel` gained `x/y/w/h` and stores
+    cel-sized pixels. `.ase` import/export preserves offsets and dimensions;
+    composite, get/set, flips, rotate, masks, dithering, merge and flatten
+    respect bounds, while painting outside grows a cel. Crop/resize
+    canonicalize; old `.vpx` cels normalize on load. 5 new tests (139 total):
+    clipping/growth, transform bounds, `.ase` offset round trip, `.vpx`
+    migration, and offset-cel paint/undo.
 
 ## Next step (exact)
 
@@ -277,8 +284,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-10** — cel bounds / offset cels (first open task), then continue down
-  the P5 roadmap in dependency order.
+- **P5-11** — cel z-index (first open task), then continue down the P5
+  roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

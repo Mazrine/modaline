@@ -93,6 +93,9 @@ thin shells:
   `Sprite`; edits must move both, and indexed edits mirror into the sprite.
 - `.ase` chunk 0x2007 is parsed into `Sprite.ase_profile`; do not leave it in
   `raw_chunks`, or a save would write the profile twice.
+- Cel pixels are cel-sized, not canvas-sized. Use `Cel::get`/`set_extend` or
+  `Sprite::get`/`set`; never index `pixels` by the canvas width. Transform and
+  composite code must honour cel bounds.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not

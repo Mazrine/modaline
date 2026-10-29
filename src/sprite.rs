@@ -5,7 +5,16 @@ use crate::color::Rgba;
 /// One cel: the image a single layer shows on a single frame.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Cel {
-    /// Row-major, `width * height` pixels.
+    /// Top-left corner in sprite coordinates (may be negative).
+    #[serde(default)]
+    pub x: i32,
+    #[serde(default)]
+    pub y: i32,
+    /// Cel size in pixels; `pixels` is row-major `w * h`.
+    #[serde(default)]
+    pub w: u32,
+    #[serde(default)]
+    pub h: u32,
     pub pixels: Vec<Rgba>,
     /// 0..255, cel opacity (Aseprite stores this per cel).
     #[serde(default = "full")]
@@ -17,11 +26,69 @@ fn full() -> u8 {
 }
 
 impl Cel {
-    pub fn blank(area: usize) -> Self {
+    pub fn blank(w: u32, h: u32) -> Self {
         Self {
-            pixels: vec![Rgba::TRANSPARENT; area],
+            x: 0,
+            y: 0,
+            w,
+            h,
+            pixels: vec![Rgba::TRANSPARENT; (w * h) as usize],
             opacity: 255,
         }
+    }
+
+    pub fn area(&self) -> usize {
+        (self.w as usize) * (self.h as usize)
+    }
+
+    pub fn contains(&self, x: i32, y: i32) -> bool {
+        x >= self.x && y >= self.y && x < self.x + self.w as i32 && y < self.y + self.h as i32
+    }
+
+    pub fn get(&self, x: i32, y: i32) -> Rgba {
+        if !self.contains(x, y) {
+            return Rgba::TRANSPARENT;
+        }
+        let i = ((y - self.y) as usize) * self.w as usize + (x - self.x) as usize;
+        self.pixels.get(i).copied().unwrap_or(Rgba::TRANSPARENT)
+    }
+
+    /// Write a pixel, growing the cel bounds to include it when necessary.
+    pub fn set_extend(&mut self, x: i32, y: i32, c: Rgba) {
+        if self.contains(x, y) {
+            let i = ((y - self.y) as usize) * self.w as usize + (x - self.x) as usize;
+            if let Some(slot) = self.pixels.get_mut(i) {
+                *slot = c;
+            }
+            return;
+        }
+        if c.3 == 0 {
+            return; // erasing outside the cel is a no-op
+        }
+        let nx = self.x.min(x);
+        let ny = self.y.min(y);
+        let nx2 = (self.x + self.w as i32).max(x + 1);
+        let ny2 = (self.y + self.h as i32).max(y + 1);
+        let (nw, nh) = ((nx2 - nx) as u32, (ny2 - ny) as u32);
+        let mut pixels = vec![Rgba::TRANSPARENT; (nw * nh) as usize];
+        let dx = self.x - nx;
+        let dy = self.y - ny;
+        for yy in 0..self.h as usize {
+            for xx in 0..self.w as usize {
+                let src = self.pixels.get(yy * self.w as usize + xx).copied();
+                if let Some(c) = src {
+                    let tx = xx + dx as usize;
+                    let ty = yy + dy as usize;
+                    pixels[ty * nw as usize + tx] = c;
+                }
+            }
+        }
+        self.x = nx;
+        self.y = ny;
+        self.w = nw;
+        self.h = nh;
+        self.pixels = pixels;
+        self.set_extend(x, y, c);
     }
 }
 
@@ -405,13 +472,12 @@ fn unit_pixel_ratio() -> (u16, u16) {
 
 impl Sprite {
     pub fn new(width: u32, height: u32) -> Self {
-        let area = (width * height) as usize;
         let layers = vec![Layer {
             name: "Layer 1".into(),
             ..Default::default()
         }];
         let frames = vec![Frame { duration_ms: 100 }];
-        let cels = vec![vec![Cel::blank(area)]];
+        let cels = vec![vec![Cel::blank(width, height)]];
         Self {
             width,
             height,
@@ -519,13 +585,26 @@ impl Sprite {
         }
         let palette = self.palette.clone();
         let ti = self.transparent_slot();
-        let w = self.width as usize;
         let matrix = mode.bayer_size().map(bayer_matrix);
         for cel in self.cels.iter_mut().flatten() {
-            if let (Some(size), Some(matrix)) = (mode.bayer_size(), matrix.as_ref()) {
-                dither_ordered(&mut cel.pixels, w, &palette, ti, matrix, size);
+            if let Some(matrix) = matrix.as_ref() {
+                dither_ordered(
+                    &mut cel.pixels,
+                    cel.w as usize,
+                    &palette,
+                    ti,
+                    matrix,
+                    cel.x,
+                    cel.y,
+                );
             } else {
-                dither_floyd(&mut cel.pixels, w, self.height as usize, &palette, ti);
+                dither_floyd(
+                    &mut cel.pixels,
+                    cel.w as usize,
+                    cel.h as usize,
+                    &palette,
+                    ti,
+                );
             }
         }
     }
@@ -589,14 +668,28 @@ impl Sprite {
         (self.width * self.height) as usize
     }
 
+    /// Upgrade old `.vpx` cels (which had no bounds) to canvas-sized cels.
+    pub fn normalize_cels(&mut self) {
+        let (w, h) = (self.width, self.height);
+        let area = (w * h) as usize;
+        for cel in self.cels.iter_mut().flatten() {
+            if cel.w == 0 || cel.h == 0 || cel.pixels.len() != cel.w as usize * cel.h as usize {
+                cel.x = 0;
+                cel.y = 0;
+                cel.w = w;
+                cel.h = h;
+                cel.pixels.resize(area, Rgba::TRANSPARENT);
+            }
+        }
+    }
+
     pub fn get(&self, layer: usize, frame: usize, x: u32, y: u32) -> Rgba {
-        self.cels[layer][frame].pixels[(y * self.width + x) as usize]
+        self.cels[layer][frame].get(x as i32, y as i32)
     }
 
     pub fn set(&mut self, layer: usize, frame: usize, x: u32, y: u32, c: Rgba) {
         let c = self.indexed_color(c);
-        let w = self.width;
-        self.cels[layer][frame].pixels[(y * w + x) as usize] = c;
+        self.cels[layer][frame].set_extend(x as i32, y as i32, c);
     }
 
     /// Flatten all visible layers of `frame` (top → bottom) into one image.
@@ -645,22 +738,45 @@ impl Sprite {
             } else {
                 self.cels[i][frame].opacity as u32
             };
-            let grouped;
-            let src: &[Rgba] = if layer.group {
+            if layer.group {
                 let mut buf = vec![Rgba::TRANSPARENT; self.area()];
                 self.composite_range(frame, i + 1, stop, &mut buf, include_reference);
-                grouped = buf;
-                &grouped
-            } else {
-                &self.cels[i][frame].pixels
-            };
-            for (k, px) in src.iter().enumerate() {
-                let mut sa = px.3 as u32 * op / 255 * cel_op / 255;
-                if let Some(m) = &layer.mask {
-                    sa = sa * *m.pixels.get(k).unwrap_or(&255) as u32 / 255;
+                for (k, px) in buf.iter().enumerate() {
+                    let mut sa = px.3 as u32 * op / 255;
+                    if let Some(m) = &layer.mask {
+                        sa = sa * *m.pixels.get(k).unwrap_or(&255) as u32 / 255;
+                    }
+                    if sa > 0 {
+                        dst[k] = blend_over(layer.blend, *px, sa, dst[k]);
+                    }
                 }
-                if sa > 0 {
-                    dst[k] = blend_over(layer.blend, *px, sa, dst[k]);
+                continue;
+            }
+            let cel = &self.cels[i][frame];
+            let (cw, ch) = (self.width as i32, self.height as i32);
+            for yy in 0..cel.h {
+                let y = cel.y + yy as i32;
+                if y < 0 || y >= ch {
+                    continue;
+                }
+                for xx in 0..cel.w {
+                    let x = cel.x + xx as i32;
+                    if x < 0 || x >= cw {
+                        continue;
+                    }
+                    let k = (y as u32 * self.width + x as u32) as usize;
+                    let px = cel
+                        .pixels
+                        .get(yy as usize * cel.w as usize + xx as usize)
+                        .copied()
+                        .unwrap_or(Rgba::TRANSPARENT);
+                    let mut sa = px.3 as u32 * op / 255 * cel_op / 255;
+                    if let Some(m) = &layer.mask {
+                        sa = sa * *m.pixels.get(k).unwrap_or(&255) as u32 / 255;
+                    }
+                    if sa > 0 {
+                        dst[k] = blend_over(layer.blend, px, sa, dst[k]);
+                    }
                 }
             }
         }
@@ -700,14 +816,21 @@ impl Sprite {
         let (ow, oh) = (self.width, self.height);
         for frame in 0..self.frames.len() {
             for layer in 0..self.layers.len() {
+                let old = self.cels[layer][frame].clone();
                 let mut np = vec![Rgba::TRANSPARENT; (width * height) as usize];
                 for y in 0..height.min(self.height) {
                     for x in 0..width.min(self.width) {
-                        np[(y * width + x) as usize] =
-                            self.cels[layer][frame].pixels[(y * self.width + x) as usize];
+                        np[(y * width + x) as usize] = old.get(x as i32, y as i32);
                     }
                 }
-                self.cels[layer][frame].pixels = np;
+                self.cels[layer][frame] = Cel {
+                    x: 0,
+                    y: 0,
+                    w: width,
+                    h: height,
+                    pixels: np,
+                    opacity: old.opacity,
+                };
             }
         }
         for layer in &mut self.layers {
@@ -732,17 +855,24 @@ impl Sprite {
         }
         for layer in 0..self.layers.len() {
             for frame in 0..self.frames.len() {
+                let old = self.cels[layer][frame].clone();
                 let mut np = vec![Rgba::TRANSPARENT; (w * h) as usize];
                 for y in 0..h {
                     for x in 0..w {
                         let (sx, sy) = (x + cx, y + cy);
                         if sx < ow && sy < oh {
-                            np[(y * w + x) as usize] =
-                                self.cels[layer][frame].pixels[(sy * ow + sx) as usize];
+                            np[(y * w + x) as usize] = old.get(sx as i32, sy as i32);
                         }
                     }
                 }
-                self.cels[layer][frame].pixels = np;
+                self.cels[layer][frame] = Cel {
+                    x: 0,
+                    y: 0,
+                    w,
+                    h,
+                    pixels: np,
+                    opacity: old.opacity,
+                };
             }
         }
         for layer in &mut self.layers {
@@ -767,13 +897,17 @@ impl Sprite {
         let (w, h) = (self.width, self.height);
         for frame in 0..self.frames.len() {
             for layer in 0..self.layers.len() {
-                for y in 0..self.height {
-                    for x in 0..w / 2 {
-                        let a = (y * w + x) as usize;
-                        let b = (y * w + (w - 1 - x)) as usize;
-                        self.cels[layer][frame].pixels.swap(a, b);
+                let cel = &mut self.cels[layer][frame];
+                let mut np = vec![Rgba::TRANSPARENT; cel.area()];
+                for yy in 0..cel.h {
+                    for xx in 0..cel.w {
+                        let src = (yy * cel.w + xx) as usize;
+                        let dst = (yy * cel.w + (cel.w - 1 - xx)) as usize;
+                        np[dst] = cel.pixels.get(src).copied().unwrap_or(Rgba::TRANSPARENT);
                     }
                 }
+                cel.pixels = np;
+                cel.x = w as i32 - (cel.x + cel.w as i32);
             }
         }
         for layer in &mut self.layers {
@@ -788,13 +922,17 @@ impl Sprite {
         let (w, h) = (self.width, self.height);
         for frame in 0..self.frames.len() {
             for layer in 0..self.layers.len() {
-                for y in 0..h / 2 {
-                    for x in 0..w {
-                        let a = (y * w + x) as usize;
-                        let b = ((h - 1 - y) * w + x) as usize;
-                        self.cels[layer][frame].pixels.swap(a, b);
+                let cel = &mut self.cels[layer][frame];
+                let mut np = vec![Rgba::TRANSPARENT; cel.area()];
+                for yy in 0..cel.h {
+                    for xx in 0..cel.w {
+                        let src = (yy * cel.w + xx) as usize;
+                        let dst = ((cel.h - 1 - yy) * cel.w + xx) as usize;
+                        np[dst] = cel.pixels.get(src).copied().unwrap_or(Rgba::TRANSPARENT);
                     }
                 }
+                cel.pixels = np;
+                cel.y = h as i32 - (cel.y + cel.h as i32);
             }
         }
         for layer in &mut self.layers {
@@ -809,16 +947,25 @@ impl Sprite {
         let (nw, nh) = (self.height, self.width);
         for frame in 0..self.frames.len() {
             for layer in 0..self.layers.len() {
-                let old = self.cels[layer][frame].pixels.clone();
-                let mut np = vec![Rgba::TRANSPARENT; (nw * nh) as usize];
-                for y in 0..self.height {
-                    for x in 0..self.width {
-                        let nx = self.height - 1 - y;
-                        let ny = x;
-                        np[(ny * nw + nx) as usize] = old[(y * self.width + x) as usize];
+                let old = self.cels[layer][frame].clone();
+                let mut np = vec![Rgba::TRANSPARENT; old.area()];
+                for yy in 0..old.h {
+                    for xx in 0..old.w {
+                        // Rotated global x = height-1-y; local x within the
+                        // rotated cel is h-1-yy; local y is xx.
+                        let nx = old.h as i32 - 1 - yy as i32;
+                        let ny = xx as i32;
+                        let src = (yy * old.w + xx) as usize;
+                        let dst = (ny * old.h as i32 + nx) as usize;
+                        np[dst] = old.pixels.get(src).copied().unwrap_or(Rgba::TRANSPARENT);
                     }
                 }
-                self.cels[layer][frame].pixels = np;
+                let cel = &mut self.cels[layer][frame];
+                cel.x = self.height as i32 - (old.y + old.h as i32);
+                cel.y = old.x;
+                cel.w = old.h;
+                cel.h = old.w;
+                cel.pixels = np;
             }
         }
         let (w, h) = (self.width, self.height);
@@ -833,7 +980,7 @@ impl Sprite {
 
     /// Insert a blank frame just after `idx`.
     pub fn add_frame_after(&mut self, idx: usize) {
-        let cel = Cel::blank(self.area());
+        let cel = Cel::blank(self.width, self.height);
         for layer in self.cels.iter_mut() {
             layer.insert(idx + 1, cel.clone());
         }
@@ -929,7 +1076,7 @@ impl Sprite {
                 ..Default::default()
             },
         );
-        let cel = Cel::blank(self.area());
+        let cel = Cel::blank(self.width, self.height);
         self.cels.insert(idx + 1, vec![cel; self.frames.len()]);
     }
 
@@ -946,7 +1093,7 @@ impl Sprite {
                 ..Default::default()
             },
         );
-        let cel = Cel::blank(self.area());
+        let cel = Cel::blank(self.width, self.height);
         self.cels.insert(idx + 1, vec![cel; self.frames.len()]);
     }
 
@@ -972,8 +1119,14 @@ impl Sprite {
         for frame in 0..self.frames.len() {
             let mut buf = vec![Rgba::TRANSPARENT; self.area()];
             self.composite_range(frame, up, down + 1, &mut buf, true);
-            self.cels[down][frame].pixels = buf;
-            self.cels[down][frame].opacity = 255;
+            self.cels[down][frame] = Cel {
+                x: 0,
+                y: 0,
+                w: self.width,
+                h: self.height,
+                pixels: buf,
+                opacity: 255,
+            };
         }
         self.layers[down].opacity = 255;
         self.layers[down].blend = BlendMode::Normal;
@@ -998,6 +1151,10 @@ impl Sprite {
         let mut cels = Vec::with_capacity(self.frames.len());
         for frame in 0..self.frames.len() {
             cels.push(Cel {
+                x: 0,
+                y: 0,
+                w: self.width,
+                h: self.height,
                 pixels: self.export_composite(frame),
                 opacity: 255,
             });
@@ -1287,8 +1444,10 @@ fn dither_ordered(
     palette: &[Rgba],
     transparent: u8,
     matrix: &[u8],
-    n: usize,
+    ox: i32,
+    oy: i32,
 ) {
+    let n = (matrix.len() as f64).sqrt() as usize;
     let denom = (n * n) as f32;
     for (i, p) in pixels.iter_mut().enumerate() {
         if p.3 == 0 {
@@ -1297,7 +1456,9 @@ fn dither_ordered(
         }
         let x = i % w;
         let y = i / w;
-        let t = (matrix[(y % n) * n + x % n] as f32 + 0.5) / denom - 0.5;
+        let mx = (x as i32 + ox).rem_euclid(n as i32) as usize;
+        let my = (y as i32 + oy).rem_euclid(n as i32) as usize;
+        let t = (matrix[my * n + mx] as f32 + 0.5) / denom - 0.5;
         let off = t * 64.0;
         let probe = Rgba(
             (p.0 as f32 + off).clamp(0.0, 255.0) as u8,
@@ -1699,6 +1860,10 @@ mod tests {
             ..Default::default()
         });
         let cel = Cel {
+            x: 0,
+            y: 0,
+            w: 1,
+            h: 1,
             pixels: vec![Rgba::rgb(10, 20, 30)],
             opacity: 255,
         };
@@ -1718,6 +1883,10 @@ mod tests {
             ..Default::default()
         });
         s.cels.push(vec![Cel {
+            x: 0,
+            y: 0,
+            w: 1,
+            h: 1,
             pixels: vec![Rgba::rgb(128, 128, 128)],
             opacity: 255,
         }]);
@@ -1788,6 +1957,61 @@ mod tests {
             assert_eq!([got.0, got.1, got.2], want, "{mode:?} at alpha 128");
             assert_eq!(got.3, 255, "{mode:?} alpha");
         }
+    }
+
+    #[test]
+    fn offset_cels_clip_composite_and_expand_on_paint() {
+        let mut s = Sprite::new(4, 4);
+        let red = Rgba(10, 20, 30, 255);
+        s.cels[0][0] = Cel {
+            x: 1,
+            y: 1,
+            w: 2,
+            h: 2,
+            pixels: vec![red; 4],
+            opacity: 255,
+        };
+        let comp = s.composite(0);
+        assert_eq!(comp[5], red);
+        assert_eq!(comp[0], Rgba::TRANSPARENT);
+
+        s.set(0, 0, 3, 3, Rgba(1, 2, 3, 255));
+        assert_eq!(s.get(0, 0, 3, 3), Rgba(1, 2, 3, 255));
+        assert!(s.cels[0][0].contains(3, 3), "paint grows the cel bounds");
+        assert_eq!(s.composite(0)[3 * 4 + 3], Rgba(1, 2, 3, 255));
+
+        // Negative origins clip at the canvas edge.
+        s.cels[0][0] = Cel {
+            x: -1,
+            y: -1,
+            w: 2,
+            h: 2,
+            pixels: vec![red; 4],
+            opacity: 255,
+        };
+        assert_eq!(s.composite(0)[0], red);
+        assert_eq!(s.get(0, 0, 3, 3), Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn flips_and_rotate_preserve_offset_bounds() {
+        let mut s = Sprite::new(4, 4);
+        let red = Rgba(255, 0, 0, 255);
+        let blue = Rgba(0, 0, 255, 255);
+        s.cels[0][0] = Cel {
+            x: 1,
+            y: 1,
+            w: 2,
+            h: 1,
+            pixels: vec![red, blue],
+            opacity: 255,
+        };
+        s.flip_h();
+        assert_eq!(s.cels[0][0].x, 1);
+        assert_eq!(s.get(0, 0, 1, 1), blue);
+        s.rotate_cw();
+        assert_eq!((s.cels[0][0].x, s.cels[0][0].y), (2, 1));
+        assert_eq!((s.cels[0][0].w, s.cels[0][0].h), (1, 2));
     }
 
     #[test]
@@ -1988,6 +2212,10 @@ mod tests {
         });
         for _ in 0..2 {
             s.cels.push(vec![Cel {
+                x: 0,
+                y: 0,
+                w: 1,
+                h: 1,
                 pixels: vec![Rgba::TRANSPARENT],
                 opacity: 255,
             }]);

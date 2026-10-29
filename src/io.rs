@@ -17,6 +17,7 @@ pub fn save_project(sprite: &Sprite, path: &Path) -> Result<()> {
 pub fn load_project(path: &Path) -> Result<Sprite> {
     let json = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     let mut sprite: Sprite = serde_json::from_str(&json).context("parse project")?;
+    sprite.normalize_cels();
     sprite.normalize_levels();
     if sprite.color_mode == crate::sprite::ColorMode::Indexed && sprite.palette.is_empty() {
         // Projects written before indexed mode had a document palette.
@@ -685,6 +686,24 @@ mod tests {
         assert_eq!(back.palette_names, s.palette_names);
         assert_eq!(back.transparent_index, s.transparent_index);
         assert_eq!(back.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
+    }
+
+    #[test]
+    fn old_vpx_cels_without_bounds_are_normalized() {
+        let mut s = Sprite::new(2, 2);
+        s.set(0, 0, 1, 1, Rgba(1, 2, 3, 255));
+        let path =
+            std::env::temp_dir().join(format!("vixel_cel_migrate_{}.vpx", std::process::id()));
+        save_project(&s, &path).unwrap();
+        let json = std::fs::read_to_string(&path).unwrap();
+        let old = json.replace("\"x\":0,\"y\":0,\"w\":2,\"h\":2,", "");
+        assert!(!old.contains("\"w\":2"));
+        std::fs::write(&path, old).unwrap();
+        let back = load_project(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!((back.cels[0][0].x, back.cels[0][0].y), (0, 0));
+        assert_eq!((back.cels[0][0].w, back.cels[0][0].h), (2, 2));
+        assert_eq!(back.get(0, 0, 1, 1), Rgba(1, 2, 3, 255));
     }
 
     #[test]

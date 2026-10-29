@@ -277,9 +277,14 @@ met; blocked tasks are marked with the reason.
   ICC/gamma round trip, `prop.ase`'s 536-byte ICC open→save→open, linear
   fixed-gamma encode/decode, and summary + `.vpx`. ICC pixels load as-is into
   the sRGB working space (no colour-managed conversion).
-- [ ] **P5-10 — Cel bounds (offset cels)** (L) — deps: P5-07.
-  `Cel` bounds; stop baking into canvas-sized cels; update paint/transform/
-  undo/export/composite.
+- [x] **P5-10 — Cel bounds (offset cels)** (L) — deps: P5-07.
+  Landed 2026-10-28. `Cel { x, y, w, h }` with cel-sized pixels. `.ase` import
+  keeps offsets and the writer emits them; linked and tilemap cels carry real
+  bounds. `Sprite::get/set`, composite, flips, rotate, masks, dithering, merge
+  and flatten respect bounds; painting outside grows the cel. Crop/resize
+  canonicalize to the new canvas. Old `.vpx` cels (no bounds) normalize on
+  load. 5 new tests (139 total): clipping/growing, flip/rotate bounds, `.ase`
+  offset round trip, `.vpx` migration, offset-cel paint + undo.
 - [ ] **P5-11 — Cel z-index** (M) — deps: P5-10.
   Read/write cel z; order siblings in `composite_range`; timeline control.
 - [ ] **P5-12 — Linked cels authoring** (L) — deps: P5-10.

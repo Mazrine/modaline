@@ -144,7 +144,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | `.ase`/`.aseprite` core read/write | Covered | — |
 | `.ase` unknown-chunk preservation | Covered | P5-07 |
 | `.ase` grid origin/size | Covered | P5-08 |
-| `.ase` cel bounds + z-index | Missing | P5-10, P5-11 |
+| `.ase` cel bounds / offsets | Covered | P5-10 |
+| `.ase` cel z-index | Missing | P5-11 |
 | `.ase` linked-cel write | Missing | P5-12 |
 | `.ase` layer flags + UUIDs | Partial | P5-13 |
 | `.ase` user data (text/color/properties) | Missing | P5-14 |

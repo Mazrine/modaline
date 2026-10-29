@@ -2254,9 +2254,12 @@ impl Editor {
         let source: Vec<Rgba> = if self.wand_all_layers {
             self.sprite.composite(self.active_frame)
         } else {
-            self.sprite.cels[self.active_layer][self.active_frame]
-                .pixels
-                .clone()
+            (0..(w * h))
+                .map(|i| {
+                    self.sprite
+                        .get(self.active_layer, self.active_frame, i % w, i / w)
+                })
+                .collect()
         };
         let target = source[(y * w + x) as usize];
         let tol = self.wand_tolerance;
@@ -2776,10 +2779,25 @@ impl Editor {
         }
         let before = self.sprite.clone();
         let mask = self.sprite.layers[l].mask.take().unwrap();
+        let (width, height) = (self.sprite.width as i32, self.sprite.height as i32);
         for cel in &mut self.sprite.cels[l] {
-            for (i, px) in cel.pixels.iter_mut().enumerate() {
-                let m = *mask.pixels.get(i).unwrap_or(&255) as u32;
-                px.3 = (px.3 as u32 * m / 255) as u8;
+            for yy in 0..cel.h {
+                for xx in 0..cel.w {
+                    let gx = cel.x + xx as i32;
+                    let gy = cel.y + yy as i32;
+                    let i = (yy as usize) * cel.w as usize + xx as usize;
+                    let m = if gx >= 0 && gy >= 0 && gx < width && gy < height {
+                        *mask
+                            .pixels
+                            .get((gy as u32 * width as u32 + gx as u32) as usize)
+                            .unwrap_or(&255) as u32
+                    } else {
+                        255
+                    };
+                    if let Some(px) = cel.pixels.get_mut(i) {
+                        px.3 = (px.3 as u32 * m / 255) as u8;
+                    }
+                }
             }
         }
         self.snapshot(before);
@@ -3774,7 +3792,7 @@ mod tests {
                 ..Default::default()
             },
         ];
-        sprite.cels = (0..3).map(|_| vec![Cel::blank(16)]).collect();
+        sprite.cels = (0..3).map(|_| vec![Cel::blank(4, 4)]).collect();
         crate::io::save_project(&sprite, &path).unwrap();
         std::fs::write(dir.join(format!("{name}.json")), r#"{"stage":"face"}"#).unwrap();
         path
@@ -4127,6 +4145,25 @@ mod tests {
         assert!(e.advance_frame());
         assert_eq!(e.active_frame, 1, "bounces off the start");
         assert_eq!(e.play_dir, 1);
+    }
+
+    #[test]
+    fn paint_and_undo_on_an_offset_cel() {
+        use crate::sprite::Cel;
+        let mut e = Editor::new(4, 4);
+        e.sprite.cels[0][0] = Cel {
+            x: 1,
+            y: 1,
+            w: 2,
+            h: 2,
+            pixels: vec![Rgba::TRANSPARENT; 4],
+            opacity: 255,
+        };
+        e.paint_pixel(1, 1, Rgba(9, 8, 7, 255));
+        assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba(9, 8, 7, 255));
+        assert_eq!(e.sprite.cels[0][0].x, 1);
+        e.undo();
+        assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::TRANSPARENT);
     }
 
     #[test]

@@ -90,7 +90,9 @@ L-shaped corners for the 1 px pencil/eraser.
   and **timeline thumbnails** (click a thumbnail to switch frames; they rebuild
   only when the sprite revision changes). Playback can
   loop or stop at the end, and bounce (**ping-pong**). The timeline also exposes the active
-  cel's **opacity** (per layer + frame, as in Aseprite).
+  cel's **opacity** (per layer + frame, as in Aseprite). Cels keep their own
+  **bounds/offset** (`x/y/w/h`), so partial and off-canvas cels survive; painting
+  outside a cel grows it, while crop/resize canonicalize to the canvas.
 - **frame tags** (named inclusive ranges): `:tag <name> [from to]`,
   `:tagdel [name]`; tags are listed above the timeline, clicking one restricts
   playback to its range (click again to clear). Tags carry a play direction
@@ -164,6 +166,9 @@ L-shaped corners for the 1 px pencil/eraser.
 - **`.ase` / `.aseprite`** — native Aseprite format, read + write.
   - Reads raw (0), zlib-compressed (2), **linked (1)** and **compressed tilemap
     (3)** cels, including embedded tileset images with X/Y/diagonal flips.
+    Cel offsets and dimensions are preserved on import and written back, so
+    partial/off-canvas cels round-trip instead of being rasterized into the
+    canvas.
   - Reads RGBA (32), grayscale (16) and indexed (8) pixels, new and legacy
     palette chunks, layer names/visibility/blend/opacity, layer groups (type +
     child level), the editable flag, **per-cel opacity** and frame durations.

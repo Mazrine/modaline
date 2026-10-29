@@ -372,13 +372,13 @@ fn write_cel_chunk(
     }
     let mut b = Vec::new();
     b.extend_from_slice(&(li as u16).to_le_bytes());
-    b.extend_from_slice(&0i16.to_le_bytes()); // x
-    b.extend_from_slice(&0i16.to_le_bytes()); // y
+    b.extend_from_slice(&(cel.x.clamp(i16::MIN as i32, i16::MAX as i32) as i16).to_le_bytes());
+    b.extend_from_slice(&(cel.y.clamp(i16::MIN as i32, i16::MAX as i32) as i16).to_le_bytes());
     b.push(cel.opacity);
     b.extend_from_slice(&0u16.to_le_bytes()); // cel type: raw
     b.extend_from_slice(&[0u8; 7]); // z-index + reserved
-    b.extend_from_slice(&(s.width as u16).to_le_bytes());
-    b.extend_from_slice(&(s.height as u16).to_le_bytes());
+    b.extend_from_slice(&(cel.w.min(u16::MAX as u32) as u16).to_le_bytes());
+    b.extend_from_slice(&(cel.h.min(u16::MAX as u32) as u16).to_le_bytes());
     match depth {
         OutDepth::Rgba => {
             for p in &cel.pixels {
@@ -495,8 +495,6 @@ struct TilemapCel {
 
 struct Import {
     depth: u16,
-    width: u32,
-    height: u32,
     frames: usize,
     palette: Vec<Rgba>,
     palette_names: Vec<String>,
@@ -604,7 +602,7 @@ impl Import {
         Ok(())
     }
 
-    /// Copy a `cw x ch` block at `(ox, oy)` into a full-canvas cel buffer.
+    /// Keep the cel's real bounds instead of baking it into a canvas buffer.
     fn place(
         &mut self,
         (li, frame): (usize, usize),
@@ -613,20 +611,14 @@ impl Import {
         px: &[Rgba],
         opacity: u8,
     ) {
-        let mut full = vec![Rgba::TRANSPARENT; (self.width * self.height) as usize];
-        for yy in 0..ch {
-            for xx in 0..cw {
-                let (x, y) = (ox + xx as i32, oy + yy as i32);
-                if x >= 0 && y >= 0 && (x as u32) < self.width && (y as u32) < self.height {
-                    let src = *px
-                        .get((yy * cw + xx) as usize)
-                        .unwrap_or(&Rgba::TRANSPARENT);
-                    full[(y as u32 * self.width + x as u32) as usize] = src;
-                }
-            }
-        }
+        let mut pixels = px.to_vec();
+        pixels.resize((cw * ch) as usize, Rgba::TRANSPARENT);
         self.cels[li][frame] = Some(Cel {
-            pixels: full,
+            x: ox,
+            y: oy,
+            w: cw,
+            h: ch,
+            pixels,
             opacity,
         });
     }
@@ -640,13 +632,16 @@ impl Import {
             if ts.image.is_empty() || ts.tile_w == 0 || ts.tile_h == 0 {
                 continue;
             }
-            let mut full = vec![Rgba::TRANSPARENT; (self.width * self.height) as usize];
+            let tiles_w = tc.tiles_w.max(1);
+            let tiles_h = (tc.tiles.len() as u32).div_ceil(tiles_w);
+            let (tw, th) = (tiles_w * ts.tile_w, tiles_h * ts.tile_h);
+            let mut pixels = vec![Rgba::TRANSPARENT; (tw * th) as usize];
             for (i, &(id, fx, fy, fd)) in tc.tiles.iter().enumerate() {
                 if id == 0 || id >= ts.num_tiles {
                     continue;
                 }
-                let tx = (i as u32 % tc.tiles_w) * ts.tile_w;
-                let ty = (i as u32 / tc.tiles_w) * ts.tile_h;
+                let tx = (i as u32 % tiles_w) * ts.tile_w;
+                let ty = (i as u32 / tiles_w) * ts.tile_h;
                 for dy in 0..ts.tile_h {
                     for dx in 0..ts.tile_w {
                         let (mut sx, mut sy) = (dx, dy);
@@ -661,16 +656,18 @@ impl Import {
                         }
                         let idx = ((id * ts.tile_h + sy) * ts.tile_w + sx) as usize;
                         let src = *ts.image.get(idx).unwrap_or(&Rgba::TRANSPARENT);
-                        let (x, y) = (tc.ox + (tx + dx) as i32, tc.oy + (ty + dy) as i32);
-                        if x >= 0 && y >= 0 && (x as u32) < self.width && (y as u32) < self.height {
-                            full[(y as u32 * self.width + x as u32) as usize] = src;
-                        }
+                        let (x, y) = (tx + dx, ty + dy);
+                        pixels[(y * tw + x) as usize] = src;
                     }
                 }
             }
             if tc.frame < self.frames && tc.layer < self.cels.len() {
                 self.cels[tc.layer][tc.frame] = Some(Cel {
-                    pixels: full,
+                    x: tc.ox,
+                    y: tc.oy,
+                    w: tw,
+                    h: th,
+                    pixels,
                     opacity: tc.opacity,
                 });
             }
@@ -703,8 +700,6 @@ pub fn load(path: &Path) -> Result<Sprite> {
 
     let mut im = Import {
         depth,
-        width,
-        height,
         frames: frames_count.max(1),
         // Undeclared indexed slots are opaque black, matching Aseprite's
         // padded palette; the transparent index overrides its own slot.
@@ -835,7 +830,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
                         .get(li)
                         .and_then(|l| l.get(fi))
                         .and_then(|c| c.clone())
-                        .unwrap_or_else(|| Cel::blank((width * height) as usize))
+                        .unwrap_or_else(|| Cel::blank(width, height))
                 })
                 .collect()
         })
@@ -1174,6 +1169,41 @@ mod tests {
             );
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn offset_cels_keep_bounds_through_ase() {
+        let mut s = Sprite::new(4, 4);
+        let red = Rgba(200, 10, 10, 255);
+        s.cels[0][0] = Cel {
+            x: 1,
+            y: 2,
+            w: 2,
+            h: 2,
+            pixels: vec![
+                red,
+                Rgba(0, 255, 0, 255),
+                Rgba(0, 0, 255, 255),
+                Rgba(255, 255, 0, 255),
+            ],
+            opacity: 255,
+        };
+        let composite = s.composite(0);
+        let path = tmp("vixel_ase_bounds.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let body = walk_chunks(&data)
+            .into_iter()
+            .find(|(_, k, _)| *k == CHUNK_CEL)
+            .expect("cel chunk")
+            .2;
+        assert_eq!((i16_at(&body, 2), i16_at(&body, 4)), (1, 2));
+        assert_eq!((u16_at(&body, 16), u16_at(&body, 18)), (2, 2));
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!((back.cels[0][0].x, back.cels[0][0].y), (1, 2));
+        assert_eq!((back.cels[0][0].w, back.cels[0][0].h), (2, 2));
+        assert_eq!(back.composite(0), composite);
     }
 
     #[test]
@@ -1811,9 +1841,9 @@ mod tests {
             .expect("layer 2 cel")
             .2;
         assert_eq!(u16_at(&body, 7), 0, "raw cel");
-        let w = u16_at(&body, 16) as usize;
-        let i = 20 + 8 * w + 10; // sprite (10, 8) in the full-canvas cel
-        assert_eq!((body[i], body[i + 1]), (want as u8, ti));
+        assert_eq!((i16_at(&body, 2), i16_at(&body, 4)), (10, 8), "cel origin");
+        assert_eq!((u16_at(&body, 16), u16_at(&body, 18)), (44, 50));
+        assert_eq!((body[20], body[21]), (want as u8, ti));
 
         let back = load(&out).unwrap();
         let _ = std::fs::remove_file(&out);
