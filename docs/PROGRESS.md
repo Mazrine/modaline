@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **107 tests green** (99 lib + 8 bin)
+- `cargo test` → **109 tests green** (101 lib + 8 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-07 .ase unknown chunks** (see batch 40).
+- Last completed batch: **P5-05 all 19 blend modes** (see batch 41).
 
 ## How to resume
 
@@ -226,6 +226,14 @@ Read, in order:
     now carry real chunk counts. 3 new tests (107 total), including
     open→save→open on all four real fixtures; composites, chunk bodies and
     frame/kind survive (group order may differ).
+41. **P5-05 — all 19 blend modes** — added dodge, burn, hard/soft light,
+    difference, exclusion, hue, saturation, color, luminosity and divide;
+    `blend_fn` takes the RGB triple so the W3C HSL modes work, and divide uses
+    Aseprite's `backdrop / source` clamp. `.ase` words 6-15/18 map both ways;
+    the layer combo has 19 entries. 2 new tests (109 total): an independent
+    reference table at α=255 and α=128 for every mode, plus a save→load round
+    trip of every word. UI not screenshotted; the combo is generated from
+    `ALL_BLENDS` (manual check: count the 19 entries).
 
 ## Next step (exact)
 
@@ -234,8 +242,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-05** — all 19 blend modes (first open task).
-- Then P5-03 (real indexed colour), in that order of the roadmap.
+- **P5-03** — real indexed colour (first open task), then continue down the
+  P5 roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

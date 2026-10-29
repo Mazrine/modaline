@@ -963,20 +963,42 @@ fn blend_name(b: BlendMode) -> &'static str {
         BlendMode::Overlay => "overlay",
         BlendMode::Darken => "darken",
         BlendMode::Lighten => "lighten",
+        BlendMode::ColorDodge => "color dodge",
+        BlendMode::ColorBurn => "color burn",
+        BlendMode::HardLight => "hard light",
+        BlendMode::SoftLight => "soft light",
+        BlendMode::Difference => "difference",
+        BlendMode::Exclusion => "exclusion",
+        BlendMode::Hue => "hue",
+        BlendMode::Saturation => "saturation",
+        BlendMode::Color => "color",
+        BlendMode::Luminosity => "luminosity",
         BlendMode::Add => "add",
         BlendMode::Subtract => "subtract",
+        BlendMode::Divide => "divide",
     }
 }
 
-const ALL_BLENDS: [BlendMode; 8] = [
+const ALL_BLENDS: [BlendMode; 19] = [
     BlendMode::Normal,
     BlendMode::Multiply,
     BlendMode::Screen,
     BlendMode::Overlay,
     BlendMode::Darken,
     BlendMode::Lighten,
+    BlendMode::ColorDodge,
+    BlendMode::ColorBurn,
+    BlendMode::HardLight,
+    BlendMode::SoftLight,
+    BlendMode::Difference,
+    BlendMode::Exclusion,
+    BlendMode::Hue,
+    BlendMode::Saturation,
+    BlendMode::Color,
+    BlendMode::Luminosity,
     BlendMode::Add,
     BlendMode::Subtract,
+    BlendMode::Divide,
 ];
 
 // ---- central canvas ----

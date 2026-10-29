@@ -60,8 +60,10 @@ L-shaped corners for the 1 px pencil/eraser.
 
 ## Layers
 
-- visibility toggle, opacity (0–255), 8 **blend modes** (normal, multiply,
-  screen, overlay, darken, lighten, add, subtract — W3C source-over math),
+- visibility toggle, opacity (0–255), 19 **blend modes** (normal, multiply,
+  screen, overlay, darken, lighten, color dodge/burn, hard/soft light,
+  difference, exclusion, hue, saturation, color, luminosity, add, subtract,
+  divide — W3C source-over math, Aseprite's divide),
   reorder (↑/↓), rename (`:layername`), add/remove, **duplicate**
   (`:duplayer`), **merge down** (`:merge`, bakes opacity/blend/mask) and
   **flatten** (`:flatten`, visible layers to one). Groups can be flattened but

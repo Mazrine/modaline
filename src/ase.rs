@@ -318,8 +318,19 @@ fn blend_word(b: BlendMode) -> u16 {
         BlendMode::Overlay => 3,
         BlendMode::Darken => 4,
         BlendMode::Lighten => 5,
+        BlendMode::ColorDodge => 6,
+        BlendMode::ColorBurn => 7,
+        BlendMode::HardLight => 8,
+        BlendMode::SoftLight => 9,
+        BlendMode::Difference => 10,
+        BlendMode::Exclusion => 11,
+        BlendMode::Hue => 12,
+        BlendMode::Saturation => 13,
+        BlendMode::Color => 14,
+        BlendMode::Luminosity => 15,
         BlendMode::Add => 16,
         BlendMode::Subtract => 17,
+        BlendMode::Divide => 18,
     }
 }
 
@@ -783,8 +794,19 @@ fn blend_from_word(w: u16) -> BlendMode {
         3 => BlendMode::Overlay,
         4 => BlendMode::Darken,
         5 => BlendMode::Lighten,
+        6 => BlendMode::ColorDodge,
+        7 => BlendMode::ColorBurn,
+        8 => BlendMode::HardLight,
+        9 => BlendMode::SoftLight,
+        10 => BlendMode::Difference,
+        11 => BlendMode::Exclusion,
+        12 => BlendMode::Hue,
+        13 => BlendMode::Saturation,
+        14 => BlendMode::Color,
+        15 => BlendMode::Luminosity,
         16 => BlendMode::Add,
         17 => BlendMode::Subtract,
+        18 => BlendMode::Divide,
         _ => BlendMode::Normal,
     }
 }
@@ -1276,6 +1298,42 @@ mod tests {
             pos += u32_at(data, pos) as usize;
         }
         (u16_at(data, pos + 6), u32_at(data, pos + 12))
+    }
+
+    #[test]
+    fn every_blend_mode_round_trips_through_ase() {
+        use crate::sprite::BlendMode;
+        let modes = [
+            BlendMode::Normal,
+            BlendMode::Multiply,
+            BlendMode::Screen,
+            BlendMode::Overlay,
+            BlendMode::Darken,
+            BlendMode::Lighten,
+            BlendMode::ColorDodge,
+            BlendMode::ColorBurn,
+            BlendMode::HardLight,
+            BlendMode::SoftLight,
+            BlendMode::Difference,
+            BlendMode::Exclusion,
+            BlendMode::Hue,
+            BlendMode::Saturation,
+            BlendMode::Color,
+            BlendMode::Luminosity,
+            BlendMode::Add,
+            BlendMode::Subtract,
+            BlendMode::Divide,
+        ];
+        for mode in modes {
+            let mut s = Sprite::new(1, 1);
+            s.set(0, 0, 0, 0, Rgba(1, 2, 3, 255));
+            s.layers[0].blend = mode;
+            let path = tmp(&format!("vixel_ase_blend_{mode:?}.ase"));
+            save(&s, &path).unwrap();
+            let back = load(&path).unwrap();
+            let _ = std::fs::remove_file(&path);
+            assert_eq!(back.layers[0].blend, mode, "{mode:?}");
+        }
     }
 
     #[test]

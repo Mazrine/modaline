@@ -184,11 +184,16 @@ met; blocked tasks are marked with the reason.
   on all four real fixtures (composites + raw chunk bodies). Group order can
   shift relative to other groups; frame, kind, body and object attachment
   survive.
-- [ ] **P5-05 — All 19 blend modes** (M) — deps: none.
-  Add the 11 missing modes (dodge/burn, hard/soft light, difference, exclusion,
-  divide, hue/sat/color/luminosity); triple-based W3C blend math; `.ase` words
-  6-15, 18; grow the combo.
-  Gate: per-mode numeric tests at α=1 and α<1; all words round-trip.
+- [x] **P5-05 — All 19 blend modes** (M) — deps: none.
+  Landed 2026-10-28. Added dodge, burn, hard/soft light, difference, exclusion,
+  hue, saturation, color, luminosity and divide. `blend_fn` now takes the RGB
+  triple so the W3C HSL modes work; the 15 separable modes use W3C math plus
+  Aseprite's Divide (`backdrop / source`, clamped, 0 stays 0). `.ase` words
+  6-15 and 18 map both ways and `ALL_BLENDS` has 19 entries. 2 new tests
+  (109 total): an independently computed reference table for all 19 at α=255
+  and α=128, and a save→load round trip of every word. UI: the layer combo is
+  generated from `ALL_BLENDS`; not screenshotted this iteration (manual check:
+  open the layer panel and count the 19 entries).
 
 ### Epic 2 — Colour depth
 

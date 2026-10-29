@@ -35,8 +35,19 @@ pub enum BlendMode {
     Overlay,
     Darken,
     Lighten,
+    ColorDodge,
+    ColorBurn,
+    HardLight,
+    SoftLight,
+    Difference,
+    Exclusion,
+    Hue,
+    Saturation,
+    Color,
+    Luminosity,
     Add,
     Subtract,
+    Divide,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -868,11 +879,11 @@ pub(crate) fn blend_over(mode: BlendMode, src: Rgba, sa: u32, dst: Rgba) -> Rgba
     if ao <= 0.0 {
         return Rgba::TRANSPARENT;
     }
+    let b = blend_fn(mode, cs, cb);
     let mut out = [0.0f32; 3];
     for i in 0..3 {
-        let b = blend_fn(mode, cs[i], cb[i]);
-        // Premultiplied source-over with separable blend (W3C compositing spec).
-        let co = as_ * (1.0 - ab) * cs[i] + as_ * ab * b + (1.0 - as_) * ab * cb[i];
+        // Premultiplied source-over with the blend function (W3C compositing).
+        let co = as_ * (1.0 - ab) * cs[i] + as_ * ab * b[i] + (1.0 - as_) * ab * cb[i];
         out[i] = (co / ao).clamp(0.0, 1.0);
     }
     Rgba(
@@ -883,23 +894,137 @@ pub(crate) fn blend_over(mode: BlendMode, src: Rgba, sa: u32, dst: Rgba) -> Rgba
     )
 }
 
-fn blend_fn(mode: BlendMode, cs: f32, cb: f32) -> f32 {
+fn blend_fn(mode: BlendMode, cs: [f32; 3], cb: [f32; 3]) -> [f32; 3] {
+    use BlendMode::*;
     match mode {
-        BlendMode::Normal => cs,
-        BlendMode::Multiply => cs * cb,
-        BlendMode::Screen => cs + cb - cs * cb,
-        BlendMode::Overlay => {
+        Hue => set_lum(set_sat(cs, sat(cb)), lum(cb)),
+        Saturation => set_lum(set_sat(cb, sat(cs)), lum(cb)),
+        Color => set_lum(cs, lum(cb)),
+        Luminosity => set_lum(cb, lum(cs)),
+        _ => [
+            separable(mode, cs[0], cb[0]),
+            separable(mode, cs[1], cb[1]),
+            separable(mode, cs[2], cb[2]),
+        ],
+    }
+}
+
+/// The channel-wise part of the blend function (W3C compositing + Aseprite's
+/// additions: Add, Subtract, Divide).
+fn separable(mode: BlendMode, cs: f32, cb: f32) -> f32 {
+    use BlendMode::*;
+    match mode {
+        Normal => cs,
+        Multiply => cs * cb,
+        Screen => cs + cb - cs * cb,
+        Overlay => {
             if cb <= 0.5 {
                 2.0 * cs * cb
             } else {
                 1.0 - 2.0 * (1.0 - cs) * (1.0 - cb)
             }
         }
-        BlendMode::Darken => cs.min(cb),
-        BlendMode::Lighten => cs.max(cb),
-        BlendMode::Add => (cs + cb).min(1.0),
-        BlendMode::Subtract => (cb - cs).max(0.0),
+        Darken => cs.min(cb),
+        Lighten => cs.max(cb),
+        ColorDodge => {
+            if cb <= 0.0 {
+                0.0
+            } else if cs >= 1.0 {
+                1.0
+            } else {
+                (cb / (1.0 - cs)).min(1.0)
+            }
+        }
+        ColorBurn => {
+            if cb >= 1.0 {
+                1.0
+            } else if cs <= 0.0 {
+                0.0
+            } else {
+                1.0 - ((1.0 - cb) / cs).min(1.0)
+            }
+        }
+        HardLight => {
+            if cs <= 0.5 {
+                2.0 * cs * cb
+            } else {
+                1.0 - 2.0 * (1.0 - cs) * (1.0 - cb)
+            }
+        }
+        SoftLight => {
+            let d = if cb <= 0.25 {
+                ((16.0 * cb - 12.0) * cb + 4.0) * cb
+            } else {
+                cb.sqrt()
+            };
+            if cs <= 0.5 {
+                cb - (1.0 - 2.0 * cs) * cb * (1.0 - cb)
+            } else {
+                cb + (2.0 * cs - 1.0) * (d - cb)
+            }
+        }
+        Difference => (cb - cs).abs(),
+        Exclusion => cb + cs - 2.0 * cb * cs,
+        Add => (cs + cb).min(1.0),
+        Subtract => (cb - cs).max(0.0),
+        // Aseprite's Divide: backdrop / source, clamped. Backdrop 0 stays 0;
+        // a zero source with a non-zero backdrop saturates to 1.
+        Divide => {
+            if cb <= 0.0 {
+                0.0
+            } else {
+                (cb / cs).min(1.0)
+            }
+        }
+        Hue | Saturation | Color | Luminosity => unreachable!(),
     }
+}
+
+fn lum(c: [f32; 3]) -> f32 {
+    0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]
+}
+
+fn sat(c: [f32; 3]) -> f32 {
+    c[0].max(c[1]).max(c[2]) - c[0].min(c[1]).min(c[2])
+}
+
+fn clip_color(mut c: [f32; 3]) -> [f32; 3] {
+    let l = lum(c);
+    let n = c[0].min(c[1]).min(c[2]);
+    let x = c[0].max(c[1]).max(c[2]);
+    if n < 0.0 {
+        for v in &mut c {
+            *v = l + ((*v - l) * l) / (l - n);
+        }
+    }
+    if x > 1.0 {
+        for v in &mut c {
+            *v = l + ((*v - l) * (1.0 - l)) / (x - l);
+        }
+    }
+    c
+}
+
+fn set_lum(mut c: [f32; 3], l: f32) -> [f32; 3] {
+    let d = l - lum(c);
+    for v in &mut c {
+        *v += d;
+    }
+    clip_color(c)
+}
+
+fn set_sat(mut c: [f32; 3], s: f32) -> [f32; 3] {
+    let minv = c[0].min(c[1]).min(c[2]);
+    let maxv = c[0].max(c[1]).max(c[2]);
+    let range = maxv - minv;
+    if range > 0.0 {
+        for v in &mut c {
+            *v = ((*v - minv) * s) / range;
+        }
+    } else {
+        c = [0.0; 3];
+    }
+    c
 }
 
 fn set_px(
@@ -1174,6 +1299,67 @@ mod tests {
         let c = s.composite(0)[0];
         // 0.5 * 0.5 = 0.25 -> ~64
         assert!((c.0 as i32 - 64).abs() <= 1, "got {}", c.0);
+    }
+
+    #[test]
+    fn every_blend_mode_matches_the_reference_math() {
+        let dst = Rgba(51, 102, 153, 255);
+        let src = Rgba(128, 77, 204, 255);
+        let opaque = [
+            (BlendMode::Normal, [128, 77, 204]),
+            (BlendMode::Multiply, [26, 31, 122]),
+            (BlendMode::Screen, [153, 148, 235]),
+            (BlendMode::Overlay, [51, 62, 214]),
+            (BlendMode::Darken, [51, 77, 153]),
+            (BlendMode::Lighten, [128, 102, 204]),
+            (BlendMode::ColorDodge, [102, 146, 255]),
+            (BlendMode::ColorBurn, [0, 0, 128]),
+            (BlendMode::HardLight, [52, 62, 214]),
+            (BlendMode::SoftLight, [51, 78, 180]),
+            (BlendMode::Difference, [77, 25, 51]),
+            (BlendMode::Exclusion, [128, 117, 112]),
+            (BlendMode::Hue, [110, 69, 171]),
+            (BlendMode::Saturation, [41, 104, 168]),
+            (BlendMode::Color, [114, 63, 190]),
+            (BlendMode::Luminosity, [65, 116, 167]),
+            (BlendMode::Add, [179, 179, 255]),
+            (BlendMode::Subtract, [0, 25, 0]),
+            (BlendMode::Divide, [102, 255, 191]),
+        ];
+        for (mode, want) in opaque {
+            let got = blend_over(mode, src, 255, dst);
+            assert_eq!([got.0, got.1, got.2], want, "{mode:?} at alpha 255");
+            assert_eq!(got.3, 255, "{mode:?} alpha");
+        }
+
+        // Source at 50% over the opaque backdrop: the compositing formula,
+        // not just the blend function.
+        let half = [
+            (BlendMode::Normal, [90, 89, 179]),
+            (BlendMode::Multiply, [38, 66, 138]),
+            (BlendMode::Screen, [102, 125, 194]),
+            (BlendMode::Overlay, [51, 82, 184]),
+            (BlendMode::Darken, [51, 89, 153]),
+            (BlendMode::Lighten, [90, 102, 179]),
+            (BlendMode::ColorDodge, [77, 124, 204]),
+            (BlendMode::ColorBurn, [25, 51, 140]),
+            (BlendMode::HardLight, [51, 82, 184]),
+            (BlendMode::SoftLight, [51, 90, 166]),
+            (BlendMode::Difference, [64, 63, 102]),
+            (BlendMode::Exclusion, [90, 110, 133]),
+            (BlendMode::Hue, [80, 85, 162]),
+            (BlendMode::Saturation, [46, 103, 160]),
+            (BlendMode::Color, [83, 82, 172]),
+            (BlendMode::Luminosity, [58, 109, 160]),
+            (BlendMode::Add, [115, 141, 204]),
+            (BlendMode::Subtract, [25, 63, 76]),
+            (BlendMode::Divide, [76, 179, 172]),
+        ];
+        for (mode, want) in half {
+            let got = blend_over(mode, src, 128, dst);
+            assert_eq!([got.0, got.1, got.2], want, "{mode:?} at alpha 128");
+            assert_eq!(got.3, 255, "{mode:?} alpha");
+        }
     }
 
     #[test]

@@ -43,7 +43,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Tilemap layers | Missing | P5-30 |
 | Visibility, opacity, rename, add/remove, reorder | Covered | — |
 | Nested groups + group opacity/blend | Covered | — |
-| Blend modes | Partial (8/19) | P5-05 |
+| Blend modes | Covered (19) | P5-05 |
 | Editable lock | Covered | — |
 | Lock movement | Missing | P5-13 |
 | Prefer linked cels | Missing | P5-13 |
