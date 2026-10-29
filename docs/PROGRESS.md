@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **194 tests green** (183 lib + 11 bin)
+- `cargo test` → **195 tests green** (184 lib + 11 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-31 tilemap editing** (see batch 68).
+- Last completed batch: **P5-32 write tilemap chunks** (see batch 69).
 
 ## How to resume
 
@@ -380,6 +380,10 @@ Read, in order:
   per-edit rasterize + one undo, pixel-edit mode, `:tileid|flip|mode|pick|erase`
   and a tilemap panel. 2 new tests (194 total): paint/pick/erase/undo and pixel
   mode.
+69. **P5-32 — write tileset/tilemap chunks** — `0x2023` embedded/external
+  tilesets, tilemap layer kind 2 + tileset ID, type-3 cels with compressed tile
+  words and flips; shared pixel encoder. 2 new tests (195 total): fixture
+  round-trip and external reference write.
 
 ## Next step (exact)
 
@@ -388,8 +392,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-32** — write tileset/tilemap chunks (first open task), then continue
-  down the P5 roadmap in dependency order.
+- **P5-33** — tileset depth (first open task), then continue down the P5 roadmap
+  in dependency order.
 
 ## Known limitations (do not forget)
 

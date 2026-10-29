@@ -221,6 +221,12 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
         write_external_files_chunk(&mut body, &s.external_files);
         count += 1;
     }
+    if frame == 0 && !s.tilesets.is_empty() {
+        for ts in &s.tilesets {
+            write_tileset_chunk(&mut body, ts, depth);
+            count += 1;
+        }
+    }
     if frame == 0 {
         if let OutDepth::Indexed { palette, .. } = depth {
             // Names describe the document palette; an auto-generated palette
@@ -424,6 +430,71 @@ fn write_palette_chunk(out: &mut Vec<u8>, palette: &[Rgba], names: &[String]) {
     write_chunk(out, CHUNK_PALETTE, &b);
 }
 
+fn push_pixel(out: &mut Vec<u8>, p: Rgba, depth: &OutDepth) {
+    match depth {
+        OutDepth::Rgba => out.extend_from_slice(&[p.0, p.1, p.2, p.3]),
+        OutDepth::Gray => out.extend_from_slice(&[p.0, p.3]),
+        OutDepth::Indexed {
+            palette,
+            transparent,
+        } => {
+            let idx = if p.3 == 0 {
+                *transparent
+            } else {
+                palette
+                    .iter()
+                    .position(|c| c == &p)
+                    .map(|i| i as u8)
+                    .unwrap_or_else(|| {
+                        crate::sprite::nearest_palette_index(palette, *transparent, p)
+                    })
+            };
+            out.push(idx);
+        }
+    }
+}
+
+fn write_tileset_chunk(out: &mut Vec<u8>, ts: &Tileset, depth: &OutDepth) {
+    let mut flags = ts.flags;
+    let external = ts.external;
+    if external.is_some() {
+        flags |= 1;
+        flags &= !2;
+    } else if !ts.image.is_empty() {
+        flags |= 2;
+    }
+    let mut b = Vec::new();
+    b.extend_from_slice(&ts.id.to_le_bytes());
+    b.extend_from_slice(&flags.to_le_bytes());
+    b.extend_from_slice(&ts.num_tiles.to_le_bytes());
+    b.extend_from_slice(&(ts.tile_w.min(u16::MAX as u32) as u16).to_le_bytes());
+    b.extend_from_slice(&(ts.tile_h.min(u16::MAX as u32) as u16).to_le_bytes());
+    b.extend_from_slice(&(ts.base_index.min(u16::MAX as u32) as u16).to_le_bytes());
+    b.extend_from_slice(&[0u8; 14]);
+    b.extend_from_slice(&(ts.name.len() as u16).to_le_bytes());
+    b.extend_from_slice(ts.name.as_bytes());
+    if let Some((file, id)) = external {
+        b.extend_from_slice(&file.to_le_bytes());
+        b.extend_from_slice(&id.to_le_bytes());
+    } else if !ts.image.is_empty() {
+        let mut raw = Vec::with_capacity(ts.image.len() * 4);
+        for p in &ts.image {
+            push_pixel(&mut raw, *p, depth);
+        }
+        let mut packed = Vec::new();
+        {
+            use std::io::Write;
+            let mut enc =
+                flate2::write::ZlibEncoder::new(&mut packed, flate2::Compression::default());
+            enc.write_all(&raw).expect("zlib to memory");
+            enc.finish().expect("zlib to memory");
+        }
+        b.extend_from_slice(&(packed.len() as u32).to_le_bytes());
+        b.extend_from_slice(&packed);
+    }
+    write_chunk(out, CHUNK_TILESET, &b);
+}
+
 fn write_layer_chunk(out: &mut Vec<u8>, layer: &Layer, has_uuid: bool) {
     let name = layer.name.as_bytes();
     let mut b = Vec::new();
@@ -446,8 +517,15 @@ fn write_layer_chunk(out: &mut Vec<u8>, layer: &Layer, has_uuid: bool) {
     if layer.collapsed {
         flags |= 32; // group displayed collapsed
     }
+    let kind: u16 = if layer.group {
+        1
+    } else if layer.tilemap {
+        2
+    } else {
+        0
+    };
     b.extend_from_slice(&flags.to_le_bytes());
-    b.extend_from_slice(&(layer.group as u16).to_le_bytes()); // 0 image, 1 group
+    b.extend_from_slice(&kind.to_le_bytes());
     b.extend_from_slice(&layer.child_level.to_le_bytes());
     b.extend_from_slice(&0u16.to_le_bytes()); // default width
     b.extend_from_slice(&0u16.to_le_bytes()); // default height
@@ -456,6 +534,9 @@ fn write_layer_chunk(out: &mut Vec<u8>, layer: &Layer, has_uuid: bool) {
     b.extend_from_slice(&[0u8; 3]);
     b.extend_from_slice(&(name.len() as u16).to_le_bytes());
     b.extend_from_slice(name);
+    if kind == 2 {
+        b.extend_from_slice(&layer.tileset.to_le_bytes());
+    }
     if has_uuid {
         b.extend_from_slice(&layer.uuid.unwrap_or([0u8; 16]));
     }
@@ -492,7 +573,11 @@ fn write_cel_chunk(
     let link = cel.link.filter(|&t| t < s.frames.len() && t != frame);
     // Empty cels are implicit, but a cel with user data (a text object can
     // live on an otherwise transparent cel) needs its chunk to carry it.
-    if link.is_none() && cel.user_data.is_none() && cel.pixels.iter().all(|p| p.3 == 0) {
+    if link.is_none()
+        && cel.user_data.is_none()
+        && cel.tilemap.is_none()
+        && cel.pixels.iter().all(|p| p.3 == 0)
+    {
         return false;
     }
     let mut b = Vec::new();
@@ -500,7 +585,44 @@ fn write_cel_chunk(
     b.extend_from_slice(&(cel.x.clamp(i16::MIN as i32, i16::MAX as i32) as i16).to_le_bytes());
     b.extend_from_slice(&(cel.y.clamp(i16::MIN as i32, i16::MAX as i32) as i16).to_le_bytes());
     b.push(cel.opacity);
-    if let Some(target) = link {
+    if let Some(tm) = &cel.tilemap {
+        b.extend_from_slice(&3u16.to_le_bytes()); // cel type: tilemap
+        b.extend_from_slice(&cel.z_index.to_le_bytes());
+        b.extend_from_slice(&[0u8; 5]);
+        let tiles_w = tm.tiles_w.max(1);
+        let tiles_h = (tm.tiles.len() as u32).div_ceil(tiles_w).max(1);
+        b.extend_from_slice(&(tiles_w.min(u16::MAX as u32) as u16).to_le_bytes());
+        b.extend_from_slice(&(tiles_h.min(u16::MAX as u32) as u16).to_le_bytes());
+        b.extend_from_slice(&32u16.to_le_bytes()); // bits per tile
+        b.extend_from_slice(&0x1fff_ffffu32.to_le_bytes()); // id mask
+        b.extend_from_slice(&(1u32 << 29).to_le_bytes()); // flip x
+        b.extend_from_slice(&(1u32 << 30).to_le_bytes()); // flip y
+        b.extend_from_slice(&(1u32 << 31).to_le_bytes()); // flip diagonal
+        b.extend_from_slice(&[0u8; 10]);
+        let mut raw = Vec::with_capacity(tm.tiles.len() * 4);
+        for t in &tm.tiles {
+            let mut word = t.id & 0x1fff_ffff;
+            if t.flip_x {
+                word |= 1 << 29;
+            }
+            if t.flip_y {
+                word |= 1 << 30;
+            }
+            if t.flip_diagonal {
+                word |= 1 << 31;
+            }
+            raw.extend_from_slice(&word.to_le_bytes());
+        }
+        let mut packed = Vec::new();
+        {
+            use std::io::Write;
+            let mut enc =
+                flate2::write::ZlibEncoder::new(&mut packed, flate2::Compression::default());
+            enc.write_all(&raw).expect("zlib to memory");
+            enc.finish().expect("zlib to memory");
+        }
+        b.extend_from_slice(&packed);
+    } else if let Some(target) = link {
         b.extend_from_slice(&1u16.to_le_bytes()); // cel type: linked
         b.extend_from_slice(&cel.z_index.to_le_bytes());
         b.extend_from_slice(&[0u8; 5]);
@@ -511,36 +633,8 @@ fn write_cel_chunk(
         b.extend_from_slice(&[0u8; 5]);
         b.extend_from_slice(&(cel.w.min(u16::MAX as u32) as u16).to_le_bytes());
         b.extend_from_slice(&(cel.h.min(u16::MAX as u32) as u16).to_le_bytes());
-        match depth {
-            OutDepth::Rgba => {
-                for p in &cel.pixels {
-                    b.extend_from_slice(&[p.0, p.1, p.2, p.3]);
-                }
-            }
-            OutDepth::Gray => {
-                for p in &cel.pixels {
-                    b.extend_from_slice(&[p.0, p.3]);
-                }
-            }
-            OutDepth::Indexed {
-                palette,
-                transparent,
-            } => {
-                for p in &cel.pixels {
-                    let idx = if p.3 == 0 {
-                        *transparent
-                    } else {
-                        palette
-                            .iter()
-                            .position(|c| c == p)
-                            .map(|i| i as u8)
-                            .unwrap_or_else(|| {
-                                crate::sprite::nearest_palette_index(palette, *transparent, *p)
-                            })
-                    };
-                    b.push(idx);
-                }
-            }
+        for p in &cel.pixels {
+            push_pixel(&mut b, *p, depth);
         }
     }
     write_chunk(out, CHUNK_CEL, &b);
@@ -2173,6 +2267,42 @@ mod tests {
         assert_eq!(s.get(0, 0, 3, 0), Rgba(255, 0, 0, 255));
         assert_eq!(s.get(0, 0, 2, 1), Rgba(255, 255, 255, 255));
         assert_eq!(s.get(0, 0, 3, 1), Rgba(0, 0, 255, 255));
+
+        // Written tileset + type-3 cel survive an open→save→open round trip.
+        let path = tmp("vixel_tilemap_roundtrip.ase");
+        save(&s, &path).unwrap();
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.tilesets, s.tilesets);
+        assert!(back.layers[0].tilemap);
+        assert_eq!(back.layers[0].tileset, 5);
+        assert_eq!(back.cels[0][0].tilemap, s.cels[0][0].tilemap);
+        assert_eq!(back.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
+        assert_eq!(back.get(0, 0, 2, 0), Rgba(0, 255, 0, 255));
+    }
+
+    #[test]
+    fn external_tileset_references_are_written() {
+        let mut s = Sprite::new(2, 2);
+        s.tilesets.push(Tileset {
+            id: 3,
+            name: "ext".into(),
+            tile_w: 8,
+            tile_h: 8,
+            base_index: 1,
+            flags: 1,
+            num_tiles: 4,
+            image: Vec::new(),
+            external: Some((7, 9)),
+        });
+        let path = tmp("vixel_external_tileset.ase");
+        save(&s, &path).unwrap();
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.tilesets.len(), 1);
+        assert_eq!(back.tilesets[0].external, Some((7, 9)));
+        assert_eq!(back.tilesets[0].id, 3);
+        assert!(back.tilesets[0].image.is_empty());
     }
 
     #[test]

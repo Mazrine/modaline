@@ -440,8 +440,14 @@ met; blocked tasks are marked with the reason.
   edit). Commands: `:tileid`, `:tileflip x|y|diag|none`, `:tilemode manual|pixel`,
   `:tilepick`, `:tileerase`. 2 new tests (194 total): paint/pick/erase/undo and
   pixel mode. Panel is UI-only and not screenshotted (manual check).
-- [ ] **P5-32 — Write tileset/tilemap chunks** (M) — deps: P5-30.
-  0x2023 + cel type 3; `open→save→open` tilemap fixture.
+- [x] **P5-32 — Write tileset/tilemap chunks** (M) — deps: P5-30.
+  Landed 2026-10-28. Frame 0 emits `0x2023` for every retained tileset
+  (embedded atlas compressed at the chosen depth, or external file/tileset IDs);
+  tilemap layers are written as kind 2 with their tileset ID, and tilemap cels
+  as type 3 with zlib-compressed tile words (ID + X/Y/diagonal flips). Raw cel
+  pixel encoding is shared with the tileset writer. 2 new tests (195 total):
+  open→save→open tilemap fixture (refs, flips, bytes) and external tileset
+  reference write.
 - [ ] **P5-33 — Tileset depth** (M) — deps: P5-29, P5-32.
   Edit tile pixels, `--export-tileset`, external tileset read, auto/stack modes.
 

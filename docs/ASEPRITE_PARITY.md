@@ -119,9 +119,9 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Manual / auto / stack modes | Missing | P5-33 |
 | Empty tile | Covered | P5-31 |
 | Tile flips X/Y/diagonal | Covered (diagonal-first order) | P5-29 |
-| Write tileset/tilemap chunks (`.ase`) | Missing | P5-32 |
+| Write tileset/tilemap chunks (`.ase`) | Covered | P5-32 |
 | Tileset editing + export | Missing | P5-33 |
-| External tileset files | Partial (references read) | P5-33 |
+| External tileset files | Partial (references read/write) | P5-33 |
 
 ## Slices
 

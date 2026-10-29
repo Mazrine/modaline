@@ -155,6 +155,8 @@ L-shaped corners for the 1 px pencil/eraser.
   rebuilds pixels after edits. The **tile tool** (`K`) places/picks tiles with
   flips, places the empty tile, and has a pixel-edit mode; each edit is one undo
   step (`:tileid`, `:tileflip`, `:tilemode`, `:tilepick`, `:tileerase`).
+  `.ase` saving writes `0x2023` tilesets and type-3 tilemap cels (ID + flips);
+  external references are written without pixels.
 - **slices**: named 9-patch/pivot slice objects with per-frame keys, read and
   written from `.ase` 0x2022 (colour from user data) and listed in the side
   panel. `:slices` lists them; `:slices <dir> named` exports one PNG per slice
