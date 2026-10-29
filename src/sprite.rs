@@ -185,6 +185,58 @@ pub enum BlendMode {
     Divide,
 }
 
+impl BlendMode {
+    pub fn name(self) -> &'static str {
+        match self {
+            BlendMode::Normal => "normal",
+            BlendMode::Multiply => "multiply",
+            BlendMode::Screen => "screen",
+            BlendMode::Overlay => "overlay",
+            BlendMode::Darken => "darken",
+            BlendMode::Lighten => "lighten",
+            BlendMode::ColorDodge => "color dodge",
+            BlendMode::ColorBurn => "color burn",
+            BlendMode::HardLight => "hard light",
+            BlendMode::SoftLight => "soft light",
+            BlendMode::Difference => "difference",
+            BlendMode::Exclusion => "exclusion",
+            BlendMode::Hue => "hue",
+            BlendMode::Saturation => "saturation",
+            BlendMode::Color => "color",
+            BlendMode::Luminosity => "luminosity",
+            BlendMode::Add => "add",
+            BlendMode::Subtract => "subtract",
+            BlendMode::Divide => "divide",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<BlendMode> {
+        let key = s.to_ascii_lowercase().replace(['_', '-'], " ");
+        Some(match key.as_str() {
+            "normal" | "n" => BlendMode::Normal,
+            "multiply" | "mul" | "m" => BlendMode::Multiply,
+            "screen" | "scr" => BlendMode::Screen,
+            "overlay" | "over" => BlendMode::Overlay,
+            "darken" | "dark" => BlendMode::Darken,
+            "lighten" | "light" => BlendMode::Lighten,
+            "color dodge" | "colordodge" | "dodge" => BlendMode::ColorDodge,
+            "color burn" | "colorburn" | "burn" => BlendMode::ColorBurn,
+            "hard light" | "hardlight" => BlendMode::HardLight,
+            "soft light" | "softlight" => BlendMode::SoftLight,
+            "difference" | "diff" => BlendMode::Difference,
+            "exclusion" | "excl" => BlendMode::Exclusion,
+            "hue" => BlendMode::Hue,
+            "saturation" | "sat" => BlendMode::Saturation,
+            "color" | "colour" => BlendMode::Color,
+            "luminosity" | "luma" => BlendMode::Luminosity,
+            "add" | "addition" | "plus" => BlendMode::Add,
+            "subtract" | "sub" => BlendMode::Subtract,
+            "divide" | "div" => BlendMode::Divide,
+            _ => return None,
+        })
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Layer {
     pub name: String,
@@ -3154,5 +3206,38 @@ mod tests {
         assert_eq!(rect_points(0, 0, 1, 1).len(), 4);
         assert!(!ellipse_points(0, 0, 4, 4, true).is_empty());
         assert!(!ellipse_points(0, 0, 4, 4, false).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod blend_tests {
+    use super::BlendMode;
+
+    #[test]
+    fn blend_names_parse_round_trip() {
+        for blend in [
+            BlendMode::Normal,
+            BlendMode::Multiply,
+            BlendMode::Screen,
+            BlendMode::Overlay,
+            BlendMode::Darken,
+            BlendMode::Lighten,
+            BlendMode::ColorDodge,
+            BlendMode::ColorBurn,
+            BlendMode::HardLight,
+            BlendMode::SoftLight,
+            BlendMode::Difference,
+            BlendMode::Exclusion,
+            BlendMode::Hue,
+            BlendMode::Saturation,
+            BlendMode::Color,
+            BlendMode::Luminosity,
+            BlendMode::Add,
+            BlendMode::Subtract,
+            BlendMode::Divide,
+        ] {
+            assert_eq!(BlendMode::parse(blend.name()), Some(blend), "{blend:?}");
+        }
+        assert_eq!(BlendMode::parse("nope"), None);
     }
 }

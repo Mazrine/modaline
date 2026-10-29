@@ -49,6 +49,8 @@ pub struct Config {
     pub session_active: usize,
     /// Cleanly closed documents, oldest first (`:reopen`).
     pub closed: Vec<String>,
+    /// Use pen/tablet pressure when a Wacom/OpenTabletDriver device is present.
+    pub pen_enabled: bool,
     /// Free-form entries a future build can read; round-tripped, never guessed.
     pub extra: BTreeMap<String, String>,
 }
@@ -126,6 +128,7 @@ impl Default for Config {
             session: Vec::new(),
             session_active: 0,
             closed: Vec::new(),
+            pen_enabled: true,
             extra: BTreeMap::new(),
         }
     }

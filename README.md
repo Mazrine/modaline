@@ -278,7 +278,7 @@ picker, pencil/eraser/bucket/picker/line/rect/ellipse with **filled shapes**,
 polygon selection**
 with **add/subtract/intersect**, **expand/contract/border/feather/invert** and
 copy/cut/paste/move, **sixteen filters** (curves, levels, balance, median, convolve, emboss…), **free rotate/scale/skew + RotSprite + interactive handles/pivot**, **8x8 bitmap
-text** (text tool with live preview/size/alignment), **brush size 1-64 + custom masks/spacing + pressure**, **pixel-perfect freehand**, **crop/trim**,
+text** (text tool with live preview/size/alignment), **brush size 1-64 + custom masks/spacing + pressure**, **Wacom/OpenTabletDriver pen pressure (Linux evdev)**, **pixel-perfect freehand**, **crop/trim**,
 **per-tool inks + alpha lock**, **retained tilesets + tilemap refs (r/w `.ase`)**, **design grid + snap**,
 **multi-stop gradients** (presets, alpha, Bayer dither), **wide-pixel preview**, **independent preview window/OS viewport**, **layer×frame timeline grid + tag editor**, **symmetry painting**
 (mirror or radial,
@@ -291,7 +291,8 @@ export**, **sprite properties** (colour mode, pixel ratio, grid size + origin) a
 **sRGB/linear colour profiles**, **custom palettes** (`.gpl`/`.hex`/`.pal`),
 **OS clipboard**, **tile mode** (3x3 seamless preview + wrapping cursor),
 **frame tags + drag reorder**, full vim keymap (normal/draw/visual/paste/command
-modes).
+modes), **keyboard pan/brush-size**, **contextual status hints + `:tips`**, and
+**Helix keymap preset planned** (`docs/KEYMAPS.md`).
 
 ## Headless CLI
 

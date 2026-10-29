@@ -280,6 +280,28 @@ fn handle_key(
                 }
             }
             Escape => {
+                // Close the topmost floating window first (they used to need
+                // the mouse on the title-bar ×).
+                if view.tips_open {
+                    view.tips_open = false;
+                    return;
+                }
+                if view.prefs_open {
+                    view.prefs_open = false;
+                    return;
+                }
+                if view.export_open {
+                    view.export_open = false;
+                    return;
+                }
+                if view.history_open {
+                    view.history_open = false;
+                    return;
+                }
+                if view.browser_open {
+                    view.browser_open = false;
+                    return;
+                }
                 if editor.filter_job.is_some() {
                     editor.cancel_filter();
                 }
@@ -477,6 +499,8 @@ fn handle_char(editor: &mut Editor, ch: char) {
         '>' => editor.cycle_layer(1),
         '[' => editor.cycle_frame(-1),
         ']' => editor.cycle_frame(1),
+        '{' => editor.nudge_brush(-1),
+        '}' => editor.nudge_brush(1),
         'X' => editor.swap_colors(),
         'u' => editor.undo(),
         'g' => editor.g_prefix = true,
@@ -561,6 +585,85 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
     if cmd == "prefs" || cmd == "preferences" {
         view.prefs_open = true;
         editor.msg = "preferences".into();
+        return;
+    }
+    if let Some(rest) = cmd.strip_prefix("onion") {
+        let mut it = rest.split_whitespace();
+        match (it.next(), it.next()) {
+            (None, _) => {
+                view.onion.enabled = !view.onion.enabled;
+                editor.msg = if view.onion.enabled {
+                    "onion skin: on".into()
+                } else {
+                    "onion skin: off".into()
+                };
+            }
+            (Some("on"), _) => view.onion.enabled = true,
+            (Some("off"), _) => view.onion.enabled = false,
+            (Some("count"), Some(n)) => match n.parse::<u8>() {
+                Ok(n) => view.onion.count = n.clamp(1, 3),
+                Err(_) => editor.msg = "usage: :onion [on|off|count <1-3>|opacity <0-255>]".into(),
+            },
+            (Some("opacity"), Some(n)) => match n.parse::<u8>() {
+                Ok(n) => view.onion.opacity = n,
+                Err(_) => editor.msg = "usage: :onion [on|off|count <1-3>|opacity <0-255>]".into(),
+            },
+            _ => editor.msg = "usage: :onion [on|off|count <1-3>|opacity <0-255>]".into(),
+        }
+        return;
+    }
+    if let Some(rest) = cmd.strip_prefix("play") {
+        match rest.trim() {
+            "" => {
+                view.play_request = Some(!view.playing);
+                editor.msg = if view.playing {
+                    "play: off".into()
+                } else {
+                    "play: on".into()
+                };
+            }
+            "on" => {
+                view.play_request = Some(true);
+                editor.msg = "play: on".into();
+            }
+            "off" => {
+                view.play_request = Some(false);
+                editor.msg = "play: off".into();
+            }
+            _ => editor.msg = "usage: :play [on|off]".into(),
+        }
+        return;
+    }
+    if cmd == "tips" {
+        view.tips_open = !view.tips_open;
+        editor.msg = if view.tips_open {
+            "tips: on"
+        } else {
+            "tips: off"
+        }
+        .into();
+        return;
+    }
+    if let Some(rest) = cmd.strip_prefix("pen") {
+        match rest.trim() {
+            "" => {
+                let label = view.pen_label();
+                editor.msg = match view.pen_pressure {
+                    Some(p) => vixel::status!("pen: {} ({:.0}%)", label, p * 100.0),
+                    None => vixel::status!("pen: {}", label),
+                };
+            }
+            "on" => {
+                view.pen_enabled = true;
+                editor.msg = "pen enabled".into();
+            }
+            "off" => {
+                view.pen_enabled = false;
+                editor.set_device_pressure(None);
+                editor.msg = "pen disabled".into();
+            }
+            other => editor.msg = vixel::status!("usage: :pen [on|off] (got {other})"),
+        }
         return;
     }
     if let Some(rest) = cmd.strip_prefix("ext")
@@ -1046,6 +1149,37 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 };
             }
         },
+        "tagsel" | "selecttag" => match arg {
+            Some(name) => match editor.sprite.tags.iter().position(|t| t.name == name) {
+                Some(i) => {
+                    editor.active_tag = Some(i);
+                    editor.msg = vixel::status!("active tag: {}", name);
+                }
+                None => editor.msg = vixel::status!("unknown tag: {name}"),
+            },
+            None => {
+                editor.msg = match editor.active_tag {
+                    Some(i) => vixel::status!("active tag: {}", editor.sprite.tags[i].name),
+                    None => "no active tag".into(),
+                }
+            }
+        },
+        "tagcolor" => match arg.and_then(crate::color::parse_hex) {
+            Some(color) => {
+                if editor.active_tag.is_some() {
+                    editor.set_tag_color(color);
+                    editor.msg = vixel::status!(
+                        "tag colour: #{:02x}{:02x}{:02x}",
+                        color.0,
+                        color.1,
+                        color.2
+                    );
+                } else {
+                    editor.msg = "no active tag (use :tagsel <name>)".into();
+                }
+            }
+            None => editor.msg = "usage: :tagcolor #rrggbb".into(),
+        },
         "tagdel" | "untag" => editor.del_tag(arg),
         "copy" | "yank" => match arg {
             Some("merged" | "all") => editor.yank_merged(),
@@ -1295,6 +1429,37 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "pixel-perfect: off".into();
             }
             _ => editor.msg = "usage: :perfect on|off".into(),
+        },
+        "celopacity" | "celop" => match arg.and_then(|v| v.parse::<u8>().ok()) {
+            Some(op) => editor.set_cel_opacity(op),
+            None => editor.msg = "usage: :celopacity <0-255>".into(),
+        },
+        "visible" | "vis" => {
+            let on = match arg {
+                Some("on") => true,
+                Some("off") => false,
+                None => !editor.sprite.layers[editor.active_layer].visible,
+                Some(other) => {
+                    editor.msg = vixel::status!("usage: :visible on|off (got {other})");
+                    return;
+                }
+            };
+            editor.set_layer_visible(on);
+        }
+        "blend" => match arg.and_then(crate::sprite::BlendMode::parse) {
+            Some(blend) => editor.set_layer_blend(blend),
+            None => {
+                editor.msg =
+                    "usage: :blend <normal|multiply|screen|overlay|darken|lighten|...>".into()
+            }
+        },
+        "layeropacity" | "layerop" => match arg.and_then(|v| v.parse::<u8>().ok()) {
+            Some(op) => editor.set_layer_opacity(op),
+            None => editor.msg = "usage: :layeropacity <0-255>".into(),
+        },
+        "frameduration" | "framedur" => match arg.and_then(|v| v.parse::<u16>().ok()) {
+            Some(ms) => editor.set_frame_duration(ms),
+            None => editor.msg = "usage: :frameduration <1-10000>".into(),
         },
         "pressure" => match arg {
             Some("auto") => editor.pressure_auto(),
@@ -2488,6 +2653,34 @@ fn parse_dims(arg: Option<&str>, dw: u32, dh: u32) -> (u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tag_commands_select_and_colour_the_active_tag() {
+        let mut e = Editor::new(4, 4);
+        let mut v = View::new();
+        e.set_tag("walk", Some(0), Some(0));
+        exec_command(&mut e, "tagsel walk");
+        assert_eq!(e.active_tag, Some(0));
+        exec_command(&mut e, "tagcolor #ff8800");
+        assert_eq!(e.sprite.tags[0].color, Rgba::rgb(255, 136, 0));
+        exec_command(&mut e, "tagcolor nope");
+        assert!(e.msg.contains("usage"));
+        let _ = &mut v;
+    }
+
+    #[test]
+    fn play_command_requests_playback() {
+        let mut e = Editor::new(2, 2);
+        let mut v = View::new();
+        let ctx = eframe::egui::Context::default();
+        e.cmdline = "play".into();
+        submit(&mut e, &mut v, &ctx);
+        assert_eq!(v.play_request, Some(true));
+        e.cmdline = "play off".into();
+        submit(&mut e, &mut v, &ctx);
+        assert_eq!(v.play_request, Some(false));
+        assert!(e.msg.contains("off"));
+    }
 
     fn ops_file(tag: &str, body: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("vixel-ops-{tag}-{}", std::process::id()));

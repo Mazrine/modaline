@@ -42,6 +42,7 @@ thin shells:
 | `input.rs` | vim keymap + `:` command line (reads `egui::Event`) |
 | `gui.rs` | `View` (zoom/pan), canvas drawing, panels, preferences/export/help windows |
 | `app.rs` | `eframe::App` + `Doc` tabs: event loop, per-doc view/textures, playback, session persistence |
+| `pen.rs` (lib) | Linux evdev pressure for Wacom/OTD tablets; position/clicks stay on the OS pointer |
 | `theme.rs` | JSON themes + built-ins, egui visuals application, UI font/size loading |
 | `keymap.rs` | action layer, chord parsing, conflicts, wheel actions, default suppression |
 | `i18n.rs` (lib) | JSON language catalogs, English fallback, translator and missing-key checks |
@@ -122,6 +123,13 @@ thin shells:
 - External files (0x2008) are parsed into `Sprite.external_files`; external
   tilesets store their file/tileset IDs and deliberately skip pixel decoding
   until P5-33. Deprecated chunks stay in `raw_chunks` on purpose.
+- Pen pressure comes from `pen::PenReader` (evdev `ABS_PRESSURE`/`BTN_TOUCH`)
+  and is applied by the app only while the tip is down; never grab the device
+  (the OS pointer must keep working). See `docs/PEN.md`.
+- Canvas pan is bindable `pan-*` actions (`Ctrl-hjkl` by default); brush size has
+  `{`/`}` and every panel slider has a command (`:celopacity`,
+  `:layeropacity`, `:frameduration`, `:visible`, `:blend`, `:onion`). Keep that
+  keyboard/mouse/pen parity when adding controls (`docs/UX_AUDIT.md`).
 - Brush paths go through `apply_ink`; operations that own their pixels (cut,
   transform, paste, contour, filters) must use the exact put path so the active
   ink cannot alter them. Inks are stored per tool in `tool_inks`.

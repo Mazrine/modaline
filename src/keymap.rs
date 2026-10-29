@@ -42,6 +42,10 @@ pub enum Action {
     SwapColors,
     ZoomIn,
     ZoomOut,
+    PanLeft,
+    PanRight,
+    PanUp,
+    PanDown,
     ToggleGrid,
 }
 
@@ -74,6 +78,10 @@ impl Action {
         Action::SwapColors,
         Action::ZoomIn,
         Action::ZoomOut,
+        Action::PanLeft,
+        Action::PanRight,
+        Action::PanUp,
+        Action::PanDown,
         Action::ToggleGrid,
     ];
 
@@ -106,6 +114,10 @@ impl Action {
             Action::SwapColors => "swap-colors",
             Action::ZoomIn => "zoom-in",
             Action::ZoomOut => "zoom-out",
+            Action::PanLeft => "pan-left",
+            Action::PanRight => "pan-right",
+            Action::PanUp => "pan-up",
+            Action::PanDown => "pan-down",
             Action::ToggleGrid => "toggle-grid",
         }
     }
@@ -144,6 +156,10 @@ impl Action {
             Action::SwapColors => "x",
             Action::ZoomIn => "+",
             Action::ZoomOut => "-",
+            Action::PanLeft => "h",
+            Action::PanRight => "l",
+            Action::PanUp => "k",
+            Action::PanDown => "j",
             Action::ToggleGrid => "'",
         };
         let mut chord =
@@ -163,7 +179,16 @@ impl Action {
                 | Action::SwapColors
                 | Action::ZoomIn
         );
-        chord.ctrl = matches!(self, Action::Redo | Action::Save | Action::Quit);
+        chord.ctrl = matches!(
+            self,
+            Action::Redo
+                | Action::Save
+                | Action::Quit
+                | Action::PanLeft
+                | Action::PanRight
+                | Action::PanUp
+                | Action::PanDown
+        );
         chord
     }
 
@@ -235,6 +260,10 @@ impl Action {
             Action::SwapColors => editor.swap_colors(),
             Action::ZoomIn => view.zoom_in(),
             Action::ZoomOut => view.zoom_out(),
+            Action::PanLeft => view.pan_by(40.0, 0.0),
+            Action::PanRight => view.pan_by(-40.0, 0.0),
+            Action::PanUp => view.pan_by(0.0, 40.0),
+            Action::PanDown => view.pan_by(0.0, -40.0),
             Action::ToggleGrid => view.show_grid = !view.show_grid,
         }
         let _ = ctx;

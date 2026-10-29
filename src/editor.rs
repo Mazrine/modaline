@@ -4732,6 +4732,62 @@ impl Editor {
     }
 
     /// Set the active cel's z-index (positive = towards the front).
+    /// Cel opacity (timeline slider has no keyboard path otherwise).
+    pub fn set_cel_opacity(&mut self, opacity: u8) {
+        let (l, f) = (self.active_layer, self.active_frame);
+        let before = self.sprite.clone();
+        self.sprite.cels[l][f].opacity = opacity;
+        self.snapshot(before);
+        self.msg = crate::status!("cel opacity: {}", opacity);
+    }
+
+    /// Layer visibility, one undo step (the panel checkbox path).
+    pub fn set_layer_visible(&mut self, visible: bool) {
+        let l = self.active_layer;
+        let before = self.layer_props(l);
+        self.sprite.layers[l].visible = visible;
+        self.record_layer_props(l, before);
+        self.msg = if visible {
+            "layer visible".into()
+        } else {
+            "layer hidden".into()
+        };
+    }
+
+    /// Layer blend mode, one undo step.
+    pub fn set_layer_blend(&mut self, blend: crate::sprite::BlendMode) {
+        let l = self.active_layer;
+        let before = self.layer_props(l);
+        self.sprite.layers[l].blend = blend;
+        self.record_layer_props(l, before);
+        self.msg = crate::status!("layer blend: {}", blend.name());
+    }
+
+    /// Active layer opacity, one undo step (same path as the layer panel).
+    pub fn set_layer_opacity(&mut self, opacity: u8) {
+        let l = self.active_layer;
+        let before = self.layer_props(l);
+        self.sprite.layers[l].opacity = opacity;
+        self.record_layer_props(l, before);
+        self.msg = crate::status!("layer opacity: {}", opacity);
+    }
+
+    /// Frame duration in milliseconds, one undo step.
+    pub fn set_frame_duration(&mut self, ms: u16) {
+        let f = self.active_frame;
+        let before = self.sprite.clone();
+        self.sprite.frames[f].duration_ms = ms.max(1);
+        self.snapshot(before);
+        self.msg = crate::status!("frame duration: {} ms", ms.max(1));
+    }
+
+    /// Grow or shrink the brush by one step (keyboard `{` / `}`).
+    pub fn nudge_brush(&mut self, delta: i32) {
+        let size = (self.brush_size as i32 + delta).clamp(1, 64) as u32;
+        self.brush_size = size;
+        self.msg = crate::status!("brush: {} px", size);
+    }
+
     pub fn set_cel_z(&mut self, z: i16) {
         let (l, f) = (self.active_layer, self.active_frame);
         let before = self.sprite.cels[l][f].z_index;
@@ -6034,6 +6090,47 @@ mod tests {
         wait_filter(&mut e);
         assert_eq!(e.sprite.get(0, 0, 5, 5), Rgba::rgb(9, 9, 9));
         assert!(e.undo.is_empty(), "a cancelled filter records no undo");
+    }
+
+    #[test]
+    fn keyboard_opacity_duration_and_brush_steps() {
+        let mut e = Editor::new(4, 4);
+        let (l, f) = (e.active_layer, e.active_frame);
+        e.undo.clear();
+        e.set_cel_opacity(120);
+        assert_eq!(e.sprite.cels[l][f].opacity, 120);
+        e.undo();
+        assert_eq!(
+            e.sprite.cels[l][f].opacity, 255,
+            "one undo restores opacity"
+        );
+
+        e.set_layer_opacity(90);
+        assert_eq!(e.sprite.layers[l].opacity, 90);
+        e.undo();
+        assert_eq!(e.sprite.layers[l].opacity, 255);
+
+        e.set_layer_visible(false);
+        assert!(!e.sprite.layers[l].visible);
+        e.undo();
+        assert!(e.sprite.layers[l].visible);
+
+        e.set_layer_blend(crate::sprite::BlendMode::Multiply);
+        assert_eq!(e.sprite.layers[l].blend, crate::sprite::BlendMode::Multiply);
+        e.undo();
+        assert_eq!(e.sprite.layers[l].blend, crate::sprite::BlendMode::Normal);
+
+        e.set_frame_duration(321);
+        assert_eq!(e.sprite.frames[f].duration_ms, 321);
+        e.undo();
+        assert_ne!(e.sprite.frames[f].duration_ms, 321);
+
+        e.brush_size = 1;
+        e.nudge_brush(-1);
+        assert_eq!(e.brush_size, 1, "brush clamps at 1");
+        e.nudge_brush(1);
+        assert_eq!(e.brush_size, 2);
+        assert!(e.msg.contains("2 px"));
     }
 
     #[test]

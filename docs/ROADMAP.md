@@ -800,6 +800,39 @@ Every row in `docs/ASEPRITE_PARITY.md` is Covered or explicitly Out of scope; no
 Partial/Not supported row remains without a checked task or a Blocked reason.
 The full gate is green and each UI task has an Xvfb/headless check.
 
+## P7 — input and UX — **open**
+
+P6 closed the parity gaps. P7 covers the input/UX work requested after it:
+tablet depth, a Helix keymap preset, and the follow-ups from
+`docs/UX_AUDIT.md`.
+
+- [x] **P7-00 — Wacom / OpenTabletDriver pressure** (M) — deps: none.
+  Landed 2026-10-29. `src/pen.rs` reads `ABS_PRESSURE`/`BTN_TOUCH` from Linux
+  evdev, prefers an `OpenTabletDriver` then `Wacom` device, never grabs it, and
+  rescans when the device disappears. Position/clicks stay on the OS pointer;
+  pressure is applied only while the tip is down (manual > device > 1.0 stays).
+  `:pen [on|off]`, a side-panel checkbox/status, tolerant permission/no-device
+  reporting and persisted `pen_enabled`. 2 unit tests (normalization, disabled
+  path) + the existing pressure tests; hardware is documented as untestable in
+  CI. `docs/PEN.md` covers NixOS/OTD setup and troubleshooting.
+- [ ] **P7-01 — Helix keymap preset** (S) — deps: P5-55, P7-00.
+  `keymap.preset = vim|helix` in config plus `:keymap vim|helix`, applying the
+  mapping proposed in `docs/KEYMAPS.md` on top of the rebindable `Action`
+  layer (u/U, leader placeholder, selection verbs, documented overrides).
+  Tests: preset round-trip, no default conflicts, tools unchanged.
+- [ ] **P7-02 — leader / which-key overlay** (M) — deps: P7-01.
+  Hold `space` (or a configured leader) to show grouped actions with their
+  descriptions, generated from `Action::ALL`; releasing runs the chord.
+  Xvfb smoke: open, navigate a group, run an action.
+- [ ] **P7-03 — pen tilt, rotation and ExpressKeys** (M) — deps: P7-00.
+  Extend `src/pen.rs` with `ABS_TILT_X/Y`,
+  `ABS_RZ` rotation and a configurable button→action map; document OTD and
+  xsetwacom alternatives. Hardware-dependent; tests for parsing/mapping.
+- [ ] **P7-04 — UX follow-ups** (M) — deps: P6-03.
+  Collapsible side-panel sections with remembered state, fuzzy command palette,
+  keyboard-accessible HSV stepper, canvas focus ring, toolbar grouping. See
+  `docs/UX_AUDIT.md` for the ranked list; each item gets an Xvfb check.
+
 ## Explicitly out of scope (for now)
 
 - Web/Wasm build (Aseprite has no web build; product choice).

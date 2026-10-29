@@ -91,7 +91,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Brush cursor preview | Covered | P5-19 |
 | Ink modes (simple, lock-alpha, replace, shading, erase) | Covered | P5-18 |
 | Alpha-lock painting flag | Covered | P5-18 |
-| Pressure/tablet sensitivity | Covered (manual + device force where reported) | P5-20 |
+| Pressure/tablet sensitivity | Covered (manual + Wacom/OpenTabletDriver evdev pressure) | P5-20, P7-00 |
 | Tiled mode | Covered (configurable repeats, opacity, preview) | P5-27 |
 | Move layer/cel content tool | Covered (M move tool drags the active cel content) | P6-00 |
 | Text tool (editable, fonts, sizes) | Covered (bitmap font) | P5-28 |

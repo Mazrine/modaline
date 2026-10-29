@@ -528,13 +528,29 @@ Read, in order:
   `status!`/`.msg`/`.tr()` usage and check every key/message/value (3 tests, 286
   total). Xvfb: `:lang pt-BR` gave `tinta: simples`, `grade: 12 px`, Portuguese
   tools/panels/prefs; `:lang en` switched back cleanly.
+106. **P7-00 + UX pass — pen, keyboard parity, tips** — Linux evdev pressure
+  for Wacom/OpenTabletDriver (never grabs, rescans, `:pen`, side row, config);
+  Ctrl-hjkl pan; `{`/`}` brush size; `:celopacity`, `:layeropacity`,
+  `:frameduration`, `:visible`, `:blend`, `:onion`; Esc closes floating
+  windows; contextual status hints, toolbar key tooltips and `:tips` with a
+  vim-vs-Helix note. 6 new tests (292 total). Xvfb: hint line, pan, tips, pen
+  status and cel opacity checked. Docs: `PEN.md`, `UX_AUDIT.md`, `KEYMAPS.md`,
+  ROADMAP P7. Hardware pressure path is untested in CI.
+
 ## Next step (exact)
 
-**P6 is complete (7/7).** All P6 tasks are checked in `docs/ROADMAP.md` and
-their matrix rows in `docs/ASEPRITE_PARITY.md` are Covered or allowlisted.
-The next pass is the P6 definition-of-done audit: re-read the matrix for any
-remaining Partial/Not-supported row, run the full gate (tests + clippy), and
-repeat the Xvfb smoke from `docs/TESTING.md` on a desktop.
+**P6 is complete (7/7); P7 is open (1/5).** P7-00 (pen pressure) landed with
+the input/UX pass. The next loop picks the first unchecked P7 task whose deps
+are met: **P7-01 Helix keymap preset** (plan in `docs/KEYMAPS.md`), then
+P7-02 leader overlay, P7-03 pen tilt/ExpressKeys, P7-04 UX follow-ups from
+`docs/UX_AUDIT.md`.
+
+### P7 landed (2026-10-29)
+
+- **P7-00** — Wacom / OpenTabletDriver pen pressure (Linux evdev).
+- Keyboard/pen parity pass: pan, brush size, opacity/blend/visibility/duration
+  commands, Esc-closes-windows.
+- Contextual status hints, tool tooltips, `:tips`; UX audit and Helix plan.
 
 ### P6 landed (2026-10-29)
 
@@ -549,9 +565,11 @@ repeat the Xvfb smoke from `docs/TESTING.md` on a desktop.
 ## Known limitations (do not forget)
 
 The matrix is the authoritative list; the entries below are the design limits
-that remain after P6. Anything marked Missing/Partial in
+that remain after P7. Anything marked Missing/Partial in
 `docs/ASEPRITE_PARITY.md` is planned work, not a permanent limitation.
 
+- Pen pressure is read from Linux evdev only (Wacom/OTD); tilt, rotation and
+  ExpressKeys are P7-03, and real hardware is not exercised in CI.
 - Mask pixels cannot be painted directly: masks are created from the selection
   (or fully opaque), baked, or removed.
 - New layers are added as siblings; nesting is an explicit `:indent`.

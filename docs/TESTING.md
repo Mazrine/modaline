@@ -76,6 +76,8 @@ Rules that cost me a run each:
 | preferences | `:prefs`, screenshot | one window shows editor, grid/canvas, export, appearance (theme/lang), keys and workspace sections; close dismisses it |
 | render cache | paint (`space`), screenshot; `u`, screenshot; idle for 5 s | the painted pixel appears, undo removes it, no flicker/stale texture while idle; `cargo test benchmark_canvas -- --ignored --nocapture` prints full vs cached cost |
 | undo/filter | `:prefs` (undo steps + MB), `:filter invert`, `u` | the preference shows the cap; the filter applies as one step and undo restores; pointwise parallel output is unit-tested against sequential |
+| pen | `:pen`, `:pen off`, side checkbox, draw with a tablet | `:pen` names the Wacom/OTD device and pressure; strokes lighten with tip pressure; `:pen off` ignores it; no tablet says `not detected` |
+| tips/pan | `:tips`, `Ctrl-l`, `{`/`}` | the tips window lists keyboard/mouse/pen workflows; the canvas pans; the brush size changes with a status message |
 | background colour | `:bgcolor #ff8800`, screenshot; `:bgcolor` | side swatch turns orange, status reads `background: #ff8800`; clear/undo removes it |
 | extensions | build a zip with `package.json` + `main.lua`; `:ext install`, `:ext list`, `:ext run <id>` | status shows the installed version/author, list shows the package, running paints the scripted pixel |
 

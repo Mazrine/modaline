@@ -7,6 +7,7 @@ use crate::brush::BrushKind;
 use crate::color::Rgba;
 use crate::editor::{Editor, Ink, LayerProps, Mode, SelectionOp, Shape, Symmetry, TileMode, Tool};
 use crate::sprite::{BlendMode, DitherMode, ellipse_points, line_points, rect_points};
+use vixel::pen;
 
 /// Onion-skin settings: how many frames each side, how strong, and the two
 /// tints. Aseprite's default is one red behind and one green ahead.
@@ -138,6 +139,16 @@ pub struct View {
     pub browser_name: String,
     pub browser_force: bool,
     pub browser_favourites: Vec<PathBuf>,
+    /// Tips window (`:tips`).
+    pub tips_open: bool,
+    /// Mirror of the app's playback flag, so `:play` can toggle it.
+    pub playing: bool,
+    /// Playback change requested by the command line.
+    pub play_request: Option<bool>,
+    /// Pen pressure backend, mirrored from the app each frame.
+    pub pen_enabled: bool,
+    pub pen_status: pen::PenStatus,
+    pub pen_pressure: Option<f32>,
 }
 
 impl View {
@@ -159,6 +170,16 @@ impl View {
             english.to_string()
         } else {
             text
+        }
+    }
+
+    /// Human-readable pen state for the panel and `:pen`.
+    pub fn pen_label(&self) -> String {
+        match &self.pen_status {
+            pen::PenStatus::Ready(name) => name.clone(),
+            pen::PenStatus::NoDevice => self.tr("pen.none"),
+            pen::PenStatus::PermissionDenied => self.tr("pen.permission"),
+            pen::PenStatus::Unsupported => self.tr("pen.unsupported"),
         }
     }
 
@@ -226,6 +247,12 @@ impl View {
             browser_name: String::new(),
             browser_force: false,
             browser_favourites: Vec::new(),
+            tips_open: false,
+            playing: false,
+            play_request: None,
+            pen_enabled: true,
+            pen_status: pen::PenStatus::NoDevice,
+            pen_pressure: None,
         }
     }
 
@@ -383,6 +410,7 @@ pub fn draw(
     export_window(ui.ctx(), editor, view);
     preferences_window(ui.ctx(), editor, view);
     file_browser_window(ui.ctx(), editor, view);
+    tips_window(ui.ctx(), view);
 
     if editor.mode == Mode::Help {
         help(ui.ctx(), view);
@@ -390,6 +418,12 @@ pub fn draw(
 }
 
 impl View {
+    /// Pan the canvas by screen pixels (positive x reveals content to the
+    /// right, positive y reveals content below).
+    pub fn pan_by(&mut self, dx: f32, dy: f32) {
+        self.pan += Vec2::new(dx, dy);
+    }
+
     /// Advance the preview clock; independent of the editor's active frame.
     pub fn preview_tick(&mut self, durations: &[u32], now: Instant) {
         if !self.preview_playing || durations.is_empty() {
@@ -471,6 +505,28 @@ fn browser_activate(editor: &mut Editor, view: &mut View, path: PathBuf) {
             }
         }
     }
+}
+
+fn tips_window(ctx: &egui::Context, view: &mut View) {
+    if !view.tips_open {
+        return;
+    }
+    let mut open = view.tips_open;
+    egui::Window::new(view.tr("tips.title"))
+        .open(&mut open)
+        .collapsible(false)
+        .resizable(true)
+        .default_width(520.0)
+        .show(ctx, |ui| {
+            egui::ScrollArea::vertical()
+                .max_height(520.0)
+                .show(ui, |ui| {
+                    for line in view.i18n.tr("tips.text").lines() {
+                        ui.label(line);
+                    }
+                });
+        });
+    view.tips_open = open;
 }
 
 fn file_browser_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
@@ -1190,6 +1246,28 @@ fn preview_ui(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View, os: bool)
 
 // ---- top toolbar ----
 
+/// Keyboard shortcut shown in each toolbar tooltip.
+fn tool_shortcut(tool: Tool) -> &'static str {
+    match tool {
+        Tool::Pencil => "b",
+        Tool::Eraser => "e",
+        Tool::Bucket => "f",
+        Tool::Picker => "c",
+        Tool::Line => "d",
+        Tool::Rect => "R",
+        Tool::Ellipse => "o",
+        Tool::Gradient => "z",
+        Tool::Shade => "q",
+        Tool::Spray => "a",
+        Tool::Blur => "n",
+        Tool::Lasso => "L",
+        Tool::Polygon => "P",
+        Tool::Text => "T",
+        Tool::Tile => "K",
+        Tool::Move => "M",
+    }
+}
+
 fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new("vixel").strong());
@@ -1215,8 +1293,11 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             (Tool::Tile, "tool.tile"),
             (Tool::Move, "tool.move"),
         ] {
+            let label = view.tr(key);
+            let hint = format!("{label} ({})", tool_shortcut(tool));
             if ui
-                .selectable_label(editor.tool == tool, view.tr(key))
+                .selectable_label(editor.tool == tool, label)
+                .on_hover_text(hint)
                 .clicked()
             {
                 editor.set_tool(tool);
@@ -1367,7 +1448,36 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         } else {
             ui.label(editor.msg.render(&view.i18n));
         }
+        let hint = context_hint(editor, view);
+        if !hint.is_empty() {
+            ui.separator();
+            ui.label(egui::RichText::new(hint).weak().small());
+        }
     });
+}
+
+/// One short next-step hint for the current mode/tool (right side of the
+/// status line). Keep it actionable, not decorative.
+fn context_hint(editor: &Editor, view: &View) -> String {
+    if editor.mode == Mode::Command || editor.filter_job.is_some() {
+        return String::new();
+    }
+    if editor.mode == Mode::Paste {
+        return view.tr("hint.paste");
+    }
+    if editor.mode == Mode::Visual {
+        return view.tr("hint.visual");
+    }
+    if editor.tool == Tool::Text {
+        return view.tr("hint.text");
+    }
+    if editor.has_selection() {
+        return view.tr("hint.selection");
+    }
+    if view.pen_enabled && matches!(view.pen_status, pen::PenStatus::Ready(_)) {
+        return view.tr("hint.pen");
+    }
+    view.tr("hint.default")
 }
 
 // ---- bottom timeline ----
@@ -1840,6 +1950,12 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             editor.pressure_auto();
         }
         ui.label(view.value("pressure", editor.pressure_source()));
+    });
+    ui.horizontal(|ui| {
+        let label = view.tr("ui.pen");
+        ui.checkbox(&mut view.pen_enabled, label);
+        ui.label(egui::RichText::new(view.pen_label()).weak().small())
+            .on_hover_text(view.tr("ui.pen_hint"));
     });
     ui.collapsing(view.tr("ui.tool_depth"), |ui| {
         ui.horizontal(|ui| {

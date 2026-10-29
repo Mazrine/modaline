@@ -8,6 +8,7 @@ use crate::editor::Editor;
 use crate::gui::{self, View};
 use crate::input;
 use crate::io;
+use vixel::pen;
 
 /// How often a dirty sprite is snapshotted to the recovery file.
 const AUTOSAVE: Duration = Duration::from_secs(30);
@@ -49,6 +50,7 @@ impl Doc {
             Err(e) => editor.msg = vixel::status!("language: {e}"),
         }
         view.browser_favourites = config.favourites.iter().map(PathBuf::from).collect();
+        view.pen_enabled = config.pen_enabled;
         if let Some(path) = path
             && let Err(e) = editor.open_path(&path)
         {
@@ -88,6 +90,8 @@ pub struct VixelApp {
     /// Theme/font currently applied, so switching tabs can restore per-doc UI.
     theme_applied: String,
     font_applied: (String, f32),
+    /// Wacom/OpenTabletDriver pressure reader (read-only evdev).
+    pen: pen::PenReader,
 }
 
 impl VixelApp {
@@ -137,6 +141,7 @@ impl VixelApp {
             font_applied: (config.ui_font.clone(), config.ui_font_size),
             config,
             next_autosave: Instant::now() + AUTOSAVE,
+            pen: pen::PenReader::start(),
         }
     }
 
@@ -274,6 +279,7 @@ impl VixelApp {
             .iter()
             .map(|p| p.to_string_lossy().into_owned())
             .collect();
+        self.config.pen_enabled = doc.view.pen_enabled;
         self.config.session = self.session_paths();
         self.config.session_active = self.active;
         self.config.closed = doc
@@ -455,6 +461,18 @@ impl eframe::App for VixelApp {
 
         input::handle_input(&mut doc.editor, &mut doc.view, ui);
         let reopen = doc.editor.reopen_request.take();
+        if let Some(on) = doc.view.play_request.take() {
+            doc.playing = on;
+            doc.next_frame = Instant::now();
+        }
+        doc.view.playing = doc.playing;
+        doc.view.pen_status = self.pen.status();
+        doc.view.pen_pressure = self.pen.last_pressure();
+        doc.editor.set_device_pressure(if doc.view.pen_enabled {
+            self.pen.pressure()
+        } else {
+            None
+        });
         doc.editor.poll_filter();
         if doc.editor.filter_job.is_some() {
             ui.ctx().request_repaint();
@@ -535,6 +553,7 @@ mod tests {
             font_applied: (config.ui_font.clone(), config.ui_font_size),
             config,
             next_autosave: Instant::now(),
+            pen: pen::PenReader::disabled(),
         }
     }
 

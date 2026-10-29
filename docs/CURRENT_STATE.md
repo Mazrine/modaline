@@ -149,6 +149,9 @@ L-shaped corners for the 1 px pencil/eraser.
 - **preferences dialog**: `:prefs` consolidates editor, grid/canvas, export,
   appearance (theme/font/language), keys and workspace settings in one window,
   all backed by the live editor/view fields and existing config persistence.
+- **pen**: Wacom/OpenTabletDriver pressure through Linux evdev (`:pen`, side
+  panel checkbox, persisted `pen_enabled`); position/clicks use the OS pointer.
+  See `docs/PEN.md`.
 - **localization**: JSON catalogs in `lang/` (`en`, `pt-BR`) with English
   fallback; `:lang` switches at runtime, `:lang check` lists missing keys and
   `:lang save` exports. Core labels, the help overlay, window/preferences text
