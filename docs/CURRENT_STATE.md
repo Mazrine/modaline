@@ -163,8 +163,9 @@ L-shaped corners for the 1 px pencil/eraser.
 - **workspace layouts**: four built-ins (`default`, `drawing`, `animation`,
   `compact`) and JSON layouts; `:layout` applies/resets/saves; panel visibility,
   side width and timeline height persist per tab and in `config.json`.
-- **themes and UI font**: four built-ins (`dark`, `light`, `midnight`, `paper`)
-  and arbitrary JSON theme files (`:theme`, `:theme save`); `:uifont` loads a
+- **themes and UI font**: five built-ins (`arcane` default, `dark`, `light`,
+  `midnight`, `paper`) and arbitrary JSON theme files (`:theme`, `:theme save`);
+  the bundled Silkscreen/Noto fonts (`:uifont silkscreen`); `:uifont` loads a
   TTF/OTF at 8–32 pt. Theme/font are per-tab and saved in the config.
 - **multi-document tabs**: a tab strip holds independent documents (editor,
   view, textures, playback). Ctrl/Cmd-Tab cycles, Ctrl/Cmd-T opens, Ctrl/Cmd-W

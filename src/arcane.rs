@@ -89,6 +89,9 @@ pub const TYPE_BODY: f32 = 12.0;
 pub const TYPE_LABEL: f32 = 10.0;
 pub const TYPE_MICRO: f32 = 8.0;
 
+/// Width reserved for the floating inspector in the overlay layout.
+pub const OVERLAY_INSPECTOR_W: f32 = 380.0;
+
 /// Apply the Arcane visuals. Fonts are installed by `theme::install_font`.
 pub fn apply(ctx: &egui::Context) {
     ctx.set_theme(egui::ThemePreference::Dark);
@@ -254,6 +257,30 @@ pub fn panel_frame(margin: f32) -> egui::Frame {
 }
 
 /// Corner brackets around the canvas, the game-HUD cue.
+/// Paint a 12×12 ASCII pixel icon scaled into `rect`, centred.
+pub fn paint_icon(painter: &Painter, rect: Rect, rows: &[&str], color: Color32) {
+    if rows.is_empty() {
+        return;
+    }
+    let cell = (rect.width().min(rect.height()) / 12.0).floor().max(1.0);
+    let w = cell * 12.0;
+    let origin = rect.center() - egui::vec2(w / 2.0, w / 2.0);
+    for (y, row) in rows.iter().enumerate().take(12) {
+        for (x, ch) in row.chars().enumerate().take(12) {
+            if ch == '#' {
+                painter.rect_filled(
+                    Rect::from_min_size(
+                        origin + egui::vec2(x as f32 * cell, y as f32 * cell),
+                        egui::vec2(cell, cell),
+                    ),
+                    0.0,
+                    color,
+                );
+            }
+        }
+    }
+}
+
 pub fn brackets(painter: &Painter, rect: Rect, p: Palette) {
     let color = Color32::from_rgba_unmultiplied(p.accent.r(), p.accent.g(), p.accent.b(), 150);
     let len = 12.0;

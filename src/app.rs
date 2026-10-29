@@ -51,6 +51,7 @@ impl Doc {
         }
         view.browser_favourites = config.favourites.iter().map(PathBuf::from).collect();
         view.pen_enabled = config.pen_enabled;
+        view.motion = config.motion;
         if let Some(path) = path
             && let Err(e) = editor.open_path(&path)
         {
@@ -280,6 +281,7 @@ impl ModalineApp {
             .map(|p| p.to_string_lossy().into_owned())
             .collect();
         self.config.pen_enabled = doc.view.pen_enabled;
+        self.config.motion = doc.view.motion;
         self.config.session = self.session_paths();
         self.config.session_active = self.active;
         self.config.closed = doc

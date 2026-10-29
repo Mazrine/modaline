@@ -47,6 +47,21 @@ workflows, plus the vim-versus-Helix question.
 
 ![The tips window](assets/screenshots/tips.png)
 
+### Look and layout
+
+The default look is **Arcane**: an ink-and-violet palette, flat 1 px chrome,
+dotted panels and the Silkscreen pixel font. `:theme` switches between
+`arcane`, `dark`, `light`, `midnight` and `paper`; `:uifont silkscreen|default`
+switches the type. Existing configs keep whatever they had.
+
+`:layout overlay`, or `Ctrl-K`, gives the canvas-first HUD: a pixel-icon tool
+rail on the left, a floating inspector, and the timeline still docked at the
+bottom. The docked layout remains the default.
+
+![The overlay layout](assets/screenshots/overlay.png)
+
+*Overlay layout: icon rail, canvas, floating inspector, timeline.*
+
 ## What it does
 
 **Drawing.** Pencil, eraser, bucket, picker, line, rectangle, ellipse, linear
@@ -192,7 +207,7 @@ implemented; and the UX audit lists the rough edges I still want to fix
 corners). Linux is the tested platform.
 
 The model is a GUI-free Rust library, so another tool can read, composite or
-write a project without opening the window. `cargo test` covers it (295 tests),
+write a project without opening the window. `cargo test` covers it (296 tests),
 and `cargo clippy --all-targets` is clean.
 
 ## Docs

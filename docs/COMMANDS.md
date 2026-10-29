@@ -13,6 +13,9 @@ Modal, like vim. Start in **normal** mode.
 | `h` `j` `k` `l` / arrows | move cursor |
 | `H` `J` `K` `L` | move 8px |
 | `0` `$` `gg` `G` | left / right / top / bottom edge |
+| `Ctrl-hjkl` | pan the canvas |
+| `{` / `}` | smaller / bigger brush |
+| `Ctrl-K` | switch studio / overlay layout |
 | `i` | **draw** mode — paint as you move |
 | `x` | erase pixel (vim's delete-char) |
 | `r` / `space` | paint one pixel with fg |
@@ -141,10 +144,11 @@ keyboard-first, but the mouse is fully wired.)
 | `:renderer glow\|wgpu` | renderer (applied on next launch) |
 | `:theme [arcane\|dark\|light\|midnight\|paper\|file.json]` / `:theme save <file>` | apply/list/save a JSON theme |
 | `:uifont <font.ttf\|silkscreen\|default> [8-32]` | UI font and size (saved in the config) |
-| `:layout [default\|drawing\|animation\|compact\|file.json]` / `:layout reset\|save <file>` | workspace panels and sizes |
+| `:layout [default\|drawing\|animation\|compact\|overlay\|file.json]` / `:layout reset\|save <file>` | workspace panels and sizes |
 | `:bind <action> <chord\|wheel-up\|wheel-down\|none>` / `:bind list\|reset` | customise action keys and wheel |
 | `:lang [en\|pt-BR\|file.json]` / `:lang list\|check\|save <file>` | runtime language and JSON catalogs |
 | `:prefs` | preferences window (editor, grid, export, appearance, keys, workspace) |
+| `:motion on\|off` | hover lift and short transitions |
 | `:bgcolor [#rrggbb\|clear]` | sprite-properties background colour (user data) |
 | `:script <file.lua>` / `:lua <code>` | run sandboxed Lua with the `app` API |
 | `:ext install\|list\|remove\|run\|themes\|theme` | `.aseprite-extension` packages, scripts and themes |

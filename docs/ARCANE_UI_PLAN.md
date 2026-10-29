@@ -9,17 +9,20 @@ Source of truth: `~/projects/another tool/src/viewer/ui/` (`tokens.rs`, `theme.r
 
 ## Status on `feat/arcane-ui`
 
-- Step 1 landed: palette, bundled fonts, `arcane` theme (new default), flat
-  visuals.
-- Step 2 landed: panel frames, dot grain, wells/raised helpers, canvas corner
-  brackets.
-- Step 3 started: tool groups, mode chip with per-mode colours, side-panel
-  section headers, wrapped HUD at 1280–1600 px. Icons and the overlay layout
-  remain for the next pass.
-- Review screenshots: `docs/screenshots/arcane-editor.png`,
-  `arcane-selection.png`, `arcane-help.png`.
-- Defaults for new configs are now `theme=arcane`, `ui_font=silkscreen`,
-  `ui_font_size=12`; existing configs keep their theme and font.
+All seven steps are implemented for review:
+
+- Step 1: palette, bundled Silkscreen/Noto, `arcane` theme and default font.
+- Step 2: dotted panel chrome, sunken status band, canvas corner brackets.
+- Step 3: wrapped HUD, grouped tools, per-mode chip, section headers.
+- Step 4: 12×12 pixel icons in the overlay tool rail, with key tooltips.
+- Step 5: hover lift, pressed inset, focus rings, 2 s toast, `:motion` toggle.
+- Step 6: `:layout overlay` / `Ctrl-K`, floating inspector, canvas-first fit.
+- Step 7: contrast/font/icon/layout tests, docs, review screenshots.
+
+Review screenshots: `assets/screenshots/editor.png`,
+`assets/screenshots/selection.png`, `assets/screenshots/tips.png`,
+`assets/screenshots/overlay.png`. Docked toolbar keeps text labels (localized)
+while the overlay rail uses icons.
 
 ## Design rules
 

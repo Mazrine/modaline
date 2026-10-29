@@ -277,6 +277,9 @@ mod tests {
             include_str!("app.rs"),
             include_str!("script.rs"),
         ];
+        // Literals assigned near a `.msg` but belonging to settings, not the
+        // status line; the source scan is deliberately coarse.
+        const NOT_MESSAGES: &[&str] = &["silkscreen", "default", "arcane", "overlay"];
         let mut seen = std::collections::BTreeSet::new();
         for src in sources {
             for part in src.split("status!(").skip(1) {
@@ -301,6 +304,7 @@ mod tests {
         assert!(seen.len() > 300, "the scan found {} messages", seen.len());
         let missing: Vec<_> = seen
             .iter()
+            .filter(|m| !NOT_MESSAGES.contains(&m.as_str()))
             .filter(|m| !pt.messages.contains_key(*m))
             .collect();
         assert!(missing.is_empty(), "pt-BR missing messages: {missing:?}");

@@ -15,6 +15,9 @@ pub struct Layout {
     pub show_side: bool,
     pub side_width: f32,
     pub timeline_height: f32,
+    /// Canvas-first mode: a left tool rail, floating inspector and HUD.
+    #[serde(default)]
+    pub overlay: bool,
 }
 
 impl Default for Layout {
@@ -26,6 +29,7 @@ impl Default for Layout {
             show_side: true,
             side_width: 260.0,
             timeline_height: 120.0,
+            overlay: false,
         }
     }
 }
@@ -49,13 +53,18 @@ pub fn builtin(name: &str) -> Option<Layout> {
             layout.show_timeline = false;
             layout.show_side = false;
         }
+        "overlay" => {
+            layout.overlay = true;
+            layout.side_width = 300.0;
+            layout.timeline_height = 150.0;
+        }
         _ => return None,
     }
     Some(layout)
 }
 
 pub fn names() -> &'static [&'static str] {
-    &["default", "drawing", "animation", "compact"]
+    &["default", "drawing", "animation", "compact", "overlay"]
 }
 
 pub fn resolve(spec: &str) -> Result<Layout> {
