@@ -15,6 +15,7 @@ use anyhow::{Context, Result, bail};
 use crate::color::Rgba;
 use crate::sprite::{
     AseProfile, BlendMode, Cel, ChunkAnchor, Frame, Layer, PlayDirection, RawChunk, Sprite, Tag,
+    UserData,
 };
 
 const MAGIC: u16 = 0xA5E0;
@@ -229,15 +230,28 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
             count += 1;
             emit_raw(&mut body, &mut count, ChunkAnchor::Palette);
         }
+        if let Some(ud) = &s.user_data {
+            write_user_data(&mut body, ud, true);
+            count += 1;
+        }
         let has_uuid = s.layers.iter().any(|l| l.uuid.is_some());
         for (i, layer) in s.layers.iter().enumerate() {
             write_layer_chunk(&mut body, layer, has_uuid);
             count += 1;
+            if let Some(ud) = &layer.user_data {
+                write_user_data(&mut body, ud, true);
+                count += 1;
+            }
             emit_raw(&mut body, &mut count, ChunkAnchor::Layer(i as u16));
         }
         if !s.tags.is_empty() {
             write_tags_chunk(&mut body, &s.tags);
             count += 1;
+            let empty = UserData::default();
+            for tag in &s.tags {
+                write_user_data(&mut body, tag.user_data.as_ref().unwrap_or(&empty), true);
+                count += 1;
+            }
             emit_raw(&mut body, &mut count, ChunkAnchor::Tags);
         }
     }
@@ -247,6 +261,10 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
         }
         if write_cel_chunk(&mut body, s, li, frame, depth) {
             count += 1;
+            if let Some(ud) = &s.cels[li][frame].user_data {
+                write_user_data(&mut body, ud, true);
+                count += 1;
+            }
             emit_raw(&mut body, &mut count, ChunkAnchor::Cel(li as u16));
         }
     }
@@ -277,6 +295,36 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
     let size = f.len() as u32;
     f[0..4].copy_from_slice(&size.to_le_bytes());
     out.extend_from_slice(&f);
+}
+
+fn write_user_data(out: &mut Vec<u8>, data: &UserData, force: bool) {
+    let mut flags = data.flags & !7;
+    if !data.text.is_empty() {
+        flags |= 1;
+    }
+    if data.color.is_some() {
+        flags |= 2;
+    }
+    if !data.properties.is_empty() {
+        flags |= 4;
+    }
+    if flags == 0 && !force {
+        return;
+    }
+    let mut b = Vec::new();
+    b.extend_from_slice(&flags.to_le_bytes());
+    if flags & 1 != 0 {
+        b.extend_from_slice(&(data.text.len() as u16).to_le_bytes());
+        b.extend_from_slice(data.text.as_bytes());
+    }
+    if flags & 2 != 0 {
+        let c = data.color.unwrap_or(Rgba::TRANSPARENT);
+        b.extend_from_slice(&[c.0, c.1, c.2, c.3]);
+    }
+    if flags & 4 != 0 {
+        b.extend_from_slice(&data.properties);
+    }
+    write_chunk(out, CHUNK_USER_DATA, &b);
 }
 
 fn write_color_profile(out: &mut Vec<u8>, profile: &AseProfile) {
@@ -473,7 +521,43 @@ fn blend_word(b: BlendMode) -> u16 {
 // ---- import ----
 
 const CHUNK_PROFILE: u16 = 0x2007;
+const CHUNK_USER_DATA: u16 = 0x2020;
 const CHUNK_TILESET: u16 = 0x2023;
+
+fn parse_user_data(body: &[u8]) -> Option<UserData> {
+    if body.len() < 4 {
+        return None;
+    }
+    let flags = u32_at(body, 0);
+    let mut p = 4usize;
+    let text = if flags & 1 != 0 {
+        let len = u16_at(body, p) as usize;
+        p += 2;
+        let bytes = body.get(p..p + len)?;
+        p += len;
+        String::from_utf8_lossy(bytes).into_owned()
+    } else {
+        String::new()
+    };
+    let color = if flags & 2 != 0 {
+        let c = body.get(p..p + 4)?;
+        p += 4;
+        Some(Rgba(c[0], c[1], c[2], c[3]))
+    } else {
+        None
+    };
+    let properties = if flags & 4 != 0 {
+        body.get(p..)?.to_vec()
+    } else {
+        Vec::new()
+    };
+    Some(UserData {
+        text,
+        color,
+        properties,
+        flags,
+    })
+}
 
 fn parse_color_profile(body: &[u8]) -> Option<AseProfile> {
     if body.len() < 16 {
@@ -517,6 +601,23 @@ struct TilemapCel {
     tiles: Vec<(u32, bool, bool, bool)>,
     opacity: u8,
     z_index: i16,
+    user_data: Option<UserData>,
+}
+
+struct CelInfo {
+    opacity: u8,
+    z_index: i16,
+    user_data: Option<UserData>,
+}
+
+#[derive(Clone, Copy)]
+enum Last {
+    None,
+    Layer(usize),
+    Cel(usize),
+    Tags(usize, usize),
+    Palette,
+    Other,
 }
 
 struct Import {
@@ -525,6 +626,7 @@ struct Import {
     palette: Vec<Rgba>,
     palette_names: Vec<String>,
     ase_profile: Option<AseProfile>,
+    sprite_user_data: Option<UserData>,
     transparent_index: u8,
     /// `[layer][frame]`; `None` means an empty cel.
     cels: Vec<Vec<Option<Cel>>>,
@@ -536,7 +638,7 @@ struct Import {
 }
 
 impl Import {
-    fn decode_cel(&mut self, frame: usize, body: &[u8]) -> Result<()> {
+    fn decode_cel(&mut self, frame: usize, body: &[u8], user_data: Option<UserData>) -> Result<()> {
         if body.len() < 16 || frame >= self.frames {
             return Ok(());
         }
@@ -561,7 +663,17 @@ impl Import {
                     self.transparent_index,
                 )
                 .2;
-                self.place((li, frame), (ox, oy), (cw, ch), &px, opacity, z_index);
+                self.place(
+                    (li, frame),
+                    (ox, oy),
+                    (cw, ch),
+                    &px,
+                    CelInfo {
+                        opacity,
+                        z_index,
+                        user_data,
+                    },
+                );
             }
             1 => {
                 // Linked cel: keep the reference; content resolves on read and
@@ -571,6 +683,7 @@ impl Import {
                 cel.link = Some(link);
                 cel.opacity = opacity;
                 cel.z_index = z_index;
+                cel.user_data = user_data;
                 self.cels[li][frame] = Some(cel);
             }
             2 => {
@@ -587,7 +700,17 @@ impl Import {
                     self.transparent_index,
                 )
                 .2;
-                self.place((li, frame), (ox, oy), (cw, ch), &px, opacity, z_index);
+                self.place(
+                    (li, frame),
+                    (ox, oy),
+                    (cw, ch),
+                    &px,
+                    CelInfo {
+                        opacity,
+                        z_index,
+                        user_data,
+                    },
+                );
             }
             3 => {
                 let w = u16_at(body, 16) as u32;
@@ -625,6 +748,7 @@ impl Import {
                     tiles,
                     opacity,
                     z_index,
+                    user_data,
                 });
             }
             _ => {}
@@ -639,8 +763,7 @@ impl Import {
         (ox, oy): (i32, i32),
         (cw, ch): (u32, u32),
         px: &[Rgba],
-        opacity: u8,
-        z_index: i16,
+        info: CelInfo,
     ) {
         let mut pixels = px.to_vec();
         pixels.resize((cw * ch) as usize, Rgba::TRANSPARENT);
@@ -649,10 +772,11 @@ impl Import {
             y: oy,
             w: cw,
             h: ch,
+            z_index: info.z_index,
             link: None,
-            z_index,
             pixels,
-            opacity,
+            opacity: info.opacity,
+            user_data: info.user_data,
         });
     }
 
@@ -704,6 +828,7 @@ impl Import {
                     link: None,
                     pixels,
                     opacity: tc.opacity,
+                    user_data: tc.user_data,
                 });
             }
         }
@@ -741,6 +866,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         palette: vec![Rgba(0, 0, 0, 255); 256],
         palette_names: vec![String::new(); 256],
         ase_profile: None,
+        sprite_user_data: None,
         transparent_index: data[28],
         cels: Vec::new(),
         layer_tilesets: Vec::new(),
@@ -754,7 +880,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
     let mut durations: Vec<u16> = Vec::new();
     // Cel bodies are decoded after the whole file is read so the palette and
     // tilesets are complete regardless of chunk order.
-    let mut cel_bodies: Vec<(usize, Vec<u8>)> = Vec::new();
+    let mut cel_bodies: Vec<(usize, Vec<u8>, Option<UserData>)> = Vec::new();
 
     let mut pos = 128usize;
     for frame in 0..frames_count {
@@ -766,6 +892,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         durations.push(u16_at(&data, pos + 6));
         pos += 16;
         let mut anchor = ChunkAnchor::FrameStart;
+        let mut last = Last::None;
 
         while pos + 6 <= frame_end {
             let chunk_size = u32_at(&data, pos) as usize; // includes the header
@@ -784,15 +911,19 @@ pub fn load(path: &Path) -> Result<Sprite> {
                     im.cels.push(vec![None; im.frames]);
                     im.layer_tilesets.push(tileset);
                     anchor = ChunkAnchor::Layer(li);
+                    last = Last::Layer(layers.len() - 1);
                 }
                 CHUNK_CEL => {
                     let li = u16_at(body, 0);
-                    cel_bodies.push((frame, body.to_vec()));
+                    cel_bodies.push((frame, body.to_vec(), None));
                     anchor = ChunkAnchor::Cel(li);
+                    last = Last::Cel(cel_bodies.len() - 1);
                 }
                 CHUNK_TAGS => {
+                    let base = im.tags.len();
                     im.tags.extend(parse_tags(body));
                     anchor = ChunkAnchor::Tags;
+                    last = Last::Tags(base, 0);
                 }
                 CHUNK_TILESET => {
                     let ti = im.tilesets.len() as u16;
@@ -803,48 +934,112 @@ pub fn load(path: &Path) -> Result<Sprite> {
                         im.transparent_index,
                     )?);
                     anchor = ChunkAnchor::Tileset(ti);
+                    last = Last::Other;
                 }
-                CHUNK_PROFILE => match parse_color_profile(body) {
-                    Some(profile) => im.ase_profile = Some(profile),
-                    None => im.raw_chunks.push(RawChunk {
-                        frame,
-                        kind: chunk_type,
-                        body: body.to_vec(),
-                        after: anchor,
-                    }),
-                },
+                CHUNK_PROFILE => {
+                    match parse_color_profile(body) {
+                        Some(profile) => im.ase_profile = Some(profile),
+                        None => im.raw_chunks.push(RawChunk {
+                            frame,
+                            kind: chunk_type,
+                            body: body.to_vec(),
+                            after: anchor,
+                        }),
+                    }
+                    last = Last::Other;
+                }
+                CHUNK_USER_DATA => {
+                    let mut handled = false;
+                    if let Some(ud) = parse_user_data(body) {
+                        match last {
+                            Last::Layer(i) => {
+                                if let Some(layer) = layers.get_mut(i) {
+                                    layer.user_data = Some(ud);
+                                    handled = true;
+                                }
+                            }
+                            Last::Cel(i) => {
+                                if let Some(slot) = cel_bodies.get_mut(i) {
+                                    slot.2 = Some(ud);
+                                    handled = true;
+                                }
+                            }
+                            Last::Tags(base, k) => {
+                                if let Some(tag) = im.tags.get_mut(base + k) {
+                                    if let Some(c) = ud.color {
+                                        tag.color = c;
+                                    }
+                                    tag.user_data = Some(ud);
+                                    last = Last::Tags(base, k + 1);
+                                    handled = true;
+                                }
+                            }
+                            Last::Palette | Last::Other
+                                if frame == 0
+                                    && im.sprite_user_data.is_none()
+                                    && layers.is_empty()
+                                    && cel_bodies.is_empty()
+                                    && im.tags.is_empty() =>
+                            {
+                                im.sprite_user_data = Some(ud);
+                                handled = true;
+                            }
+                            _ => {}
+                        }
+                    }
+                    if handled {
+                        if !matches!(last, Last::Tags(..)) {
+                            last = Last::Other;
+                        }
+                    } else {
+                        im.raw_chunks.push(RawChunk {
+                            frame,
+                            kind: chunk_type,
+                            body: body.to_vec(),
+                            after: anchor,
+                        });
+                        last = Last::Other;
+                    }
+                }
                 CHUNK_PALETTE => {
                     parse_palette_new(body, &mut im.palette, &mut im.palette_names)?;
                     anchor = ChunkAnchor::Palette;
+                    last = Last::Palette;
                 }
                 CHUNK_PALETTE_RGB => {
                     parse_palette_rgb(body, &mut im.palette, false);
                     anchor = ChunkAnchor::Palette;
+                    last = Last::Palette;
                 }
                 CHUNK_PALETTE_RGBA => {
                     parse_palette_rgb(body, &mut im.palette, true);
                     anchor = ChunkAnchor::Palette;
+                    last = Last::Palette;
                 }
-                _ => im.raw_chunks.push(RawChunk {
-                    frame,
-                    kind: chunk_type,
-                    body: body.to_vec(),
-                    after: anchor,
-                }),
+                _ => {
+                    im.raw_chunks.push(RawChunk {
+                        frame,
+                        kind: chunk_type,
+                        body: body.to_vec(),
+                        after: anchor,
+                    });
+                    last = Last::Other;
+                }
             }
             pos += chunk_size;
         }
         pos = frame_end;
     }
 
-    for (frame, body) in cel_bodies {
-        im.decode_cel(frame, &body)?;
+    for (frame, body, user_data) in cel_bodies {
+        im.decode_cel(frame, &body, user_data)?;
     }
     im.resolve_tilemaps();
 
     if layers.is_empty() {
         layers.push(Layer {
             name: "Layer 1".into(),
+            user_data: None,
             ..Default::default()
         });
         im.cels.push(vec![None; im.frames]);
@@ -915,6 +1110,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         color_profile,
         ase_profile: im.ase_profile,
         raw_chunks: im.raw_chunks,
+        user_data: im.sprite_user_data,
     };
     sprite.normalize_levels();
     sprite.clamp_tags();
@@ -949,6 +1145,7 @@ fn parse_tags(body: &[u8]) -> Vec<Tag> {
             color,
             direction,
             repeat,
+            user_data: None,
         });
     }
     tags
@@ -1037,6 +1234,7 @@ fn parse_layer(body: &[u8], has_uuid: bool) -> Result<(Layer, u32)> {
             lock_movement: flags & 4 != 0,
             collapsed: flags & 32 != 0,
             uuid,
+            user_data: None,
         },
         tileset,
     ))
@@ -1290,6 +1488,7 @@ mod tests {
                 Rgba(255, 255, 0, 255),
             ],
             opacity: 255,
+            user_data: None,
         };
         let composite = s.composite(0);
         let path = tmp("vixel_ase_bounds.ase");
@@ -1409,6 +1608,7 @@ mod tests {
             color: Rgba(1, 2, 3, 255),
             direction: PlayDirection::PingPongReverse,
             repeat: 0,
+            user_data: None,
         });
         let path = tmp("vixel_ase_tag3.ase");
         save(&s, &path).unwrap();
@@ -1458,6 +1658,7 @@ mod tests {
             Layer {
                 name: "Grp".into(),
                 group: true,
+                user_data: None,
                 ..Default::default()
             },
         );
@@ -1542,6 +1743,41 @@ mod tests {
     }
 
     // ---- synthesized fixtures for cel types the writer never emits ----
+
+    fn ud_chunk(text: &str, color: Option<Rgba>) -> Vec<u8> {
+        let mut flags = 0u32;
+        if !text.is_empty() {
+            flags |= 1;
+        }
+        if color.is_some() {
+            flags |= 2;
+        }
+        let mut b = flags.to_le_bytes().to_vec();
+        if flags & 1 != 0 {
+            b.extend_from_slice(&(text.len() as u16).to_le_bytes());
+            b.extend_from_slice(text.as_bytes());
+        }
+        if let Some(c) = color {
+            b.extend_from_slice(&[c.0, c.1, c.2, c.3]);
+        }
+        b
+    }
+
+    fn one_tag(name: &str) -> Vec<u8> {
+        let mut b = Vec::new();
+        b.extend_from_slice(&1u16.to_le_bytes());
+        b.extend_from_slice(&[0u8; 8]);
+        b.extend_from_slice(&0u16.to_le_bytes()); // from
+        b.extend_from_slice(&0u16.to_le_bytes()); // to
+        b.push(0); // direction
+        b.extend_from_slice(&0u16.to_le_bytes()); // repeat
+        b.extend_from_slice(&[0u8; 6]);
+        b.extend_from_slice(&[1, 2, 3]);
+        b.push(0);
+        b.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        b.extend_from_slice(name.as_bytes());
+        b
+    }
 
     fn ase_header(w: u16, h: u16, depth: u16, frames: u16) -> Vec<u8> {
         let mut hdr = vec![0u8; 128];
@@ -1716,6 +1952,7 @@ mod tests {
             color: Rgba(200, 100, 50, 255),
             direction: PlayDirection::PingPong,
             repeat: 3,
+            user_data: None,
         });
         s.tags.push(Tag {
             name: "idle".into(),
@@ -1724,6 +1961,7 @@ mod tests {
             color: Rgba(10, 20, 30, 255),
             direction: PlayDirection::Forward,
             repeat: 0,
+            user_data: None,
         });
         let path = tmp("vixel_ase_tags.ase");
         save(&s, &path).unwrap();
@@ -1821,6 +2059,7 @@ mod tests {
             color: Rgba(1, 2, 3, 255),
             direction: PlayDirection::Forward,
             repeat: 0,
+            user_data: None,
         });
         let path = tmp("vixel_ase_counts.ase");
         save(&s, &path).unwrap();
@@ -2007,6 +2246,104 @@ mod tests {
         let before: Vec<_> = a.layers.iter().map(|l| l.uuid).collect();
         let after: Vec<_> = b.layers.iter().map(|l| l.uuid).collect();
         assert_eq!(after, before);
+    }
+
+    #[test]
+    fn user_data_attaches_to_layer_cel_and_tag() {
+        let mut raw = Vec::new();
+        raw.extend_from_slice(&1u16.to_le_bytes());
+        raw.extend_from_slice(&1u16.to_le_bytes());
+        raw.extend_from_slice(&[255, 0, 0, 255]);
+        let mut data = ase_header(1, 1, 32, 1);
+        data.extend(ase_frame(&[
+            (CHUNK_LAYER, layer_chunk(0, 0)),
+            (CHUNK_USER_DATA, ud_chunk("layer", Some(Rgba(1, 2, 3, 4)))),
+            (CHUNK_CEL, cel_chunk(0, 0, &raw)),
+            (CHUNK_USER_DATA, ud_chunk("cel", None)),
+            (CHUNK_TAGS, one_tag("walk")),
+            (CHUNK_USER_DATA, ud_chunk("tag", Some(Rgba(9, 8, 7, 255)))),
+        ]));
+        let s = load_bytes("vixel_ase_userdata.ase", data);
+        assert_eq!(s.layers[0].user_data.as_ref().unwrap().text, "layer");
+        assert_eq!(
+            s.layers[0].user_data.as_ref().unwrap().color,
+            Some(Rgba(1, 2, 3, 4))
+        );
+        assert_eq!(s.cels[0][0].user_data.as_ref().unwrap().text, "cel");
+        assert_eq!(s.tags[0].user_data.as_ref().unwrap().text, "tag");
+        assert_eq!(s.tags[0].color, Rgba(9, 8, 7, 255));
+
+        let path = tmp("vixel_ase_userdata_rt.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let uds = walk_chunks(&data)
+            .into_iter()
+            .filter(|(_, k, _)| *k == CHUNK_USER_DATA)
+            .count();
+        assert_eq!(uds, 3);
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.layers[0].user_data, s.layers[0].user_data);
+        assert_eq!(back.cels[0][0].user_data, s.cels[0][0].user_data);
+        assert_eq!(back.tags[0].user_data, s.tags[0].user_data);
+    }
+
+    #[test]
+    fn user_data_properties_and_sprite_data_round_trip() {
+        let mut s = Sprite::new(1, 1);
+        s.set(0, 0, 0, 0, Rgba(255, 0, 0, 255));
+        let properties = vec![8, 0, 0, 0, 0, 0, 0, 0];
+        s.user_data = Some(UserData {
+            text: "sprite".into(),
+            color: Some(Rgba(4, 5, 6, 7)),
+            properties: properties.clone(),
+            flags: 7,
+        });
+        s.layers[0].user_data = Some(UserData {
+            text: "layer".into(),
+            color: None,
+            properties: Vec::new(),
+            flags: 1,
+        });
+        let path = tmp("vixel_ase_userdata_props.ase");
+        save(&s, &path).unwrap();
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.user_data, s.user_data);
+        assert_eq!(back.user_data.unwrap().properties, properties);
+        assert_eq!(back.layers[0].user_data, s.layers[0].user_data);
+    }
+
+    #[test]
+    fn fixture_user_data_survives_open_save_open() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ase/prop.ase");
+        let a = load(&src).unwrap();
+        assert!(a.layers.iter().any(|l| l.user_data.is_some()));
+        let layers: Vec<_> = a.layers.iter().map(|l| l.user_data.clone()).collect();
+        let cels: Vec<_> = a
+            .cels
+            .iter()
+            .map(|f| f.iter().map(|c| c.user_data.clone()).collect::<Vec<_>>())
+            .collect();
+        let out = tmp("vixel_ase_userdata_fixture.ase");
+        save(&a, &out).unwrap();
+        let b = load(&out).unwrap();
+        let _ = std::fs::remove_file(&out);
+        assert_eq!(
+            b.layers
+                .iter()
+                .map(|l| l.user_data.clone())
+                .collect::<Vec<_>>(),
+            layers
+        );
+        assert_eq!(
+            b.cels
+                .iter()
+                .map(|f| f.iter().map(|c| c.user_data.clone()).collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+            cels
+        );
+        assert_eq!(b.user_data, a.user_data);
     }
 
     #[test]

@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **151 tests green** (142 lib + 9 bin)
+- `cargo test` → **154 tests green** (145 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-13 layer flags and UUIDs** (see batch 50).
+- Last completed batch: **P5-14 user data 0x2020** (see batch 51).
 
 ## How to resume
 
@@ -294,6 +294,13 @@ Read, in order:
     layers. `:movelock`, `:collapse`, `:layeruuid` and panel `mv`/`col`
     toggles; collapsed groups hide children. 4 new tests (151 total): flag and
     UUID bytes/round trip, fixture UUIDs, movement lock, UUID minting.
+51. **P5-14 — user data 0x2020** — `UserData { text, color, properties,
+    flags }` on layers, cels, tags and the sprite; properties are retained
+    verbatim. The reader applies the “attaches to the previous object” rules
+    (layer, cel, one per tag, sprite after the palette) and the writer re-emits
+    them in place; `.vpx` stores the data. 3 new tests (154 total): attachment
+    and round trip, property payload + sprite data, `prop.ase`
+    open→save→open. Tileset/slice user data stays raw until P5-15/31.
 
 ## Next step (exact)
 
@@ -302,7 +309,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-14** — user data 0x2020 (first open task), then continue down the P5
+- **P5-15** — slices 0x2022 (first open task), then continue down the P5
   roadmap in dependency order.
 
 ## Known limitations (do not forget)

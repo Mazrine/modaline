@@ -312,9 +312,14 @@ met; blocked tasks are marked with the reason.
   4 new tests (151 total): flag+UUID bytes/round trip, fixture UUID
   preservation, movement lock, and UUID minting. Collapsed UI not screenshotted
   (manual check: collapse a group and reopen the file).
-- [ ] **P5-14 — User data 0x2020** (M) — deps: P5-07.
-  Text/color/properties on layer/cel/tag/slice/tileset; implement the
-  “attaches to the previous chunk” ordering rule.
+- [x] **P5-14 — User data 0x2020** (M) — deps: P5-07.
+  Landed 2026-10-28. `UserData { text, color, properties, flags }` on layers,
+  cels, tags and the sprite; the property payload is kept verbatim. The reader
+  applies the “attaches to the previous object” rules (layer, cel, one per tag,
+  sprite after the palette) and the writer re-emits them in the same positions.
+  `.vpx` stores the data. 3 new tests (154 total): layer/cel/tag attachment and
+  round trip, property payload + sprite data, and `prop.ase` open→save→open.
+  Tileset/slice user data stays in the raw-chunk pass-through until P5-15/31.
 - [ ] **P5-15 — Slices 0x2022** (L) — deps: P5-07, P5-14.
   Slice model (name, bounds, 9-patch, pivot, color), read/write, list UI,
   export by slice, JSON metadata.

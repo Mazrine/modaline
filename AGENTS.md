@@ -104,6 +104,9 @@ thin shells:
 - Layer flags map to `.ase` bits: editable 2, lock movement 4, background 8,
   prefer-linked 16, collapsed 32, reference 64. UUIDs are written only when at
   least one layer has one (header bit 4).
+- `UserData.properties` is the raw 0x2020 property payload after flags/text/
+  colour; keep it verbatim. Tag user data is positional: write one chunk per
+  tag (empty placeholder included) so later tags stay attached correctly.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not

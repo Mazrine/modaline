@@ -176,6 +176,10 @@ L-shaped corners for the 1 px pencil/eraser.
     order and links round-trip instead of being rasterized into the canvas.
     Layer flag bits (editable, background, reference, prefer-linked, lock
     movement, collapsed) and layer UUIDs (header bit 4) round-trip.
+  - Reads and writes **user data** (0x2020) on layers, cels, tags and the
+    sprite: text, colour and the property payload (kept verbatim). Tileset and
+    slice user data stays in the raw-chunk pass-through until those models
+    land.
   - Reads RGBA (32), grayscale (16) and indexed (8) pixels, new and legacy
     palette chunks, layer names/visibility/blend/opacity, layer groups (type +
     child level), the editable flag, **per-cel opacity** and frame durations.

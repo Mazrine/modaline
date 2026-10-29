@@ -26,6 +26,8 @@ pub struct Cel {
     /// 0..255, cel opacity (Aseprite stores this per cel).
     #[serde(default = "full")]
     pub opacity: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_data: Option<UserData>,
 }
 
 fn full() -> u8 {
@@ -62,6 +64,7 @@ impl Cel {
             link: None,
             pixels: vec![Rgba::TRANSPARENT; (w * h) as usize],
             opacity: 255,
+            user_data: None,
         }
     }
 
@@ -184,6 +187,8 @@ pub struct Layer {
     /// Aseprite layer UUID (written when any layer has one).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uuid: Option<[u8; 16]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_data: Option<UserData>,
 }
 
 fn yes() -> bool {
@@ -207,6 +212,7 @@ impl Default for Layer {
             lock_movement: false,
             collapsed: false,
             uuid: None,
+            user_data: None,
         }
     }
 }
@@ -304,6 +310,8 @@ pub struct Tag {
     pub direction: PlayDirection,
     #[serde(default)]
     pub repeat: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_data: Option<UserData>,
 }
 
 fn tag_color() -> Rgba {
@@ -338,6 +346,25 @@ pub struct RawChunk {
     pub body: Vec<u8>,
     #[serde(default)]
     pub after: ChunkAnchor,
+}
+
+/// Aseprite user data (0x2020): text, colour and an opaque property payload.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct UserData {
+    #[serde(default)]
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Rgba>,
+    /// Property payload exactly as stored (DWORD size + maps).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<u8>,
+    /// Raw flags, so unknown flag bits survive a round trip.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub flags: u32,
+}
+
+fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
 }
 
 /// The `.ase` colour-profile chunk (0x2007), kept verbatim.
@@ -400,6 +427,9 @@ pub struct Sprite {
     /// so an open→save round trip does not discard them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub raw_chunks: Vec<RawChunk>,
+    /// Sprite-level user data (0x2020 after the palette chunk).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_data: Option<UserData>,
 }
 
 /// The two working spaces this editor understands. A sprite authored in linear
@@ -518,6 +548,7 @@ impl Sprite {
     pub fn new(width: u32, height: u32) -> Self {
         let layers = vec![Layer {
             name: "Layer 1".into(),
+            user_data: None,
             ..Default::default()
         }];
         let frames = vec![Frame { duration_ms: 100 }];
@@ -539,6 +570,7 @@ impl Sprite {
             color_profile: ColorProfile::Srgb,
             ase_profile: None,
             raw_chunks: Vec::new(),
+            user_data: None,
         }
     }
 
@@ -994,6 +1026,7 @@ impl Sprite {
                     link: None,
                     pixels: np,
                     opacity: old.opacity,
+                    user_data: None,
                 };
             }
         }
@@ -1039,6 +1072,7 @@ impl Sprite {
                     link: None,
                     pixels: np,
                     opacity: old.opacity,
+                    user_data: None,
                 };
             }
         }
@@ -1295,6 +1329,7 @@ impl Sprite {
                 name,
                 child_level,
                 uuid: use_uuid.then(|| mint_uuid(idx)),
+                user_data: None,
                 ..Default::default()
             },
         );
@@ -1314,6 +1349,7 @@ impl Sprite {
                 group: true,
                 child_level,
                 uuid: use_uuid.then(|| mint_uuid(idx)),
+                user_data: None,
                 ..Default::default()
             },
         );
@@ -1355,6 +1391,7 @@ impl Sprite {
                 link: None,
                 pixels: buf,
                 opacity: 255,
+                user_data: None,
             };
         }
         self.layers[down].opacity = 255;
@@ -1388,10 +1425,12 @@ impl Sprite {
                 link: None,
                 pixels: self.export_composite(frame),
                 opacity: 255,
+                user_data: None,
             });
         }
         self.layers = vec![Layer {
             name: "Flattened".into(),
+            user_data: None,
             ..Layer::default()
         }];
         self.cels = vec![cels];
@@ -2088,6 +2127,7 @@ mod tests {
         // top layer (index 0) transparent -> bottom layer shows through
         s.layers.push(Layer {
             name: "Bottom".into(),
+            user_data: None,
             ..Default::default()
         });
         let cel = Cel {
@@ -2099,6 +2139,7 @@ mod tests {
             link: None,
             pixels: vec![Rgba::rgb(10, 20, 30)],
             opacity: 255,
+            user_data: None,
         };
         s.cels.push(vec![cel; 1]);
         assert_eq!(s.composite(0)[0], Rgba(10, 20, 30, 255));
@@ -2113,6 +2154,7 @@ mod tests {
         let mut s = Sprite::new(1, 1);
         s.layers.push(Layer {
             name: "Bottom".into(),
+            user_data: None,
             ..Default::default()
         });
         s.cels.push(vec![Cel {
@@ -2124,6 +2166,7 @@ mod tests {
             link: None,
             pixels: vec![Rgba::rgb(128, 128, 128)],
             opacity: 255,
+            user_data: None,
         }]);
         // top layer multiplies gray over gray
         s.layers[0].blend = BlendMode::Multiply;
@@ -2247,6 +2290,7 @@ mod tests {
         s.set(0, 0, 0, 0, red);
         s.layers.push(Layer {
             name: "Bottom".into(),
+            user_data: None,
             ..Default::default()
         });
         s.cels.push(vec![Cel {
@@ -2258,6 +2302,7 @@ mod tests {
             link: None,
             pixels: vec![blue],
             opacity: 255,
+            user_data: None,
         }]);
         assert_eq!(s.composite(0)[0], red);
         s.cels[1][0].z_index = 1;
@@ -2282,6 +2327,7 @@ mod tests {
             link: None,
             pixels: vec![red; 4],
             opacity: 255,
+            user_data: None,
         };
         let comp = s.composite(0);
         assert_eq!(comp[5], red);
@@ -2302,6 +2348,7 @@ mod tests {
             link: None,
             pixels: vec![red; 4],
             opacity: 255,
+            user_data: None,
         };
         assert_eq!(s.composite(0)[0], red);
         assert_eq!(s.get(0, 0, 3, 3), Rgba::TRANSPARENT);
@@ -2321,6 +2368,7 @@ mod tests {
             link: None,
             pixels: vec![red, blue],
             opacity: 255,
+            user_data: None,
         };
         s.flip_h();
         assert_eq!(s.cels[0][0].x, 1);
@@ -2515,15 +2563,18 @@ mod tests {
         s.layers[0] = Layer {
             name: "Group".into(),
             group: true,
+            user_data: None,
             ..Default::default()
         };
         s.layers.push(Layer {
             name: "Child".into(),
             child_level: 1,
+            user_data: None,
             ..Default::default()
         });
         s.layers.push(Layer {
             name: "Bottom".into(),
+            user_data: None,
             ..Default::default()
         });
         for _ in 0..2 {
@@ -2536,6 +2587,7 @@ mod tests {
                 link: None,
                 pixels: vec![Rgba::TRANSPARENT],
                 opacity: 255,
+                user_data: None,
             }]);
         }
         s.cels[0][0].pixels[0] = Rgba::rgb(255, 0, 0); // group itself is ignored
@@ -2634,6 +2686,7 @@ mod tests {
             color: Rgba(1, 2, 3, 255),
             direction: PlayDirection::Reverse,
             repeat: 2,
+            user_data: None,
         });
         s.add_frame_after(0); // insert before the tag -> shifts to 2..3
         assert_eq!((s.tags[0].from, s.tags[0].to), (2, 3));

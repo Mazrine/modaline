@@ -1529,6 +1529,7 @@ impl Editor {
                     color: Rgba(120, 170, 255, 255),
                     direction: crate::sprite::PlayDirection::Forward,
                     repeat: 0,
+                    user_data: None,
                 });
                 self.sprite.tags.len() - 1
             }
@@ -3933,16 +3934,19 @@ mod tests {
         sprite.layers = vec![
             Layer {
                 name: "fix".into(),
+                user_data: None,
                 ..Default::default()
             },
             Layer {
                 name: "base".into(),
                 editable: false,
+                user_data: None,
                 ..Default::default()
             },
             Layer {
                 name: "ref".into(),
                 editable: false,
+                user_data: None,
                 ..Default::default()
             },
         ];
@@ -4380,6 +4384,7 @@ mod tests {
             link: None,
             pixels: vec![Rgba::TRANSPARENT; 4],
             opacity: 255,
+            user_data: None,
         };
         e.paint_pixel(1, 1, Rgba(9, 8, 7, 255));
         assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba(9, 8, 7, 255));
@@ -4433,6 +4438,7 @@ mod tests {
             color: Rgba(1, 2, 3, 255),
             direction: PlayDirection::PingPongReverse,
             repeat: 0,
+            user_data: None,
         });
         e.active_tag = Some(0);
         e.start_playback();

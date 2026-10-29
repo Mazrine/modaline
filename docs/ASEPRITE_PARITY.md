@@ -51,7 +51,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Alpha masks | Covered (vixel extension) | — |
 | Duplicate / merge down / flatten | Covered | — |
 | Layer UUID | Covered | P5-13 |
-| Layer user data | Missing | P5-14 |
+| Layer user data | Covered | P5-14 |
+| Cel / tag / sprite user data | Covered | P5-14 |
 
 ## Colour
 
@@ -148,7 +149,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | `.ase` cel z-index | Covered | P5-11 |
 | `.ase` linked-cel write | Covered | P5-12 |
 | `.ase` layer flags + UUIDs | Covered | P5-13 |
-| `.ase` user data (text/color/properties) | Missing | P5-14 |
+| `.ase` user data (text/color/properties) | Covered | P5-14 |
 | `.ase` slices | Missing | P5-15 |
 | `.ase` color profile / ICC | Covered | P5-09 |
 | `.ase` external files chunk | Missing | P5-17 |

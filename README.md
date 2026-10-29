@@ -190,7 +190,8 @@ crop/resize canonicalize to the canvas.
   lossless depth (gray, indexed, or 32-bit RGBA). Indexed sprites carry a
   document palette and transparent index (header byte 28), and paint snaps to
   palette entries. Embedded sRGB/ICC/gamma profiles are read and written;
-  unknown chunks (slices, user data) are preserved on save.
+  user data (text/colour/properties) round-trips on layers, cels, tags and the
+  sprite; unknown chunks (slices, tileset data) are preserved on save.
 - **`.vpx`** — project file: JSON with size, layers, frames, and every cel.
 - **PNG** — single-frame import/export with full alpha.
 
