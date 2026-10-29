@@ -3586,6 +3586,7 @@ const HELP: &[&str] = &[
     "  :lang [en|pt-BR|file.json]   :lang check|save <file>   (runtime language)",
     "  :prefs   (editor, grid, export, appearance, keys, workspace)",
     "  :bgcolor [#rrggbb|clear]   (sprite-properties background colour)",
+    "  :script <file.lua>   :lua <code>   (sandboxed Lua, Aseprite-style app API)",
     "  :slices [<dir> [cols rows|named]]   (list, grid export, or named slices)",
     "  :grad linear|radial   :contour   :textobj <text>   (editable text object)",
     "  :textfont vixel   :textsize <8-64>   :textalign left|center|right",

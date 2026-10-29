@@ -1662,6 +1662,32 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 }
             }
         }
+        "script" => match arg {
+            Some(path) => match crate::script::run_file(editor, std::path::Path::new(path)) {
+                Ok(out) => {
+                    editor.msg = if out.is_empty() {
+                        format!("script: {path}")
+                    } else {
+                        out.lines().last().unwrap_or("script finished").to_string()
+                    }
+                }
+                Err(e) => editor.msg = format!("script: {e}"),
+            },
+            None => editor.msg = "usage: :script <file.lua>".into(),
+        },
+        "lua" => match arg {
+            Some(code) => match crate::script::run(editor, code, "inline") {
+                Ok(out) => {
+                    editor.msg = if out.is_empty() {
+                        "lua: ok".into()
+                    } else {
+                        out.lines().last().unwrap_or("lua: ok").to_string()
+                    }
+                }
+                Err(e) => editor.msg = format!("lua: {e}"),
+            },
+            None => editor.msg = "usage: :lua <code>".into(),
+        },
         "bgcolor" | "backgroundcolor" => match arg {
             Some("clear" | "none") => {
                 editor.set_background_color(None);

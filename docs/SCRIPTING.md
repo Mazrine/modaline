@@ -1,7 +1,7 @@
 # Scripting engine decision (P5-48)
 
-Status: **decided — Lua via `mlua`**, with P5-49/P5-50 blocked on dependency
-availability in this offline environment.
+Status: **implemented MVP** — Lua 5.4 via `mlua` (vendored); P5-49 landed
+2026-10-29. P5-50 grows API coverage.
 
 ## Requirement
 

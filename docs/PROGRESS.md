@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **250 tests green** (217 lib + 28 bin + 5 CLI; 1 ignored benchmark)
+- `cargo test` → **256 tests green** (222 lib + 28 bin + 6 CLI; 1 ignored benchmark)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-60 background colour** (see batch 94).
+- Last completed batch: **P5-49 scripting MVP** (see batch 95).
 
 ## How to resume
 
@@ -475,6 +475,9 @@ Read, in order:
 94. **P5-60 — sprite background colour** — sprite user-data colour with undo,
   `:bgcolor`, side picker/swatch, `.ase`/`.vpx` round-trip. 3 tests (250 total);
   Xvfb verified the swatch/status.
+95. **P5-49 — scripting MVP** — `mlua` 0.12 (Lua 5.4 vendored), sandboxed
+  execution, core `app`/sprite/layer/pixel API, one-step script undo,
+  `:script`/`:lua`/`--script`. 5 unit + 1 CLI test (256 total).
 
 ## Next step (exact)
 
@@ -483,10 +486,9 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **No unblocked P5 tasks remain.** P5-49/P5-50/P5-51 are Blocked on an offline
-  `mlua` dependency; all other P5 tasks are checked. The loop stops here. The
-  remaining documented Partial rows are localization strings, async filtering
-  and CPU dirty compositing.
+- **P5-50** — scripting API coverage (first open task; `mlua` is now available),
+  then P5-51 extensions. Remaining documented Partial rows: scripting coverage,
+  localization strings, async filtering and CPU dirty compositing.
 
 ## Known limitations (do not forget)
 

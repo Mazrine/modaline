@@ -15,4 +15,5 @@ pub mod layout;
 pub mod ops;
 pub mod palette;
 pub mod properties;
+pub mod script;
 pub mod sprite;

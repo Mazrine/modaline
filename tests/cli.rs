@@ -39,6 +39,45 @@ fn run(args: &[String]) -> std::process::Output {
 }
 
 #[test]
+fn batch_runs_a_lua_script_then_saves() {
+    let d = dir("script");
+    let input = fixture(&d);
+    let script = d.join("paint.lua");
+    std::fs::write(
+        &script,
+        r#"
+        app.activeSprite:setPixel(0, 0, {r=9, g=8, b=7, a=255})
+        print("scripted", app.activeSprite.width)
+        "#,
+    )
+    .unwrap();
+    let out_path = d.join("out.vpx");
+    let out = run(&[
+        "-b".into(),
+        input.display().to_string(),
+        "--script".into(),
+        script.display().to_string(),
+        "--save-as".into(),
+        out_path.display().to_string(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("scripted\t4"),
+        "stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let saved = io::load_project(&out_path).unwrap();
+    assert_eq!(saved.get(0, 0, 0, 0), Rgba::rgb(9, 8, 7));
+    assert_eq!(saved.get(0, 0, 2, 2), Rgba::rgb(255, 0, 0));
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
 fn batch_exports_filtered_trimmed_sheet_and_atlas() {
     let d = dir("sheet");
     let input = fixture(&d);

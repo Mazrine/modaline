@@ -2250,6 +2250,49 @@ impl Editor {
         self.dirty = true;
     }
 
+    /// Finish a script: if its API calls changed the sprite, record the whole
+    /// script as one snapshot undo step.
+    pub fn commit_script(&mut self, before: Sprite, before_revision: u64) {
+        if self.revision == before_revision {
+            return;
+        }
+        let after = self.sprite.clone();
+        self.push_undo(UndoStep::Snapshot {
+            before: Box::new(before),
+            after: Box::new(after),
+        });
+        self.dirty = true;
+    }
+
+    /// Direct pixel write used by scripting (no active-tool ink/selection).
+    pub fn script_set_pixel(&mut self, x: u32, y: u32, color: Rgba) {
+        if x >= self.sprite.width || y >= self.sprite.height {
+            return;
+        }
+        self.sprite
+            .set(self.active_layer, self.active_frame, x, y, color);
+        self.touch();
+        self.dirty = true;
+    }
+
+    pub fn script_add_layer(&mut self) -> usize {
+        let idx = self.active_layer;
+        self.sprite.add_layer_after(idx);
+        self.active_layer = (idx + 1).min(self.sprite.layers.len() - 1);
+        self.touch();
+        self.dirty = true;
+        self.active_layer
+    }
+
+    pub fn script_add_frame(&mut self) -> usize {
+        let idx = self.active_frame;
+        self.sprite.add_frame_after(idx);
+        self.active_frame = (idx + 1).min(self.sprite.frames.len() - 1);
+        self.touch();
+        self.dirty = true;
+        self.active_frame
+    }
+
     pub fn pick_color(&mut self, x: u32, y: u32) {
         let comp = self.sprite.composite(self.active_frame);
         let c = comp[(y * self.sprite.width + x) as usize];

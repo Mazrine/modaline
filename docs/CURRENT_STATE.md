@@ -166,9 +166,10 @@ L-shaped corners for the 1 px pencil/eraser.
   view, textures, playback). Ctrl/Cmd-Tab cycles, Ctrl/Cmd-T opens, Ctrl/Cmd-W
   closes; drops open a tab; dirty tabs refuse close. Open paths and the active
   tab persist in `config.json` and restore on launch.
-- **scripting**: engine decision is Lua via `mlua` (`docs/SCRIPTING.md`), chosen
-  for Aseprite-script compatibility; implementation is blocked because the crate
-  is not available offline. JSON `Op` replay remains the working automation path.
+- **scripting**: Lua 5.4 via `mlua` (vendored) with a sandbox (no io/os/package/
+  debug, 64 MiB, 50M instructions). Core `app`/sprite/layer/pixel API; scripts
+  are one undo step. `:script <file.lua>`, `:lua <code>`, CLI `--script`; JSON
+  `Op` replay remains available.
 - **CLI batch** (`vixel -b`): headless save-as/sheet/data/GIF export with
   scale, colour mode/dither, frame/tag/layer filters, trim/crop, layout and
   atlas/GIF options; `--list-*` prints structure. Splits: layers, tags, slices

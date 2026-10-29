@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use eframe::egui;
 // The model lives in the library crate now. These names are what the shell
 // modules above reach through their `crate::…` paths.
-use vixel::{ase, brush, color, editor, i18n, io, layout, ops, palette, sprite};
+use vixel::{ase, brush, color, editor, i18n, io, layout, ops, palette, script, sprite};
 
 /// The backend this build can actually run. A `wgpu` request on a glow-only
 /// build is a warning, not a crash: losing the setting is worse than losing the

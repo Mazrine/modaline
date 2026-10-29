@@ -592,14 +592,20 @@ met; blocked tasks are marked with the reason.
   memory/instruction limits, API surface and residual risks are documented.
   Offline check found no mlua/rhai/quickjs/pyo3 sources or cache entries, so the
   dependency cannot be added here. No tests (decision/documentation).
-- [ ] **P5-49 — Scripting MVP** (L) — deps: P5-48. **Blocked**: `mlua` is not
-  available offline (no registry source/cache entry, no Cargo.lock entry).
-  Sandboxed engine, core API, `:script`/`--script`.
-- [ ] **P5-50 — Scripting API coverage** (L) — deps: P5-49. **Blocked** by
-  P5-49/dependency availability. Aseprite API compatibility matrix; run
-  representative scripts.
+- [x] **P5-49 — Scripting MVP** (L) — deps: P5-48.
+  Landed 2026-10-29. `mlua 0.12` (Lua 5.4, vendored) is now a real dependency.
+  `src/script.rs` runs scripts sandboxed (no io/os/package/debug/dofile/
+  loadfile/require, 64 MiB memory cap, 50M-instruction budget) and exposes
+  `app.version`, `app.alert`, `app.activeSprite` (width/height/frameCount/
+  layerCount, resize/getPixel/setPixel/newLayer/newFrame/save/saveAs),
+  `app.activeLayer` (name/visible/editable/opacity/isBackground/isReference)
+  and `app.activeFrame`. A whole script is one snapshot undo step.
+  `:script <file.lua>`, `:lua <code>` and CLI `--script` are wired. 5 unit tests
+  + CLI integration (256 total). Xvfb/headless verified.
+- [ ] **P5-50 — Scripting API coverage** (L) — deps: P5-49.
+  Aseprite API compatibility matrix; run representative scripts.
 - [ ] **P5-51 — Extensions** (L) — deps: P5-49, P5-50, P5-53. **Blocked** by
-  the scripting dependency (`mlua` unavailable offline).
+  P5-50 (not started).
   `.aseprite-extension` zip/manifest, install/remove, scripts/themes.
 
 ### Epic 10 — App shell and UX

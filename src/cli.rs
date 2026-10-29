@@ -21,6 +21,7 @@ pub fn run(args: &[String]) -> Result<()> {
     let mut tileset_path: Option<PathBuf> = None;
     let mut tileset_id: Option<u32> = None;
     let mut palette_path: Option<PathBuf> = None;
+    let mut script_path: Option<PathBuf> = None;
     let mut cfg = io::ExportConfig {
         gif: false,
         meta: false,
@@ -66,6 +67,7 @@ pub fn run(args: &[String]) -> Result<()> {
             }
             "--tileset-id" => tileset_id = Some(next(&mut i)?.parse::<u32>()?),
             "--palette" => palette_path = Some(PathBuf::from(next(&mut i)?)),
+            "--script" => script_path = Some(PathBuf::from(next(&mut i)?)),
             "--filename" => cfg.filename = next(&mut i)?,
             "--ignore-empty" => cfg.ignore_empty = true,
             "--merge" => cfg.merge_duplicates = true,
@@ -172,6 +174,12 @@ pub fn run(args: &[String]) -> Result<()> {
     }
     if let Some(mode) = color_mode {
         editor.set_color_mode(mode);
+    }
+    if let Some(path) = script_path.as_ref() {
+        let out = vixel::script::run_file(&mut editor, path).map_err(anyhow::Error::msg)?;
+        if !out.is_empty() {
+            println!("{out}");
+        }
     }
     let sprite = editor.sprite.clone();
 
@@ -397,6 +405,7 @@ fn print_help() {
          \x20 --split-layers <dir>  --split-tags <dir>  --split-slices <dir>\n\
          \x20 --split-grid <dir> [--columns N --rows N]\n\
          \x20 --export-tileset <png> [--tileset-id ID]  --palette <gpl|hex|pal>\n\
+         \x20 --script <file.lua>\n\
          Lists:\n\
          \x20 --list-layers --list-tags --list-frames --list-slices --list-tilesets --list-palette"
     );
