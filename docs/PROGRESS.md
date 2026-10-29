@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **174 tests green** (165 lib + 9 bin)
+- `cargo test` → **177 tests green** (168 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-21 tool depth** (see batch 58).
+- Last completed batch: **P5-22 gradient depth** (see batch 59).
 
 ## How to resume
 
@@ -342,6 +342,10 @@ Read, in order:
     `box_blur`, contour width + inside/outside. Commands and a "tool depth"
     panel group. 4 new tests (174 total): spray bounds, shade strength/coverage,
     blur sampling, contour width/side.
+59. **P5-22 — gradient depth** — multi-stop gradients with alpha, seven presets,
+    Bayer 2/4/8 dithering, selection clipping; `:grad preset|stop|stops|clear|
+    dither` and toolbar combos. 3 new tests (177 total): interpolation/presets,
+    dither level reduction, selection + alpha.
 
 ## Next step (exact)
 
@@ -350,7 +354,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-22** — gradient depth (first open task), then continue down the P5
+- **P5-23** — filter breadth (first open task), then continue down the P5
   roadmap in dependency order.
 
 ## Known limitations (do not forget)

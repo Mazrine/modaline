@@ -998,17 +998,89 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "usage: :selop replace|add|subtract|intersect".into();
             }
         }
-        "grad" | "gradient" => match arg {
-            Some("radial") | Some("rad") => {
-                editor.gradient_radial = true;
-                editor.msg = "gradient: radial".into();
+        "grad" | "gradient" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            match it.next() {
+                Some("radial") | Some("rad") => {
+                    editor.gradient_radial = true;
+                    editor.msg = "gradient: radial".into();
+                }
+                Some("linear") | Some("lin") => {
+                    editor.gradient_radial = false;
+                    editor.msg = "gradient: linear".into();
+                }
+                Some("clear") => {
+                    editor.gradient_stops.clear();
+                    editor.msg = "gradient: fg -> bg".into();
+                }
+                Some("stops") => {
+                    let list: Vec<String> = editor
+                        .gradient_stops
+                        .iter()
+                        .map(|(p, c)| {
+                            format!(
+                                "{:.0}% #{:02x}{:02x}{:02x}{:02x}",
+                                p * 100.0,
+                                c.0,
+                                c.1,
+                                c.2,
+                                c.3
+                            )
+                        })
+                        .collect();
+                    editor.msg = if list.is_empty() {
+                        "gradient: fg -> bg".into()
+                    } else {
+                        list.join("  ")
+                    };
+                }
+                Some("dither") => match it.next().and_then(crate::sprite::DitherMode::parse) {
+                    Some(mode) => {
+                        editor.gradient_dither = mode;
+                        editor.msg = format!("gradient dither: {}", mode.name());
+                    }
+                    None => editor.msg = "usage: :grad dither none|bayer2|bayer4|bayer8".into(),
+                },
+                Some("preset") => match it.next() {
+                    Some(name) => {
+                        if !editor.gradient_preset(name) {
+                            editor.msg =
+                                "presets: fg-bg, fg-transparent, bg-transparent, black-white, \
+                                 white-black, rainbow, fire"
+                                    .into();
+                        }
+                    }
+                    None => editor.msg = "usage: :grad preset <name>".into(),
+                },
+                Some("stop") => match it.next().and_then(|v| v.parse::<f32>().ok()) {
+                    Some(pos) => {
+                        let color = it
+                            .next()
+                            .and_then(crate::color::parse_hex)
+                            .unwrap_or(editor.fg);
+                        editor.gradient_set_stop(pos / 100.0, color);
+                    }
+                    None => editor.msg = "usage: :grad stop <0-100> [#rrggbb]".into(),
+                },
+                None => {
+                    editor.msg = format!(
+                        "gradient: {} · {} stops · dither {}",
+                        if editor.gradient_radial {
+                            "radial"
+                        } else {
+                            "linear"
+                        },
+                        editor.gradient_stops.len(),
+                        editor.gradient_dither.name()
+                    );
+                }
+                _ => {
+                    editor.msg = "usage: :grad linear|radial|dither <mode>|preset <name>|\
+                                  stop <pct> [#rrggbb]|stops|clear"
+                        .into();
+                }
             }
-            Some("linear") | Some("lin") => {
-                editor.gradient_radial = false;
-                editor.msg = "gradient: linear".into();
-            }
-            _ => editor.msg = "usage: :grad linear|radial".into(),
-        },
+        }
         "fg" | "bg" => match arg.and_then(crate::color::parse_hex) {
             Some(c) => {
                 if name == "fg" {

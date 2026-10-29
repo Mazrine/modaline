@@ -269,8 +269,14 @@ met; blocked tasks are marked with the reason.
   `:contour [1-64] [inside|outside]`; all four have a "tool depth" panel group.
   4 new tests (174 total): spray scatter bounds, shade strength/brush coverage,
   blur radius sampling, and contour width/side.
-- [ ] **P5-22 — Gradient depth** (M) — deps: P5-04.
-  Multi-stop gradients, presets, alpha, dithering, selection-aware; UI.
+- [x] **P5-22 — Gradient depth** (M) — deps: P5-04.
+  Landed 2026-10-28. Multi-stop gradients with interpolated alpha, seven presets
+  (fg-bg, fg-transparent, bg-transparent, black-white, white-black, rainbow,
+  fire), optional Bayer 2/4/8 ordered dithering, and selection clipping through
+  `paint_pixel`. Commands: `:grad preset <name>`, `:grad stop <pct> [#hex]`,
+  `:grad stops`, `:grad clear`, `:grad dither <mode>`; toolbar preset/dither
+  combos. 3 new tests (177 total): stop interpolation/presets, dither level
+  reduction, selection + alpha. Combos not screenshotted (manual check).
 - [ ] **P5-23 — Filters breadth** (L) — deps: none.
   Curves, levels, colour balance, desaturate, median, convolution/emboss,
   outline options; selection-aware, one undo step.

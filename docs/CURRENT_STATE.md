@@ -29,6 +29,8 @@ pencil, eraser, bucket (flood fill, contiguous or global, with tolerance),
 picker (eyedropper), line, rectangle,
 ellipse (outline or **filled**), **gradient (linear/radial)**, **spray**,
 **shade** (darken; right-click lightens), **blur**, and **contour** (outline) —
+and gradients support multiple stops, seven presets, interpolated alpha and
+Bayer 2/4/8 ordered dithering, clipped by the selection —
 all with live preview where applicable — plus **symmetry painting** (mirror or
 radial, including bucket fill and paste). Pencil and eraser share a square
 brush, 1-64 px (`:brush` or the panel slider), clipped at the canvas edges.

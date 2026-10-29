@@ -77,7 +77,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 |---|---|---|
 | Pencil, eraser, bucket, picker | Covered | — |
 | Line, rectangle, ellipse (outline/filled) | Covered | — |
-| Gradient (linear/radial) | Partial (2 colours) | P5-22 |
+| Gradient (linear/radial) | Covered (multi-stop, presets, alpha, dither) | P5-22 |
 | Spray, shade, blur, contour | Covered (configurable depth) | P5-21 |
 | Pixel-perfect freehand | Covered | — |
 | Symmetry (H/V/both/radial, movable centre) | Covered | — |

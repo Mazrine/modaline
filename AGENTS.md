@@ -124,7 +124,9 @@ thin shells:
   `Editor::pressure()`; keep freehand, shapes and the cursor preview on
   `current_brush()`. Pressure precedence is manual → device → 1.0. Shade,
   blur and spray iterate that same mask, so brush size stays consistent across
-  tools; blur radius must keep using `box_blur`.
+  tools; blur radius must keep using `box_blur`. Gradient stops live in
+  `gradient_stops` (empty = fg→bg) and must stay sorted; dithering is
+  gradient-local (`gradient_dither`) and must not touch conversion settings.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not

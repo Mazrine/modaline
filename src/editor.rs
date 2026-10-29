@@ -332,6 +332,10 @@ pub struct Editor {
     pub selection_op: SelectionOp,
     pub filled_shapes: bool,
     pub gradient_radial: bool,
+    /// Gradient stops in `0..=1`; empty means the live fg → bg pair.
+    pub gradient_stops: Vec<(f32, Rgba)>,
+    /// Ordered-dither mode applied while painting a gradient.
+    pub gradient_dither: DitherMode,
     pub spray_seed: u64,
     /// Airbrush dots per dab and scatter radius, in pixels.
     pub spray_rate: u32,
@@ -440,6 +444,8 @@ impl Editor {
             selection_op: SelectionOp::Replace,
             filled_shapes: false,
             gradient_radial: false,
+            gradient_stops: Vec::new(),
+            gradient_dither: DitherMode::None,
             spray_seed: 0x9E37_79B9_7F4A_7C15,
             spray_rate: 6,
             spray_radius: 3,
@@ -935,7 +941,6 @@ impl Editor {
         let len2 = dx * dx + dy * dy;
         let len = len2.sqrt();
         let radial = self.gradient_radial;
-        let (fg, bg) = (self.fg, self.bg);
         self.begin_stroke();
         for y in 0..h {
             for x in 0..w {
@@ -967,10 +972,75 @@ impl Editor {
                 } else {
                     (((px - ax) * dx + (py - ay) * dy) / len2).clamp(0.0, 1.0)
                 };
-                self.paint_pixel(x, y, lerp_rgba(fg, bg, t));
+                let color = self.gradient_color(t);
+                self.paint_pixel(x, y, gradient_dither(color, x, y, self.gradient_dither));
             }
         }
         self.end_stroke();
+    }
+
+    /// Colour at `t` along the active gradient (fg → bg when no stops are set).
+    pub fn gradient_color(&self, t: f32) -> Rgba {
+        let t = t.clamp(0.0, 1.0);
+        if self.gradient_stops.is_empty() {
+            return lerp_rgba(self.fg, self.bg, t);
+        }
+        let stops = &self.gradient_stops;
+        let (first_pos, first) = stops[0];
+        if t <= first_pos {
+            return first;
+        }
+        for pair in stops.windows(2) {
+            let (p0, c0) = pair[0];
+            let (p1, c1) = pair[1];
+            if t <= p1 {
+                let span = (p1 - p0).max(f32::EPSILON);
+                return lerp_rgba(c0, c1, ((t - p0) / span).clamp(0.0, 1.0));
+            }
+        }
+        stops.last().map(|(_, c)| *c).unwrap_or(self.bg)
+    }
+
+    /// Install a named gradient preset; returns false for an unknown name.
+    pub fn gradient_preset(&mut self, name: &str) -> bool {
+        let stops: Vec<(f32, Rgba)> = match name.to_ascii_lowercase().as_str() {
+            "fg-bg" | "default" => Vec::new(),
+            "fg-transparent" => vec![(0.0, self.fg), (1.0, Rgba::TRANSPARENT)],
+            "bg-transparent" => vec![(0.0, self.bg), (1.0, Rgba::TRANSPARENT)],
+            "black-white" => vec![(0.0, Rgba::rgb(0, 0, 0)), (1.0, Rgba::rgb(255, 255, 255))],
+            "white-black" => vec![(0.0, Rgba::rgb(255, 255, 255)), (1.0, Rgba::rgb(0, 0, 0))],
+            "rainbow" => vec![
+                (0.0, Rgba::rgb(255, 0, 0)),
+                (1.0 / 6.0, Rgba::rgb(255, 255, 0)),
+                (2.0 / 6.0, Rgba::rgb(0, 255, 0)),
+                (3.0 / 6.0, Rgba::rgb(0, 255, 255)),
+                (4.0 / 6.0, Rgba::rgb(0, 0, 255)),
+                (5.0 / 6.0, Rgba::rgb(255, 0, 255)),
+                (1.0, Rgba::rgb(255, 0, 0)),
+            ],
+            "fire" => vec![
+                (0.0, Rgba::rgb(0, 0, 0)),
+                (0.35, Rgba::rgb(180, 0, 0)),
+                (0.65, Rgba::rgb(255, 120, 0)),
+                (0.85, Rgba::rgb(255, 220, 60)),
+                (1.0, Rgba::rgb(255, 255, 255)),
+            ],
+            _ => return false,
+        };
+        self.gradient_stops = stops;
+        self.msg = format!("gradient preset: {name}");
+        true
+    }
+
+    /// Add or replace a stop at `pos` (0..=1), keeping the list sorted.
+    pub fn gradient_set_stop(&mut self, pos: f32, color: Rgba) {
+        let pos = pos.clamp(0.0, 1.0);
+        self.gradient_stops
+            .retain(|(p, _)| (p - pos).abs() > 0.0001);
+        self.gradient_stops.push((pos, color));
+        self.gradient_stops
+            .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        self.msg = format!("gradient stop: {:.0}%", pos * 100.0);
     }
 
     /// Shortest signed delta from `from` to `to` on an axis of `size` pixels:
@@ -3883,6 +3953,41 @@ fn shade_color(c: Rgba, darken: bool, strength: u32) -> Rgba {
     Rgba(ch(c.0), ch(c.1), ch(c.2), c.3)
 }
 
+/// Recursive Bayer matrix value in `0..n*n` for `(x, y)`.
+fn bayer_value(n: u32, x: u32, y: u32) -> u32 {
+    if n <= 1 {
+        return 0;
+    }
+    let half = n / 2;
+    let quadrant = match (x >= half, y >= half) {
+        (false, false) => 0,
+        (true, false) => 2,
+        (false, true) => 3,
+        (true, true) => 1,
+    };
+    4 * bayer_value(half, x % half, y % half) + quadrant
+}
+
+/// Ordered-dither an already-interpolated gradient colour. Alpha is left
+/// continuous (dithering it would punch holes in the ramp).
+fn gradient_dither(c: Rgba, x: u32, y: u32, mode: DitherMode) -> Rgba {
+    let (n, levels) = match mode {
+        DitherMode::Bayer2 => (2, 4.0),
+        DitherMode::Bayer4 => (4, 8.0),
+        DitherMode::Bayer8 => (8, 16.0),
+        _ => return c,
+    };
+    let threshold = (bayer_value(n, x % n, y % n) as f32 + 0.5) / (n * n) as f32;
+    let q = |v: u8| {
+        let scaled = f32::from(v) / 255.0 * (levels - 1.0);
+        let base = scaled.floor();
+        let frac = scaled - base;
+        let stepped = base + if frac > threshold { 1.0 } else { 0.0 };
+        (stepped / (levels - 1.0) * 255.0).round().clamp(0.0, 255.0) as u8
+    };
+    Rgba(q(c.0), q(c.1), q(c.2), c.3)
+}
+
 /// Linear interpolation between two colors, `t` in 0..1.
 fn lerp_rgba(a: Rgba, b: Rgba, t: f32) -> Rgba {
     let l = |x: u8, y: u8| {
@@ -4615,6 +4720,76 @@ mod tests {
         let sel = e.current_selection().unwrap();
         assert_eq!((sel.x, sel.w), (0, 3), "bbox spans the gap");
         assert_eq!(sel.mask.iter().filter(|&&m| m).count(), 2);
+    }
+
+    #[test]
+    fn multi_stop_gradients_interpolate_and_presets_carry_alpha() {
+        let mut e = Editor::new(4, 4);
+        e.gradient_stops = vec![
+            (0.0, Rgba::rgb(255, 0, 0)),
+            (0.5, Rgba::rgb(0, 255, 0)),
+            (1.0, Rgba::rgb(0, 0, 255)),
+        ];
+        assert_eq!(e.gradient_color(0.0), Rgba::rgb(255, 0, 0));
+        assert_eq!(e.gradient_color(0.5), Rgba::rgb(0, 255, 0));
+        assert_eq!(e.gradient_color(1.0), Rgba::rgb(0, 0, 255));
+        let quarter = e.gradient_color(0.25);
+        assert!((quarter.0 as i32 - 128).abs() <= 1, "{quarter:?}");
+        assert!((quarter.1 as i32 - 128).abs() <= 1, "{quarter:?}");
+
+        assert!(e.gradient_preset("fg-transparent"));
+        assert_eq!(e.gradient_color(0.0).3, 255);
+        assert_eq!(e.gradient_color(1.0).3, 0);
+        assert!((e.gradient_color(0.5).3 as i32 - 128).abs() <= 1);
+        assert!(!e.gradient_preset("nope"));
+
+        e.gradient_preset("black-white");
+        e.gradient_set_stop(0.5, Rgba::rgb(255, 0, 0));
+        assert_eq!(e.gradient_stops.len(), 3);
+        assert_eq!(e.gradient_stops[1].1, Rgba::rgb(255, 0, 0));
+    }
+
+    #[test]
+    fn gradient_dither_quantizes_to_bayer_levels() {
+        let mut e = Editor::new(16, 1);
+        e.gradient_preset("black-white");
+        e.gradient_dither = DitherMode::Bayer4;
+        e.cursor = (15, 0);
+        e.paint_gradient((0, 0));
+        let unique: std::collections::BTreeSet<u8> =
+            (0..16).map(|x| e.sprite.get(0, 0, x, 0).0).collect();
+        assert!(unique.len() > 1 && unique.len() <= 8, "{unique:?}");
+
+        let mut e = Editor::new(16, 1);
+        e.gradient_preset("black-white");
+        e.cursor = (15, 0);
+        e.paint_gradient((0, 0));
+        let smooth: std::collections::BTreeSet<u8> =
+            (0..16).map(|x| e.sprite.get(0, 0, x, 0).0).collect();
+        assert!(
+            smooth.len() > unique.len(),
+            "dither reduces the level count"
+        );
+    }
+
+    #[test]
+    fn gradient_honours_selection_and_alpha() {
+        let mut e = Editor::new(4, 1);
+        e.selection = Some(Selection::rect(0, 0, 2, 1));
+        e.gradient_preset("fg-transparent");
+        e.cursor = (3, 0);
+        e.paint_gradient((0, 0));
+        assert_eq!(
+            e.sprite.get(0, 0, 3, 0),
+            Rgba::TRANSPARENT,
+            "outside selection"
+        );
+        let left = e.sprite.get(0, 0, 0, 0).3;
+        let right = e.sprite.get(0, 0, 1, 0).3;
+        assert!(
+            left > right && right > 0,
+            "alpha ramps inside: {left}, {right}"
+        );
     }
 
     #[test]

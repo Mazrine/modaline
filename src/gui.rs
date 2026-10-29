@@ -3,7 +3,7 @@ use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Texture
 use crate::brush::BrushKind;
 use crate::color::Rgba;
 use crate::editor::{Editor, Ink, LayerProps, Mode, SelectionOp, Shape, Symmetry, Tool};
-use crate::sprite::{BlendMode, ellipse_points, line_points, rect_points};
+use crate::sprite::{BlendMode, DitherMode, ellipse_points, line_points, rect_points};
 
 /// Onion-skin settings: how many frames each side, how strong, and the two
 /// tints. Aseprite's default is one red behind and one green ahead.
@@ -229,6 +229,44 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         if ui.selectable_label(editor.gradient_radial, gmode).clicked() {
             editor.gradient_radial = !editor.gradient_radial;
         }
+        egui::ComboBox::from_id_salt("grad_preset")
+            .selected_text(if editor.gradient_stops.is_empty() {
+                "grad preset"
+            } else {
+                "grad custom"
+            })
+            .show_ui(ui, |ui| {
+                for name in [
+                    "fg-bg",
+                    "fg-transparent",
+                    "bg-transparent",
+                    "black-white",
+                    "white-black",
+                    "rainbow",
+                    "fire",
+                ] {
+                    if ui.selectable_label(false, name).clicked() {
+                        editor.gradient_preset(name);
+                    }
+                }
+            });
+        egui::ComboBox::from_id_salt("grad_dither")
+            .selected_text(format!("dith:{}", editor.gradient_dither.name()))
+            .show_ui(ui, |ui| {
+                for mode in [
+                    DitherMode::None,
+                    DitherMode::Bayer2,
+                    DitherMode::Bayer4,
+                    DitherMode::Bayer8,
+                ] {
+                    if ui
+                        .selectable_label(editor.gradient_dither == mode, mode.name())
+                        .clicked()
+                    {
+                        editor.gradient_dither = mode;
+                    }
+                }
+            });
         if ui
             .selectable_label(
                 editor.selection_op != SelectionOp::Replace,
@@ -1846,6 +1884,7 @@ const HELP: &[&str] = &[
     "  :brush <1-64>|square|circle <n>|spacing <pct>|load <png>|save|use|list",
     "  :pressure <0-100>|auto   :spray <dots> [r]   :shade <pct>   :blur <r>",
     "  :contour [1-64] [inside|outside]   (tool depth)",
+    "  :grad linear|radial|dither <mode>|preset <name>|stop <pct> [#hex]|stops|clear",
     "  :perfect on|off   :grid <px>   :snap on|off   (brush, grid)",
     "  :crop [x y w h]   :trim   (crop to a rect/selection, or to content)",
     "  :ink simple|lockalpha|replace|shading|erase   :alphalock on|off",

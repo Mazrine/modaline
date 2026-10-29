@@ -132,6 +132,8 @@ keyboard-first, but the mouse is fully wired.)
 | `:pressure <0-100>` / `:pressure auto` | manual pressure override; `auto` follows pen force |
 | `:spray <dots> [radius]` / `:shade <pct>` / `:blur <radius>` | airbrush, shade, and blur-tool depth |
 | `:contour [width] [inside\|outside]` | contour the cursor region with the chosen ring |
+| `:grad preset <name>` / `:grad stop <pct> [#hex]` / `:grad stops` / `:grad clear` | multi-stop gradient presets and stops |
+| `:grad dither none\|bayer2\|bayer4\|bayer8` | ordered dithering while painting a gradient |
 | `:ink simple\|lockalpha\|replace\|shading\|erase` / `:alphalock on\|off` | per-tool ink and alpha-locked painting |
 | `:perfect on\|off` | pixel-perfect freehand: drop L-shaped corner pixels |
 | `:mode auto\|rgba\|grayscale\|indexed` / `:aspect <x> <y>` / `:sgrid [x y] <w> <h>` | sprite colour mode, pixel ratio, grid size + origin |
@@ -244,7 +246,7 @@ with **add/subtract/intersect**, **expand/contract/border/feather/invert** and
 copy/cut/paste/move, **eight filters**, **free rotate/scale/skew**, **8x8 bitmap
 text**, **brush size 1-64 + custom masks/spacing + pressure**, **pixel-perfect freehand**, **crop/trim**,
 **per-tool inks + alpha lock**, **design grid + snap**,
-**symmetry painting**
+**multi-stop gradients** (presets, alpha, Bayer dither), **symmetry painting**
 (mirror or radial,
 including bucket fill and paste), flip H/V + rotate 90° (**selection-aware**),
 stroke-grouped undo/redo (**structural layer/frame/tag edits and panel
