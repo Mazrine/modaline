@@ -423,8 +423,14 @@ met; blocked tasks are marked with the reason.
   diagonal→X→Y order. Tilesets persist in `.vpx`. 3 new tests (191 total):
   retained model/ID/base/flip rendering, flip-order helper, and `.vpx`
   round-trip.
-- [ ] **P5-30 — Tilemap layer model** (L) — deps: P5-29, P5-10.
-  Layer kind, cel tile refs + flips, retain/rasterize, composite.
+- [x] **P5-30 — Tilemap layer model** (L) — deps: P5-29, P5-10.
+  Landed 2026-10-28. `Layer.tilemap` marks tilemap layers (with their tileset
+  ID); `Cel.tilemap: Option<TilemapCel>` retains row-major `TileRef`s (id +
+  X/Y/diagonal flips) while `pixels` stays the render cache. `render_tilemap`
+  and `Sprite::rasterize_tilemap` rebuild bounds/pixels from refs; `.ase` import
+  now fills both. Composite keeps using the cached pixels. Refs persist in
+  `.vpx`. 2 new tests (192 total): retained refs/layer flag from `.ase`, and
+  re-rasterization after edits (plus `.vpx` refs).
 - [ ] **P5-31 — Tilemap editing** (L) — deps: P5-30.
   Draw tiles, picker, empty tile, manual mode, pixel-edit mode, tile undo, UI.
 - [ ] **P5-32 — Write tileset/tilemap chunks** (M) — deps: P5-30.

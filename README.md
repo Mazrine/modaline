@@ -251,7 +251,7 @@ polygon selection**
 with **add/subtract/intersect**, **expand/contract/border/feather/invert** and
 copy/cut/paste/move, **sixteen filters** (curves, levels, balance, median, convolve, emboss…), **free rotate/scale/skew + RotSprite + interactive handles/pivot**, **8x8 bitmap
 text** (text tool with live preview/size/alignment), **brush size 1-64 + custom masks/spacing + pressure**, **pixel-perfect freehand**, **crop/trim**,
-**per-tool inks + alpha lock**, **retained embedded tilesets**, **design grid + snap**,
+**per-tool inks + alpha lock**, **retained tilesets + tilemap refs**, **design grid + snap**,
 **multi-stop gradients** (presets, alpha, Bayer dither), **wide-pixel preview**, **symmetry painting**
 (mirror or radial,
 including bucket fill and paste), flip H/V + rotate 90° (**selection-aware**),

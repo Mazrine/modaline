@@ -28,6 +28,42 @@ pub struct Cel {
     pub opacity: u8,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_data: Option<UserData>,
+    /// Retained tile refs for tilemap cels; pixels stay the render cache.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tilemap: Option<TilemapCel>,
+}
+
+/// One tile reference in a tilemap cel.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TileRef {
+    /// Tile ID (0 = empty), mapped through the tileset's base index.
+    pub id: u32,
+    #[serde(default)]
+    pub flip_x: bool,
+    #[serde(default)]
+    pub flip_y: bool,
+    #[serde(default)]
+    pub flip_diagonal: bool,
+}
+
+/// Row-major tile references for one tilemap cel.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct TilemapCel {
+    pub tiles_w: u32,
+    pub tiles_h: u32,
+    pub tiles: Vec<TileRef>,
+}
+
+impl TilemapCel {
+    pub fn new(tiles_w: u32, tiles: Vec<TileRef>) -> Self {
+        let tiles_w = tiles_w.max(1);
+        let tiles_h = (tiles.len() as u32).div_ceil(tiles_w);
+        TilemapCel {
+            tiles_w,
+            tiles_h,
+            tiles,
+        }
+    }
 }
 
 fn full() -> u8 {
@@ -65,6 +101,7 @@ impl Cel {
             pixels: vec![Rgba::TRANSPARENT; (w * h) as usize],
             opacity: 255,
             user_data: None,
+            tilemap: None,
         }
     }
 
@@ -184,6 +221,9 @@ pub struct Layer {
     /// A group layer is displayed collapsed in the layer list.
     #[serde(default)]
     pub collapsed: bool,
+    /// Tilemap layer (the cel holds tile references as well as pixels).
+    #[serde(default)]
+    pub tilemap: bool,
     /// Tileset ID for tilemap layers (0 = none).
     #[serde(default)]
     pub tileset: u32,
@@ -214,6 +254,7 @@ impl Default for Layer {
             prefer_linked: false,
             lock_movement: false,
             collapsed: false,
+            tilemap: false,
             tileset: 0,
             uuid: None,
             user_data: None,
@@ -562,6 +603,70 @@ pub struct Sprite {
     /// Retained tilesets (embedded image or external reference), keyed by ID.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tilesets: Vec<Tileset>,
+}
+
+/// Atlas offset for destination pixel `(dx, dy)` of `tile`. Aseprite applies
+/// the diagonal flip first, then horizontal, then vertical.
+pub(crate) fn tile_pixel_offset(
+    ts: &Tileset,
+    tile: u32,
+    dx: u32,
+    dy: u32,
+    fx: bool,
+    fy: bool,
+    fd: bool,
+) -> Option<usize> {
+    let (mut sx, mut sy) = (dx, dy);
+    if fd {
+        (sx, sy) = (sy, sx);
+    }
+    if fx {
+        sx = ts.tile_w.checked_sub(1)?.checked_sub(sx)?;
+    }
+    if fy {
+        sy = ts.tile_h.checked_sub(1)?.checked_sub(sy)?;
+    }
+    if sx >= ts.tile_w || sy >= ts.tile_h {
+        return None;
+    }
+    Some(((tile * ts.tile_h + sy) * ts.tile_w + sx) as usize)
+}
+
+/// Rasterise tile refs into a cel-sized pixel buffer.
+pub fn render_tilemap(ts: &Tileset, tm: &TilemapCel) -> (u32, u32, Vec<Rgba>) {
+    let tiles_w = tm.tiles_w.max(1);
+    let tiles_h = (tm.tiles.len() as u32).div_ceil(tiles_w).max(1);
+    let (w, h) = (tiles_w * ts.tile_w, tiles_h * ts.tile_h);
+    let mut pixels = vec![Rgba::TRANSPARENT; (w * h) as usize];
+    for (i, tile_ref) in tm.tiles.iter().enumerate() {
+        let Some(tile) = tile_ref.id.checked_sub(ts.base_index) else {
+            continue;
+        };
+        if tile_ref.id == 0 || tile >= ts.num_tiles {
+            continue;
+        }
+        let tx = (i as u32 % tiles_w) * ts.tile_w;
+        let ty = (i as u32 / tiles_w) * ts.tile_h;
+        for dy in 0..ts.tile_h {
+            for dx in 0..ts.tile_w {
+                let Some(off) = tile_pixel_offset(
+                    ts,
+                    tile,
+                    dx,
+                    dy,
+                    tile_ref.flip_x,
+                    tile_ref.flip_y,
+                    tile_ref.flip_diagonal,
+                ) else {
+                    continue;
+                };
+                let src = *ts.image.get(off).unwrap_or(&Rgba::TRANSPARENT);
+                let (x, y) = (tx + dx, ty + dy);
+                pixels[(y * w + x) as usize] = src;
+            }
+        }
+    }
+    (w, h, pixels)
 }
 
 /// One Aseprite tileset: id/name/tile size/base index/flags and the atlas.
@@ -940,6 +1045,44 @@ impl Sprite {
         cel
     }
 
+    /// Re-render a tilemap cel's pixels from its retained tile references.
+    pub fn rasterize_tilemap(&mut self, layer: usize, frame: usize) -> bool {
+        let Some(l) = self.layers.get(layer) else {
+            return false;
+        };
+        if !l.tilemap {
+            return false;
+        }
+        let ts_id = l.tileset;
+        let Some(ts) = self
+            .tilesets
+            .iter()
+            .find(|t| t.id == ts_id)
+            .filter(|t| t.external.is_none() && !t.image.is_empty())
+            .cloned()
+        else {
+            return false;
+        };
+        let Some(tm) = self
+            .cels
+            .get(layer)
+            .and_then(|f| f.get(frame))
+            .and_then(|c| c.tilemap.clone())
+        else {
+            return false;
+        };
+        let (w, h, pixels) = render_tilemap(&ts, &tm);
+        if let Some(cel) = self.cels.get_mut(layer).and_then(|f| f.get_mut(frame)) {
+            cel.w = w;
+            cel.h = h;
+            cel.pixels = pixels;
+            cel.link = None;
+            true
+        } else {
+            false
+        }
+    }
+
     /// Replace a linked cel with an independent copy of its content.
     fn materialize(&mut self, layer: usize, frame: usize) {
         let Some(target) = self.cels[layer][frame].link else {
@@ -1184,6 +1327,7 @@ impl Sprite {
                     pixels: np,
                     opacity: old.opacity,
                     user_data: None,
+                    tilemap: None,
                 };
             }
         }
@@ -1230,6 +1374,7 @@ impl Sprite {
                     pixels: np,
                     opacity: old.opacity,
                     user_data: None,
+                    tilemap: None,
                 };
             }
         }
@@ -1549,6 +1694,7 @@ impl Sprite {
                 pixels: buf,
                 opacity: 255,
                 user_data: None,
+                tilemap: None,
             };
         }
         self.layers[down].opacity = 255;
@@ -1583,6 +1729,7 @@ impl Sprite {
                 pixels: self.export_composite(frame),
                 opacity: 255,
                 user_data: None,
+                tilemap: None,
             });
         }
         self.layers = vec![Layer {
@@ -2297,6 +2444,7 @@ mod tests {
             pixels: vec![Rgba::rgb(10, 20, 30)],
             opacity: 255,
             user_data: None,
+            tilemap: None,
         };
         s.cels.push(vec![cel; 1]);
         assert_eq!(s.composite(0)[0], Rgba(10, 20, 30, 255));
@@ -2324,6 +2472,7 @@ mod tests {
             pixels: vec![Rgba::rgb(128, 128, 128)],
             opacity: 255,
             user_data: None,
+            tilemap: None,
         }]);
         // top layer multiplies gray over gray
         s.layers[0].blend = BlendMode::Multiply;
@@ -2440,6 +2589,67 @@ mod tests {
     }
 
     #[test]
+    fn tilemap_cels_rerasterize_from_retained_refs() {
+        let mut s = Sprite::new(4, 2);
+        s.layers[0].tilemap = true;
+        s.layers[0].tileset = 5;
+        s.tilesets.push(Tileset {
+            id: 5,
+            tile_w: 2,
+            tile_h: 2,
+            base_index: 1,
+            num_tiles: 2,
+            image: vec![
+                Rgba::rgb(255, 0, 0),
+                Rgba::rgb(255, 0, 0),
+                Rgba::rgb(255, 0, 0),
+                Rgba::rgb(255, 0, 0),
+                Rgba::rgb(0, 255, 0),
+                Rgba::rgb(0, 255, 0),
+                Rgba::rgb(0, 255, 0),
+                Rgba::rgb(0, 255, 0),
+            ],
+            ..Default::default()
+        });
+        let tm = TilemapCel::new(
+            2,
+            vec![
+                TileRef {
+                    id: 1,
+                    ..Default::default()
+                },
+                TileRef {
+                    id: 2,
+                    ..Default::default()
+                },
+            ],
+        );
+        s.cels[0][0].tilemap = Some(tm);
+        assert!(s.rasterize_tilemap(0, 0));
+        assert_eq!(s.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+        assert_eq!(s.get(0, 0, 2, 0), Rgba::rgb(0, 255, 0));
+
+        s.cels[0][0].tilemap = Some(TilemapCel::new(
+            2,
+            vec![
+                TileRef {
+                    id: 2,
+                    flip_x: true,
+                    ..Default::default()
+                },
+                TileRef {
+                    id: 1,
+                    ..Default::default()
+                },
+            ],
+        ));
+        assert!(s.rasterize_tilemap(0, 0));
+        assert_eq!(s.get(0, 0, 0, 0), Rgba::rgb(0, 255, 0));
+        assert_eq!(s.get(0, 0, 2, 0), Rgba::rgb(255, 0, 0));
+        assert_eq!((s.cels[0][0].w, s.cels[0][0].h), (4, 2));
+    }
+
+    #[test]
     fn cel_z_orders_the_composite() {
         let mut s = Sprite::new(1, 1);
         let red = Rgba(255, 0, 0, 255);
@@ -2460,6 +2670,7 @@ mod tests {
             pixels: vec![blue],
             opacity: 255,
             user_data: None,
+            tilemap: None,
         }]);
         assert_eq!(s.composite(0)[0], red);
         s.cels[1][0].z_index = 1;
@@ -2485,6 +2696,7 @@ mod tests {
             pixels: vec![red; 4],
             opacity: 255,
             user_data: None,
+            tilemap: None,
         };
         let comp = s.composite(0);
         assert_eq!(comp[5], red);
@@ -2506,6 +2718,7 @@ mod tests {
             pixels: vec![red; 4],
             opacity: 255,
             user_data: None,
+            tilemap: None,
         };
         assert_eq!(s.composite(0)[0], red);
         assert_eq!(s.get(0, 0, 3, 3), Rgba::TRANSPARENT);
@@ -2526,6 +2739,7 @@ mod tests {
             pixels: vec![red, blue],
             opacity: 255,
             user_data: None,
+            tilemap: None,
         };
         s.flip_h();
         assert_eq!(s.cels[0][0].x, 1);
@@ -2745,6 +2959,7 @@ mod tests {
                 pixels: vec![Rgba::TRANSPARENT],
                 opacity: 255,
                 user_data: None,
+                tilemap: None,
             }]);
         }
         s.cels[0][0].pixels[0] = Rgba::rgb(255, 0, 0); // group itself is ignored

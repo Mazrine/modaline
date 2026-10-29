@@ -6104,6 +6104,7 @@ mod tests {
             pixels: vec![Rgba::TRANSPARENT; 4],
             opacity: 255,
             user_data: None,
+            tilemap: None,
         };
         e.paint_pixel(1, 1, Rgba(9, 8, 7, 255));
         assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba(9, 8, 7, 255));

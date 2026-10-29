@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **191 tests green** (180 lib + 11 bin)
+- `cargo test` → **192 tests green** (181 lib + 11 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-29 tileset model** (see batch 66).
+- Last completed batch: **P5-30 tilemap model** (see batch 67).
 
 ## How to resume
 
@@ -371,6 +371,11 @@ Read, in order:
     ID-based lookup, base-index tile mapping, diagonal-first flips, `.vpx`
     persistence. 3 new tests (191 total): model/ID/base/flip render, flip order,
     and `.vpx` round-trip.
+67. **P5-30 — tilemap model** — `Layer.tilemap` plus per-cel `TilemapCel`/
+    `TileRef` (id + flips) kept alongside the render cache; `render_tilemap`
+    and `Sprite::rasterize_tilemap` rebuild pixels/bounds; `.ase` retains refs,
+    `.vpx` round-trips them. 2 new tests (192 total): retained refs/flag and
+    re-rasterization.
 
 ## Next step (exact)
 
@@ -379,7 +384,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-30** — tilemap layer model (first open task), then continue down the P5
+- **P5-31** — tilemap editing (first open task), then continue down the P5
   roadmap in dependency order.
 
 ## Known limitations (do not forget)

@@ -552,12 +552,21 @@ mod tests {
             ],
             external: None,
         });
+        s.cels[0][0].tilemap = Some(crate::sprite::TilemapCel::new(
+            1,
+            vec![crate::sprite::TileRef {
+                id: 1,
+                flip_diagonal: true,
+                ..Default::default()
+            }],
+        ));
         let path = std::env::temp_dir().join(format!("vixel-tileset-{}.vpx", std::process::id()));
         save_project(&s, &path).unwrap();
         let back = load_project(&path).unwrap();
         let _ = std::fs::remove_file(&path);
         assert_eq!(back.tilesets, s.tilesets);
         assert_eq!(back.layers[0].tileset, 7);
+        assert_eq!(back.cels[0][0].tilemap, s.cels[0][0].tilemap);
     }
 
     #[test]

@@ -939,6 +939,7 @@ impl Import {
             pixels,
             opacity: info.opacity,
             user_data: info.user_data,
+            tilemap: None,
         });
     }
 
@@ -986,6 +987,20 @@ impl Import {
                     pixels,
                     opacity: tc.opacity,
                     user_data: tc.user_data,
+                    tilemap: Some(crate::sprite::TilemapCel::new(
+                        tiles_w,
+                        tc.tiles
+                            .iter()
+                            .map(
+                                |&(id, flip_x, flip_y, flip_diagonal)| crate::sprite::TileRef {
+                                    id,
+                                    flip_x,
+                                    flip_y,
+                                    flip_diagonal,
+                                },
+                            )
+                            .collect(),
+                    )),
                 });
             }
         }
@@ -1439,6 +1454,7 @@ fn parse_layer(body: &[u8], has_uuid: bool) -> Result<(Layer, u32)> {
             prefer_linked: flags & 16 != 0,
             lock_movement: flags & 4 != 0,
             collapsed: flags & 32 != 0,
+            tilemap: kind == 2,
             tileset,
             uuid,
             user_data: None,
@@ -1696,6 +1712,7 @@ mod tests {
             ],
             opacity: 255,
             user_data: None,
+            tilemap: None,
         };
         let composite = s.composite(0);
         let path = tmp("vixel_ase_bounds.ase");
@@ -2143,6 +2160,13 @@ mod tests {
         assert_eq!(s.tilesets[0].base_index, 1);
         assert_eq!(s.tilesets[0].flags, 2);
         assert_eq!(s.layers[0].tileset, 5);
+        assert!(s.layers[0].tilemap);
+        let tm = s.cels[0][0].tilemap.as_ref().expect("tile refs retained");
+        assert_eq!((tm.tiles_w, tm.tiles_h), (2, 1));
+        assert_eq!(tm.tiles[0].id, 1);
+        assert!(!tm.tiles[0].flip_x);
+        assert_eq!(tm.tiles[1].id, 1);
+        assert!(tm.tiles[1].flip_x);
         assert_eq!(s.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
         assert_eq!(s.get(0, 0, 1, 0), Rgba(0, 255, 0, 255));
         assert_eq!(s.get(0, 0, 2, 0), Rgba(0, 255, 0, 255), "flipped tile");

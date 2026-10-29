@@ -139,7 +139,8 @@ thin shells:
   canvas extent and hit area must match or seam clicks land outside.
 - Tilesets live in `Sprite.tilesets` keyed by `Tileset.id`; layers reference
   that ID (`Layer.tileset`). Tile IDs map through `base_index`, and flips apply
-  diagonal → X → Y.
+  diagonal → X → Y. Tilemap cels keep `Cel.tilemap` refs beside `pixels`; after
+  changing refs call `Sprite::rasterize_tilemap` so composite stays current.
 - Text editing snapshots once in `text_edit_before`; `preview_text_object`
   re-rasterises without undo, and only `commit_text_edit` pushes the step.
 - Selection masks are sprite-sized grids (`selection_grid`/`grid_to_selection`);
