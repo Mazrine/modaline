@@ -113,6 +113,38 @@ pub enum ExportLayers {
     Indices,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SheetLayout {
+    Horizontal,
+    Vertical,
+    Rows,
+    Columns,
+    Packed,
+}
+
+impl SheetLayout {
+    pub fn name(self) -> &'static str {
+        match self {
+            SheetLayout::Horizontal => "horizontal",
+            SheetLayout::Vertical => "vertical",
+            SheetLayout::Rows => "rows",
+            SheetLayout::Columns => "columns",
+            SheetLayout::Packed => "packed",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "horizontal" | "h" => SheetLayout::Horizontal,
+            "vertical" | "v" => SheetLayout::Vertical,
+            "rows" | "r" => SheetLayout::Rows,
+            "columns" | "cols" | "c" => SheetLayout::Columns,
+            "packed" | "pack" | "p" => SheetLayout::Packed,
+            _ => return None,
+        })
+    }
+}
+
 /// Options shared by every export path. Frame indices are 0-based inclusive.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExportConfig {
@@ -132,6 +164,14 @@ pub struct ExportConfig {
     pub sequence: bool,
     pub filename: String,
     pub per_layer: bool,
+    /// `None` keeps the legacy uniform `padding` sheet.
+    pub sheet_layout: Option<SheetLayout>,
+    pub columns: Option<u32>,
+    pub rows: Option<u32>,
+    pub border_padding: u32,
+    pub shape_padding: u32,
+    pub inner_padding: u32,
+    pub extrude: u32,
 }
 
 impl Default for ExportConfig {
@@ -152,6 +192,13 @@ impl Default for ExportConfig {
             sequence: false,
             filename: "{title}_{frame}".into(),
             per_layer: false,
+            sheet_layout: None,
+            columns: None,
+            rows: None,
+            border_padding: 0,
+            shape_padding: 0,
+            inner_padding: 0,
+            extrude: 0,
         }
     }
 }
@@ -269,7 +316,11 @@ pub fn export_config(sprite: &Sprite, cfg: &ExportConfig, stem: &Path) -> Result
     let mut paths = Vec::new();
     if cfg.sheet {
         let sheet_path = with_suffix(stem, ".sheet.png");
-        let sheet = export_sheet_scaled_padded(&view, &sheet_path, None, scale, padding)?;
+        let sheet = if cfg.sheet_layout.is_some() {
+            export_sheet_layout(&view, &sheet_path, cfg)?
+        } else {
+            export_sheet_scaled_padded(&view, &sheet_path, None, scale, padding)?
+        };
         paths.push(sheet_path.clone());
         if cfg.meta {
             let meta_path = with_suffix(stem, ".json");
@@ -439,7 +490,7 @@ pub fn export_png_scaled(sprite: &Sprite, frame: usize, path: &Path, scale: u32)
 }
 
 /// One frame's cell in the sheet, as written to `meta.json`.
-#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Sheet {
     pub frame_w: u32,
     pub frame_h: u32,
@@ -447,6 +498,16 @@ pub struct Sheet {
     pub rows: u32,
     #[serde(default)]
     pub padding: u32,
+    #[serde(default)]
+    pub layout: String,
+    #[serde(default)]
+    pub border_padding: u32,
+    #[serde(default)]
+    pub shape_padding: u32,
+    #[serde(default)]
+    pub inner_padding: u32,
+    #[serde(default)]
+    pub extrude: u32,
 }
 
 /// Sheet columns for `frames` cells: roughly a 3:2 grid, so 24 frames pack 6x4
@@ -509,6 +570,93 @@ pub fn export_sheet_scaled_padded(
         columns,
         rows,
         padding: pad,
+        layout: "uniform".into(),
+        border_padding: 0,
+        shape_padding: pad,
+        inner_padding: pad,
+        extrude: 0,
+    })
+}
+
+/// Copy edge pixels outward by `amount`, framing the source.
+fn extrude(img: &image::RgbaImage, amount: u32) -> image::RgbaImage {
+    let e = amount.min(64);
+    if e == 0 {
+        return img.clone();
+    }
+    let (w, h) = img.dimensions();
+    let mut out = image::RgbaImage::new(w + e * 2, h + e * 2);
+    for y in 0..out.height() {
+        let sy = (y as i32 - e as i32).clamp(0, h.saturating_sub(1) as i32) as u32;
+        for x in 0..out.width() {
+            let sx = (x as i32 - e as i32).clamp(0, w.saturating_sub(1) as i32) as u32;
+            out.put_pixel(x, y, *img.get_pixel(sx, sy));
+        }
+    }
+    out
+}
+
+/// Export a sheet using the configured layout, padding and extrusion.
+pub fn export_sheet_layout(sprite: &Sprite, path: &Path, cfg: &ExportConfig) -> Result<Sheet> {
+    let n = sprite.frames.len().max(1);
+    let layout = cfg.sheet_layout.unwrap_or(SheetLayout::Rows);
+    let (columns, rows) = match layout {
+        SheetLayout::Horizontal => (n as u32, 1),
+        SheetLayout::Vertical => (1, n as u32),
+        SheetLayout::Rows => {
+            let c = cfg
+                .columns
+                .unwrap_or_else(|| columns_for(n))
+                .clamp(1, n as u32);
+            (c, (n as u32).div_ceil(c))
+        }
+        SheetLayout::Columns => {
+            let r = cfg
+                .rows
+                .unwrap_or_else(|| columns_for(n))
+                .clamp(1, n as u32);
+            ((n as u32).div_ceil(r), r)
+        }
+        SheetLayout::Packed => {
+            let c = cfg
+                .columns
+                .unwrap_or_else(|| columns_for(n))
+                .clamp(1, n as u32);
+            (c, (n as u32).div_ceil(c))
+        }
+    };
+    let scale = cfg.scale.clamp(1, 16);
+    let border = cfg.border_padding.min(64);
+    let shape = cfg.shape_padding.min(64);
+    let inner = cfg.inner_padding.min(64);
+    let ex = cfg.extrude.min(64);
+    let (fw, fh) = (sprite.width * scale, sprite.height * scale);
+    let (cw, ch) = (fw + ex * 2 + inner * 2, fh + ex * 2 + inner * 2);
+    let stride_x = cw + shape;
+    let stride_y = ch + shape;
+    let total_w = border * 2 + columns * cw + columns.saturating_sub(1) * shape;
+    let total_h = border * 2 + rows * ch + rows.saturating_sub(1) * shape;
+    let mut sheet_img = image::RgbaImage::new(total_w, total_h);
+    for frame in 0..n {
+        let cell = extrude(&scaled(frame_image(sprite, frame), scale), ex);
+        let ox = border + (frame as u32 % columns) * stride_x + inner;
+        let oy = border + (frame as u32 / columns) * stride_y + inner;
+        image::imageops::overlay(&mut sheet_img, &cell, ox as i64, oy as i64);
+    }
+    sheet_img
+        .save(path)
+        .with_context(|| format!("save {}", path.display()))?;
+    Ok(Sheet {
+        frame_w: fw,
+        frame_h: fh,
+        columns,
+        rows,
+        padding: shape,
+        layout: layout.name().into(),
+        border_padding: border,
+        shape_padding: shape,
+        inner_padding: inner,
+        extrude: ex,
     })
 }
 
@@ -558,6 +706,11 @@ pub fn export_meta(sprite: &Sprite, sheet: Sheet, image: &str, path: &Path) -> R
         "columns": sheet.columns,
         "rows": sheet.rows,
         "padding": sheet.padding,
+        "layout": sheet.layout,
+        "border_padding": sheet.border_padding,
+        "shape_padding": sheet.shape_padding,
+        "inner_padding": sheet.inner_padding,
+        "extrude": sheet.extrude,
         "fps": (fps * 100.0).round() / 100.0,
         "profile": sprite.color_profile.name(),
         "color_mode": sprite.color_mode.name(),
@@ -896,6 +1049,62 @@ pub fn import_sheet(path: &Path, cols: u32, rows: u32) -> Result<Sprite> {
 mod tests {
     use super::*;
     use crate::color::Rgba;
+
+    #[test]
+    fn sheet_layout_applies_padding_and_extrusion() {
+        let mut s = Sprite::new(2, 2);
+        s.add_frame_after(0);
+        s.set(0, 0, 0, 0, Rgba::rgb(255, 0, 0));
+        s.set(0, 1, 0, 0, Rgba::rgb(0, 0, 255));
+        let cfg = ExportConfig {
+            sheet_layout: Some(SheetLayout::Horizontal),
+            border_padding: 2,
+            shape_padding: 3,
+            inner_padding: 1,
+            extrude: 1,
+            ..Default::default()
+        };
+        let dir = std::env::temp_dir().join(format!("vixel-sheet-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sheet.png");
+        let sheet = export_sheet_layout(&s, &path, &cfg).unwrap();
+        assert_eq!((sheet.columns, sheet.rows), (2, 1));
+        assert_eq!(sheet.layout, "horizontal");
+        assert_eq!(sheet.extrude, 1);
+        let img = image::open(&path).unwrap().to_rgba8();
+        assert_eq!(img.dimensions(), (19, 10));
+        assert_eq!(img.get_pixel(4, 4).0, [255, 0, 0, 255], "extruded start");
+        assert_eq!(img.get_pixel(13, 4).0, [0, 0, 255, 255], "second cell");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sheet_layout_vertical_and_columns_choose_grids() {
+        let mut s = Sprite::new(2, 2);
+        s.add_frame_after(0);
+        s.add_frame_after(1);
+        let dir = std::env::temp_dir().join(format!("vixel-sheet-grid-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut cfg = ExportConfig {
+            sheet_layout: Some(SheetLayout::Vertical),
+            ..Default::default()
+        };
+        let path = dir.join("vertical.png");
+        let sheet = export_sheet_layout(&s, &path, &cfg).unwrap();
+        assert_eq!((sheet.columns, sheet.rows), (1, 3));
+        assert_eq!(image::open(&path).unwrap().to_rgba8().dimensions(), (2, 6));
+
+        cfg.sheet_layout = Some(SheetLayout::Columns);
+        cfg.rows = Some(2);
+        let path = dir.join("columns.png");
+        let sheet = export_sheet_layout(&s, &path, &cfg).unwrap();
+        assert_eq!((sheet.columns, sheet.rows), (2, 2));
+        assert_eq!(image::open(&path).unwrap().to_rgba8().dimensions(), (4, 4));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn filename_tokens_render_and_sanitize() {

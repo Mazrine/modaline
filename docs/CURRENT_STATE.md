@@ -152,7 +152,9 @@ L-shaped corners for the 1 px pencil/eraser.
   duplicates, scale, global trim, padding and sheet/GIF/meta switches, shared by
   `:exportcfg` and the export dialog; padded sheets record `padding` in metadata.
   PNG sequences export per frame or per layer with `{frame}`, `{layer}`, `{tag}`,
-  `{title}` and `{duration}` filename templates.
+  `{title}` and `{duration}` filename templates. Sheet layouts: horizontal,
+  vertical, rows, columns, packed; border/shape/inner padding, extrusion and
+  trim, recorded in metadata.
 - **filters** (panel + `:filter`): invert, brightness, contrast, hue,
   saturation, desaturate, curves, levels, colour balance, posterize, outline,
   blur, sharpen, median, 3×3 convolution (custom kernel/divisor/bias) and

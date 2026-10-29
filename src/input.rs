@@ -1676,8 +1676,44 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         Some(p) => cfg.filename = p.to_string(),
                         None => bad = true,
                     },
+                    "--layout" => match it.next().and_then(crate::io::SheetLayout::parse) {
+                        Some(l) => cfg.sheet_layout = Some(l),
+                        None => bad = true,
+                    },
+                    "--columns" => match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                        Some(n) => cfg.columns = Some(n.max(1)),
+                        None => bad = true,
+                    },
+                    "--rows" => match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                        Some(n) => cfg.rows = Some(n.max(1)),
+                        None => bad = true,
+                    },
+                    "--border" => match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                        Some(n) => cfg.border_padding = n.min(64),
+                        None => bad = true,
+                    },
+                    "--shape" => match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                        Some(n) => cfg.shape_padding = n.min(64),
+                        None => bad = true,
+                    },
+                    "--inner" => match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                        Some(n) => cfg.inner_padding = n.min(64),
+                        None => bad = true,
+                    },
+                    "--extrude" => match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                        Some(n) => cfg.extrude = n.min(64),
+                        None => bad = true,
+                    },
                     _ => bad = true,
                 }
+            }
+            if cfg.sheet_layout.is_none()
+                && (cfg.border_padding > 0
+                    || cfg.shape_padding > 0
+                    || cfg.inner_padding > 0
+                    || cfg.extrude > 0)
+            {
+                cfg.sheet_layout = Some(crate::io::SheetLayout::Rows);
             }
             match (bad, stem) {
                 (false, Some(stem)) => {
@@ -1701,7 +1737,9 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     editor.msg = "usage: :exportcfg <stem> [--frames a b] [--tag name] \
                         [--layers all|visible|indices i,j] [--ignore-empty] [--merge] \
                         [--trim] [--scale n] [--padding n] [--no-sheet] [--no-gif] \
-                        [--no-meta] [--sequence] [--per-layer] [--pattern <tpl>]"
+                        [--no-meta] [--sequence] [--per-layer] [--pattern <tpl>] \
+                        [--layout h|v|rows|columns|packed] [--columns n] [--rows n] \
+                        [--border n] [--shape n] [--inner n] [--extrude n]"
                         .into();
                 }
             }

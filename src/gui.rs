@@ -400,6 +400,69 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                 });
             }
             ui.horizontal(|ui| {
+                ui.label("layout");
+                egui::ComboBox::from_id_salt("sheet_layout")
+                    .selected_text(
+                        cfg.sheet_layout
+                            .map(crate::io::SheetLayout::name)
+                            .unwrap_or("uniform"),
+                    )
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_label(cfg.sheet_layout.is_none(), "uniform")
+                            .clicked()
+                        {
+                            cfg.sheet_layout = None;
+                        }
+                        for layout in [
+                            crate::io::SheetLayout::Horizontal,
+                            crate::io::SheetLayout::Vertical,
+                            crate::io::SheetLayout::Rows,
+                            crate::io::SheetLayout::Columns,
+                            crate::io::SheetLayout::Packed,
+                        ] {
+                            if ui
+                                .selectable_label(cfg.sheet_layout == Some(layout), layout.name())
+                                .clicked()
+                            {
+                                cfg.sheet_layout = Some(layout);
+                            }
+                        }
+                    });
+            });
+            if cfg.sheet_layout.is_some() {
+                ui.horizontal(|ui| {
+                    ui.label("cols");
+                    let mut cols = cfg.columns.unwrap_or(0);
+                    if ui
+                        .add(egui::DragValue::new(&mut cols).range(0..=64))
+                        .changed()
+                    {
+                        cfg.columns = (cols > 0).then_some(cols);
+                    }
+                    ui.label("rows");
+                    let mut rows = cfg.rows.unwrap_or(0);
+                    if ui
+                        .add(egui::DragValue::new(&mut rows).range(0..=64))
+                        .changed()
+                    {
+                        cfg.rows = (rows > 0).then_some(rows);
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("border");
+                    ui.add(egui::DragValue::new(&mut cfg.border_padding).range(0..=64));
+                    ui.label("shape");
+                    ui.add(egui::DragValue::new(&mut cfg.shape_padding).range(0..=64));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("inner");
+                    ui.add(egui::DragValue::new(&mut cfg.inner_padding).range(0..=64));
+                    ui.label("extrude");
+                    ui.add(egui::DragValue::new(&mut cfg.extrude).range(0..=64));
+                });
+            }
+            ui.horizontal(|ui| {
                 ui.label("scale");
                 ui.add(egui::DragValue::new(&mut cfg.scale).range(1..=16));
                 ui.label("padding");
@@ -2847,6 +2910,8 @@ const HELP: &[&str] = &[
     "  Ctrl/Cmd-click toggles a cel; Shift-click selects a timeline range",
     "  :exportcfg <stem> [--frames a b] [--tag n] [--layers ...] [--merge] [--trim] [--padding n]",
     "  :exportcfg <stem> --sequence [--per-layer] [--pattern <tpl>]   (PNG sequence)",
+    "  :exportcfg <stem> --layout h|v|rows|columns|packed [--columns n] [--rows n]",
+    "  :exportcfg ... --border n --shape n --inner n --extrude n   (sheet layout)",
     "  t                  toggle filled shapes (rect / ellipse)",
     "  , / .              prev / next color",
     "  < / >              prev / next layer",

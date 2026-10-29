@@ -524,9 +524,16 @@ met; blocked tasks are marked with the reason.
   `:exportcfg ... --sequence [--per-layer] [--pattern <tpl>]` and dialog fields.
   2 new tests (209 total): token rendering/sanitizing and a 2-frame × 2-layer
   sequence with scaling.
-- [ ] **P5-41 — Sheet layouts** (L) — deps: P5-39.
-  horizontal/vertical/rows/columns/packed, width/height/columns/rows,
-  border/shape/inner padding, extrude, trim/crop.
+- [x] **P5-41 — Sheet layouts** (L) — deps: P5-39.
+  Landed 2026-10-28. `SheetLayout` supports horizontal, vertical, rows,
+  columns and packed (row grid, equivalent for uniform frame sizes) with
+  optional column/row overrides. Sheet padding is split into border, shape
+  spacing and inner margin; `extrude` replicates edge pixels. Trim/crop comes
+  from `ExportConfig.trim`. Metadata records layout and all paddings. Commands:
+  `:exportcfg ... --layout h|v|rows|columns|packed --columns n --rows n
+  --border n --shape n --inner n --extrude n`; dialog exposes the same.
+  2 new tests (211 total): horizontal padding/extrude placement and
+  vertical/columns grids.
 - [ ] **P5-42 — Atlas metadata + GIF options** (M) — deps: P5-41.
   json-hash/json-array, layers/tags/slices, filename formats; GIF loop, palette
   and dither.

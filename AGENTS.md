@@ -144,6 +144,8 @@ thin shells:
 - Exports go through `ExportConfig`/`configured_sprite`; derive a filtered
   sprite rather than re-implementing frame/layer selection in each exporter.
   Sequence filenames go through `render_filename` (sanitize, `.png`, dedupe).
+  Sheet layouts use `export_sheet_layout`; keep border/shape/inner padding and
+  extrusion distinct, and record them in `Sheet`/meta.
 - Tile preview extents use `Editor::tile_offsets()`/`tile_x`/`tile_y`; the
   canvas extent and hit area must match or seam clicks land outside.
 - Tilesets live in `Sprite.tilesets` keyed by `Tileset.id`; layers reference

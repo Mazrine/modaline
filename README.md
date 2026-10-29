@@ -119,6 +119,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:exporttileset [out.png]` | export the retained tileset atlas |
 | `:exportcfg <stem> [--frames a b] [--tag name] [--layers ...] [--merge] [--trim] [--padding n]` | configured sheet/GIF/meta export |
 | `:exportcfg <stem> --sequence [--per-layer] [--pattern <tpl>]` | PNG sequence with `{frame}/{layer}/{tag}/{title}/{duration}` |
+| `:exportcfg <stem> --layout h\|v\|rows\|columns\|packed [--columns n] [--rows n] [--border n] [--shape n] [--inner n] [--extrude n]` | sheet layout, padding and extrusion |
 | `:celselect <layer> <frame>` / `:celclear` / `:exportcels <dir>` | multi-cel selection and per-cel PNG export |
 | `:celcopy` / `:celcut` / `:celpaste` / `:celdel` / `:celinfo` | whole-cel clipboard, empty cel vs frame, cel status |
 | `vixel --export-tileset in.ase [out.png]` | headless atlas export |
