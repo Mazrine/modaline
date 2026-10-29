@@ -415,9 +415,14 @@ met; blocked tasks are marked with the reason.
 
 ### Epic 6 — Tilesets and tilemaps
 
-- [ ] **P5-29 — Tileset model + retained import** (L) — deps: P5-07.
-  `Sprite.tilesets` (id/name/tile size/base index/flags/tiles); fix ID, base
-  index, external skip and flip order; persist in `.vpx`.
+- [x] **P5-29 — Tileset model + retained import** (L) — deps: P5-07.
+  Landed 2026-10-28. `Sprite.tilesets: Vec<Tileset>` carries id/name/tile
+  size/base index/flags/tile count/atlas/external refs, and `Layer.tileset`
+  keeps the referenced ID. `.ase` import now looks tilesets up by ID (not list
+  index), maps tile IDs through the base index, and applies flips in Aseprite's
+  diagonal→X→Y order. Tilesets persist in `.vpx`. 3 new tests (191 total):
+  retained model/ID/base/flip rendering, flip-order helper, and `.vpx`
+  round-trip.
 - [ ] **P5-30 — Tilemap layer model** (L) — deps: P5-29, P5-10.
   Layer kind, cel tile refs + flips, retain/rasterize, composite.
 - [ ] **P5-31 — Tilemap editing** (L) — deps: P5-30.

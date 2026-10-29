@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **189 tests green** (178 lib + 11 bin)
+- `cargo test` → **191 tests green** (180 lib + 11 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-28 text tool** (see batch 65).
+- Last completed batch: **P5-29 tileset model** (see batch 66).
 
 ## How to resume
 
@@ -367,6 +367,10 @@ Read, in order:
 65. **P5-28 — text tool** — `Tool::Text` placement, multi-line live preview with
     one-undo commit, bitmap font/size/alignment/colour, `:textfont|size|align`.
     2 new tests (189 total): preview undo grouping and placement/settings.
+66. **P5-29 — tileset model** — retained `Sprite.tilesets`/`Layer.tileset`,
+    ID-based lookup, base-index tile mapping, diagonal-first flips, `.vpx`
+    persistence. 3 new tests (191 total): model/ID/base/flip render, flip order,
+    and `.vpx` round-trip.
 
 ## Next step (exact)
 
@@ -375,8 +379,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-29** — tileset model + retained import (first open task), then continue
-  down the P5 roadmap in dependency order.
+- **P5-30** — tilemap layer model (first open task), then continue down the P5
+  roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

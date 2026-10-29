@@ -147,6 +147,10 @@ L-shaped corners for the 1 px pencil/eraser.
   alignment. Editable **text objects** store text, font, size,
   alignment, antialias flag and position in the cel's user-data properties and
   re-rasterise on edit (`:textobj <string>`); `.ase` text properties round-trip.
+- **tilesets**: embedded/external tilesets are retained on the sprite
+  (`id`, name, tile size, base index, flags, atlas) with layer tilemap IDs;
+  `.vpx` preserves them and `.ase` import honours base-index and
+  diagonal→X→Y flip order.
 - **slices**: named 9-patch/pivot slice objects with per-frame keys, read and
   written from `.ase` 0x2022 (colour from user data) and listed in the side
   panel. `:slices` lists them; `:slices <dir> named` exports one PNG per slice

@@ -529,6 +529,38 @@ mod tests {
     use crate::color::Rgba;
 
     #[test]
+    fn tilesets_survive_vpx() {
+        let mut s = Sprite::new(2, 2);
+        s.layers[0].tileset = 7;
+        s.tilesets.push(crate::sprite::Tileset {
+            id: 7,
+            name: "ground".into(),
+            tile_w: 2,
+            tile_h: 2,
+            base_index: 1,
+            flags: 3,
+            num_tiles: 2,
+            image: vec![
+                Rgba::rgb(255, 0, 0),
+                Rgba::rgb(0, 255, 0),
+                Rgba::rgb(0, 0, 255),
+                Rgba::TRANSPARENT,
+                Rgba::rgb(1, 2, 3),
+                Rgba::rgb(4, 5, 6),
+                Rgba::rgb(7, 8, 9),
+                Rgba::rgb(10, 11, 12),
+            ],
+            external: None,
+        });
+        let path = std::env::temp_dir().join(format!("vixel-tileset-{}.vpx", std::process::id()));
+        save_project(&s, &path).unwrap();
+        let back = load_project(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.tilesets, s.tilesets);
+        assert_eq!(back.layers[0].tileset, 7);
+    }
+
+    #[test]
     fn slices_cover_the_sprite_even_when_the_grid_does_not_divide_it() {
         let mut s = Sprite::new(10, 7);
         assert_eq!(

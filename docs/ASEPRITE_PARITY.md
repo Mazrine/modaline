@@ -112,13 +112,13 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 
 | Capability | Status | Task |
 |---|---|---|
-| Embedded tileset read/rasterize | Partial | P5-29 |
-| Tileset model (id, name, base index, flags) | Missing | P5-29 |
+| Embedded tileset read/rasterize | Covered | P5-29 |
+| Tileset model (id, name, base index, flags) + `.vpx` persistence | Covered | P5-29 |
 | Tilemap layer model + tile references | Missing | P5-30 |
 | Draw tiles / draw pixels in tiles | Missing | P5-31 |
 | Manual / auto / stack modes | Missing | P5-33 |
 | Empty tile | Missing | P5-31 |
-| Tile flips X/Y/diagonal | Partial (import) | P5-29 |
+| Tile flips X/Y/diagonal | Covered (diagonal-first order) | P5-29 |
 | Write tileset/tilemap chunks (`.ase`) | Missing | P5-32 |
 | Tileset editing + export | Missing | P5-33 |
 | External tileset files | Partial (references read) | P5-33 |

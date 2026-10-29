@@ -184,6 +184,9 @@ pub struct Layer {
     /// A group layer is displayed collapsed in the layer list.
     #[serde(default)]
     pub collapsed: bool,
+    /// Tileset ID for tilemap layers (0 = none).
+    #[serde(default)]
+    pub tileset: u32,
     /// Aseprite layer UUID (written when any layer has one).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uuid: Option<[u8; 16]>,
@@ -211,6 +214,7 @@ impl Default for Layer {
             prefer_linked: false,
             lock_movement: false,
             collapsed: false,
+            tileset: 0,
             uuid: None,
             user_data: None,
         }
@@ -555,6 +559,31 @@ pub struct Sprite {
     pub slices: Vec<Slice>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub external_files: Vec<ExternalFile>,
+    /// Retained tilesets (embedded image or external reference), keyed by ID.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tilesets: Vec<Tileset>,
+}
+
+/// One Aseprite tileset: id/name/tile size/base index/flags and the atlas.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Tileset {
+    pub id: u32,
+    #[serde(default)]
+    pub name: String,
+    pub tile_w: u32,
+    pub tile_h: u32,
+    /// Tile ID of the first atlas tile (usually 1; 0 = empty tile).
+    #[serde(default)]
+    pub base_index: u32,
+    #[serde(default)]
+    pub flags: u32,
+    pub num_tiles: u32,
+    /// Row-major tile atlas, `tile_w` wide and `tile_h * num_tiles` tall.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image: Vec<Rgba>,
+    /// External file ID + tileset ID when flag 1 is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external: Option<(u32, u32)>,
 }
 
 /// The two working spaces this editor understands. A sprite authored in linear
@@ -698,6 +727,7 @@ impl Sprite {
             user_data: None,
             slices: Vec::new(),
             external_files: Vec::new(),
+            tilesets: Vec::new(),
         }
     }
 

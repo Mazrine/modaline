@@ -15,7 +15,7 @@ use anyhow::{Context, Result, bail};
 use crate::color::Rgba;
 use crate::sprite::{
     AseProfile, BlendMode, Cel, ChunkAnchor, ExternalFile, Frame, Layer, PlayDirection, RawChunk,
-    Slice, SliceKey, Sprite, Tag, UserData,
+    Slice, SliceKey, Sprite, Tag, Tileset, UserData,
 };
 
 const MAGIC: u16 = 0xA5E0;
@@ -722,14 +722,31 @@ fn parse_color_profile(body: &[u8]) -> Option<AseProfile> {
     })
 }
 
-struct Tileset {
-    num_tiles: u32,
-    tile_w: u32,
-    tile_h: u32,
-    /// Row-major, `tile_w` wide and `tile_h * num_tiles` tall.
-    image: Vec<Rgba>,
-    /// External file ID + tileset ID when flag 1 is set.
-    external: Option<(u32, u32)>,
+/// Atlas offset for destination pixel `(dx, dy)` of `tile`. Aseprite applies
+/// the diagonal flip first, then horizontal, then vertical.
+fn tile_pixel_offset(
+    ts: &Tileset,
+    tile: u32,
+    dx: u32,
+    dy: u32,
+    fx: bool,
+    fy: bool,
+    fd: bool,
+) -> Option<usize> {
+    let (mut sx, mut sy) = (dx, dy);
+    if fd {
+        (sx, sy) = (sy, sx);
+    }
+    if fx {
+        sx = ts.tile_w.checked_sub(1)?.checked_sub(sx)?;
+    }
+    if fy {
+        sy = ts.tile_h.checked_sub(1)?.checked_sub(sy)?;
+    }
+    if sx >= ts.tile_w || sy >= ts.tile_h {
+        return None;
+    }
+    Some(((tile * ts.tile_h + sy) * ts.tile_w + sx) as usize)
 }
 
 /// A tilemap cel, kept until every tileset chunk has been read.
@@ -927,8 +944,8 @@ impl Import {
 
     fn resolve_tilemaps(&mut self) {
         for tc in std::mem::take(&mut self.tilemaps) {
-            let ts_index = self.layer_tilesets.get(tc.layer).copied().unwrap_or(0) as usize;
-            let Some(ts) = self.tilesets.get(ts_index) else {
+            let ts_id = self.layer_tilesets.get(tc.layer).copied().unwrap_or(0);
+            let Some(ts) = self.tilesets.iter().find(|t| t.id == ts_id) else {
                 continue;
             };
             if ts.external.is_some() || ts.image.is_empty() || ts.tile_w == 0 || ts.tile_h == 0 {
@@ -939,25 +956,20 @@ impl Import {
             let (tw, th) = (tiles_w * ts.tile_w, tiles_h * ts.tile_h);
             let mut pixels = vec![Rgba::TRANSPARENT; (tw * th) as usize];
             for (i, &(id, fx, fy, fd)) in tc.tiles.iter().enumerate() {
-                if id == 0 || id >= ts.num_tiles {
+                let Some(tile) = id.checked_sub(ts.base_index) else {
+                    continue;
+                };
+                if id == 0 || tile >= ts.num_tiles {
                     continue;
                 }
                 let tx = (i as u32 % tiles_w) * ts.tile_w;
                 let ty = (i as u32 / tiles_w) * ts.tile_h;
                 for dy in 0..ts.tile_h {
                     for dx in 0..ts.tile_w {
-                        let (mut sx, mut sy) = (dx, dy);
-                        if fx {
-                            sx = ts.tile_w - 1 - sx;
-                        }
-                        if fy {
-                            sy = ts.tile_h - 1 - sy;
-                        }
-                        if fd {
-                            (sx, sy) = (sy, sx);
-                        }
-                        let idx = ((id * ts.tile_h + sy) * ts.tile_w + sx) as usize;
-                        let src = *ts.image.get(idx).unwrap_or(&Rgba::TRANSPARENT);
+                        let Some(off) = tile_pixel_offset(ts, tile, dx, dy, fx, fy, fd) else {
+                            continue;
+                        };
+                        let src = *ts.image.get(off).unwrap_or(&Rgba::TRANSPARENT);
                         let (x, y) = (tx + dx, ty + dy);
                         pixels[(y * tw + x) as usize] = src;
                     }
@@ -1291,6 +1303,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         user_data: im.sprite_user_data,
         slices: im.slices,
         external_files: im.external_files,
+        tilesets: im.tilesets,
     };
     sprite.normalize_levels();
     sprite.clamp_tags();
@@ -1332,11 +1345,17 @@ fn parse_tags(body: &[u8]) -> Vec<Tag> {
 }
 
 fn parse_tileset(body: &[u8], depth: u16, palette: &[Rgba], transparent: u8) -> Result<Tileset> {
+    let id = u32_at(body, 0);
     let flags = u32_at(body, 4);
     let num_tiles = u32_at(body, 8);
     let tile_w = u16_at(body, 12) as u32;
     let tile_h = u16_at(body, 14) as u32;
+    let base_index = u16_at(body, 16) as u32;
     let name_len = u16_at(body, 32) as usize;
+    let name = body
+        .get(34..34 + name_len)
+        .map(|b| String::from_utf8_lossy(b).into_owned())
+        .unwrap_or_default();
     let mut p = 34 + name_len;
     let mut external = None;
     if flags & 1 != 0 {
@@ -1362,9 +1381,13 @@ fn parse_tileset(body: &[u8], depth: u16, palette: &[Rgba], transparent: u8) -> 
         }
     }
     Ok(Tileset {
-        num_tiles,
+        id,
+        name,
         tile_w,
         tile_h,
+        base_index,
+        flags,
+        num_tiles,
         image,
         external,
     })
@@ -1416,6 +1439,7 @@ fn parse_layer(body: &[u8], has_uuid: bool) -> Result<(Layer, u32)> {
             prefer_linked: flags & 16 != 0,
             lock_movement: flags & 4 != 0,
             collapsed: flags & 32 != 0,
+            tileset,
             uuid,
             user_data: None,
         },
@@ -2058,13 +2082,13 @@ mod tests {
 
     #[test]
     fn reads_compressed_tilemap_cels() {
-        // Tileset: 2x2 tiles. Tile 0 transparent, tile 1 = red/green/blue/white.
+        // Tileset: 2 tiles of 2x2. Base index 1, so tile id 1 is atlas tile 0.
         let mut tile_pixels = vec![0u8; 2 * 4 * 4];
-        tile_pixels[16..].copy_from_slice(&[
+        tile_pixels[..16].copy_from_slice(&[
             255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
         ]);
         let mut ts = Vec::new();
-        ts.extend_from_slice(&1u32.to_le_bytes()); // tileset id
+        ts.extend_from_slice(&5u32.to_le_bytes()); // tileset id (not 0-based)
         ts.extend_from_slice(&2u32.to_le_bytes()); // flags: embedded image
         ts.extend_from_slice(&2u32.to_le_bytes()); // number of tiles
         ts.extend_from_slice(&2u16.to_le_bytes()); // tile width
@@ -2109,11 +2133,16 @@ mod tests {
         let mut data = ase_header(4, 2, 32, 1);
         data.extend(ase_frame(&[
             (CHUNK_TILESET, ts),
-            (CHUNK_LAYER, layer_chunk(2, 0)),
+            (CHUNK_LAYER, layer_chunk(2, 5)),
             (CHUNK_CEL, cel_chunk(0, 3, &cel)),
         ]));
 
         let s = load_bytes("vixel_ase_tilemap.ase", data);
+        assert_eq!(s.tilesets.len(), 1);
+        assert_eq!(s.tilesets[0].id, 5, "ID retained, not a list index");
+        assert_eq!(s.tilesets[0].base_index, 1);
+        assert_eq!(s.tilesets[0].flags, 2);
+        assert_eq!(s.layers[0].tileset, 5);
         assert_eq!(s.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
         assert_eq!(s.get(0, 0, 1, 0), Rgba(0, 255, 0, 255));
         assert_eq!(s.get(0, 0, 2, 0), Rgba(0, 255, 0, 255), "flipped tile");
@@ -2434,6 +2463,33 @@ mod tests {
         let back = load(&path).unwrap();
         let _ = std::fs::remove_file(&path);
         assert_eq!(back.external_files, s.external_files);
+    }
+
+    #[test]
+    fn tile_flip_order_is_diagonal_then_x_then_y() {
+        let ts = Tileset {
+            tile_w: 2,
+            tile_h: 2,
+            num_tiles: 1,
+            image: vec![
+                Rgba::rgb(255, 0, 0),
+                Rgba::rgb(0, 255, 0),
+                Rgba::rgb(0, 0, 255),
+                Rgba::rgb(255, 255, 255),
+            ],
+            ..Default::default()
+        };
+        // Diagonal then X: dest (0,0) reads transposed (0,0)=red, then X=green.
+        assert_eq!(
+            tile_pixel_offset(&ts, 0, 0, 0, true, false, true),
+            Some(1),
+            "green"
+        );
+        // X then diagonal would read blue; this documents the fixed order.
+        assert_eq!(
+            tile_pixel_offset(&ts, 0, 0, 0, false, false, false),
+            Some(0)
+        );
     }
 
     #[test]
