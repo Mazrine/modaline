@@ -63,8 +63,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Transparent palette index | Covered | P5-03 |
 | RGB→indexed dithering | Covered | P5-04 |
 | Palette import/export (`.gpl`, `.hex`, `.pal`) | Covered | — |
-| Palette editor: insert/delete/sort/presets/names | Partial | P5-06 |
-| Colour picker wheel + recent colours | Missing | P5-06 |
+| Palette editor: insert/delete/sort/presets/names | Covered | P5-06 |
+| Colour picker wheel + recent colours | Covered | P5-06 |
 | sRGB/linear working profiles | Covered (vixel) | — |
 | ICC embedding (`.ase` 0x2007) | Missing | P5-09 |
 | Background colour sprite property | Missing | P5-08 |

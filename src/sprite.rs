@@ -242,6 +242,9 @@ pub struct Sprite {
     /// entry at `transparent_index` means transparent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub palette: Vec<Rgba>,
+    /// Optional per-entry palette names, parallel to `palette`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub palette_names: Vec<String>,
     #[serde(default)]
     pub transparent_index: u8,
     /// Pixel aspect ratio (width:height). Aseprite calls it the pixel ratio;
@@ -391,6 +394,7 @@ impl Sprite {
             tags: Vec::new(),
             color_mode: ColorMode::Auto,
             palette: Vec::new(),
+            palette_names: Vec::new(),
             transparent_index: 0,
             pixel_aspect: (1, 1),
             grid: (0, 0),
@@ -461,6 +465,7 @@ impl Sprite {
         self.palette = Vec::with_capacity(chosen.len() + 1);
         self.palette.push(Rgba::TRANSPARENT);
         self.palette.extend(chosen);
+        self.palette_names = vec![String::new(); self.palette.len()];
         self.transparent_index = 0;
     }
 

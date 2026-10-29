@@ -6,6 +6,58 @@ use anyhow::{Context, Result, bail};
 
 use crate::color::Rgba;
 
+/// Palette presets offered by `:pal preset`.
+pub const PRESETS: &[&str] = &["default", "gray", "pico8", "dawnbringer16"];
+
+pub fn preset(name: &str) -> Option<Vec<Rgba>> {
+    Some(match name.to_ascii_lowercase().as_str() {
+        "default" | "vixel" => crate::color::default_palette(),
+        "gray" | "grey" | "grayscale" | "greyscale" => (0..16)
+            .map(|i| {
+                let v = (i * 17) as u8;
+                Rgba::rgb(v, v, v)
+            })
+            .collect(),
+        "pico8" | "pico-8" => vec![
+            Rgba::rgb(0x00, 0x00, 0x00),
+            Rgba::rgb(0x1d, 0x2b, 0x53),
+            Rgba::rgb(0x7e, 0x25, 0x53),
+            Rgba::rgb(0x00, 0x87, 0x51),
+            Rgba::rgb(0xab, 0x52, 0x36),
+            Rgba::rgb(0x5f, 0x57, 0x4f),
+            Rgba::rgb(0xc2, 0xc3, 0xc7),
+            Rgba::rgb(0xff, 0xf1, 0xe8),
+            Rgba::rgb(0xff, 0x00, 0x4d),
+            Rgba::rgb(0xff, 0xa3, 0x00),
+            Rgba::rgb(0xff, 0xec, 0x27),
+            Rgba::rgb(0x00, 0xe4, 0x36),
+            Rgba::rgb(0x29, 0xad, 0xff),
+            Rgba::rgb(0x83, 0x76, 0x9c),
+            Rgba::rgb(0xff, 0x77, 0xa8),
+            Rgba::rgb(0xff, 0xcc, 0xaa),
+        ],
+        "dawnbringer16" | "db16" => vec![
+            Rgba::rgb(0x14, 0x0c, 0x1c),
+            Rgba::rgb(0x44, 0x24, 0x34),
+            Rgba::rgb(0x30, 0x34, 0x6d),
+            Rgba::rgb(0x4e, 0x4a, 0x4e),
+            Rgba::rgb(0x85, 0x4c, 0x30),
+            Rgba::rgb(0x34, 0x65, 0x24),
+            Rgba::rgb(0xd0, 0x46, 0x48),
+            Rgba::rgb(0x75, 0x71, 0x61),
+            Rgba::rgb(0x59, 0x7d, 0xce),
+            Rgba::rgb(0xd2, 0x7d, 0x2c),
+            Rgba::rgb(0x85, 0x95, 0xa1),
+            Rgba::rgb(0x6d, 0xaa, 0x2c),
+            Rgba::rgb(0xd2, 0xaa, 0x99),
+            Rgba::rgb(0x6d, 0xc2, 0xca),
+            Rgba::rgb(0xda, 0xd4, 0x5e),
+            Rgba::rgb(0xde, 0xee, 0xd6),
+        ],
+        _ => return None,
+    })
+}
+
 pub fn load(path: &Path) -> Result<Vec<Rgba>> {
     let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     let ext = path
@@ -134,6 +186,17 @@ fn to_jasc(palette: &[Rgba]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn presets_are_known_and_complete() {
+        assert_eq!(preset("default").unwrap().len(), 16);
+        assert_eq!(preset("gray").unwrap().len(), 16);
+        assert_eq!(preset("pico8").unwrap().len(), 16);
+        assert_eq!(preset("dawnbringer16").unwrap().len(), 16);
+        assert_eq!(preset("PICO-8").unwrap()[8], Rgba::rgb(255, 0, 77));
+        assert!(preset("nope").is_none());
+        assert_eq!(PRESETS.len(), 4);
+    }
 
     #[test]
     fn parses_all_formats() {

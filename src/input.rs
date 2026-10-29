@@ -845,6 +845,44 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                         _ => editor.msg = "usage: :pal move <from> <to>".into(),
                     }
                 }
+                "preset" if !path.is_empty() => {
+                    editor.load_palette_preset(path);
+                }
+                "insert" => {
+                    let mut it = path.split_whitespace();
+                    let idx = it.next().and_then(|v| v.parse::<usize>().ok());
+                    let color = it
+                        .next()
+                        .and_then(crate::color::parse_hex)
+                        .unwrap_or(editor.fg);
+                    match idx {
+                        Some(i) => editor.insert_palette_at(i, color),
+                        None => editor.msg = "usage: :pal insert <index> [#rrggbb]".into(),
+                    }
+                }
+                "delete" | "remove" => {
+                    match path
+                        .split_whitespace()
+                        .next()
+                        .and_then(|v| v.parse::<usize>().ok())
+                    {
+                        Some(i) => editor.remove_palette_at(i),
+                        None => editor.msg = "usage: :pal delete <index>".into(),
+                    }
+                }
+                "sort" if !path.is_empty() => {
+                    editor.sort_palette(path);
+                }
+                "sort" => editor.sort_palette("rgb"),
+                "name" => {
+                    let mut it = path.splitn(2, char::is_whitespace);
+                    let idx = it.next().and_then(|v| v.parse::<usize>().ok());
+                    let name = it.next().unwrap_or("").trim();
+                    match idx {
+                        Some(i) => editor.set_palette_name(i, name),
+                        None => editor.msg = "usage: :pal name <index> [name]".into(),
+                    }
+                }
                 "load" | "save" if !path.is_empty() => {
                     let p = std::path::Path::new(path);
                     if sub == "load" {
@@ -864,9 +902,10 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     }
                 }
                 _ => {
-                    editor.msg =
-                        "usage: :pal from-sprite | lock on|off | move <from> <to> | load|save <file>"
-                            .into();
+                    editor.msg = "usage: :pal from-sprite | lock on|off | move <from> <to> | \
+                                  insert <i> [#hex] | delete <i> | sort [rgb|luma|hue] | \
+                                  name <i> <name> | preset <name> | load|save <file>"
+                        .into();
                 }
             }
         }

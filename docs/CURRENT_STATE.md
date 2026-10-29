@@ -124,11 +124,14 @@ L-shaped corners for the 1 px pencil/eraser.
 
 ## Color
 
-- default 16-color palette, fg/bg, swap, full RGB picker, eyedropper, plus a
-  **hex field** and **HSV** drag values for both.
-- palette management: add the current fg, remove the selected swatch, drag a
-  swatch to reorder (`:pal move <from> <to>`), palette-from-sprite, lock, and
-  import/export **`.gpl` (GIMP), `.hex`, and `.pal` (JASC)** via `:pal`.
+- default 16-color palette, fg/bg, swap, full RGB picker, a **hue wheel**, the
+  last 12 **recent colours**, eyedropper, plus a **hex field** and **HSV** drag
+  values for both.
+- palette management: add the current fg, remove/insert at an index, sort by
+  RGB/luma/hue, per-swatch **names** (written to `.ase`), presets (default,
+  gray, pico8, dawnbringer16), drag a swatch to reorder (`:pal move`),
+  palette-from-sprite, lock, and import/export **`.gpl` (GIMP), `.hex`, and
+  `.pal` (JASC)** via `:pal`.
 - **sprite properties**: colour mode (auto / rgba / grayscale / indexed — the
   declared mode drives the .ase depth; grayscale also converts the pixels),
   pixel ratio (written to and read from the .ase header) and the sprite grid.
@@ -229,6 +232,8 @@ middle-drag = pan.
 `text <string>` · `grid <px>` · `snap [on|off]` · `brush <1-64>` ·
 `perfect on|off` · `sym radial [axes]` ·
 `symcenter cursor|reset|<x> <y>` · `fg|bg #rrggbb` · `pal move <from> <to>` ·
+`pal preset <name>` · `pal insert <i> [#hex]` · `pal delete <i>` ·
+`pal sort [rgb|luma|hue]` · `pal name <i> <name>` ·
 `mode auto|rgba|grayscale|indexed` · `dither none|bayer2|bayer4|bayer8|floyd` ·
 `aspect <x> <y>` · `sgrid <w> <h>` ·
 `slices <dir> [cols rows]` · `export <file> [scale]` · `profile srgb|linear` ·

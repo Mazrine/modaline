@@ -215,10 +215,16 @@ met; blocked tasks are marked with the reason.
   2×2 Bayer pattern, an FS `B B W W` ramp, determinism across all four modes,
   editor conversion + undo/palette sync, and dithered `.ase` indices surviving
   save→load. P5-22 gradients can reuse `dither_to_palette`.
-- [ ] **P5-06 — Palette editor and picker depth** (M) — deps: P5-03.
-  Presets/defaults, insert/delete at index, sort, names round-trip, picker
-  wheel + recent colours.
-  Gate: palette names in `.ase`; editor/picker tests.
+- [x] **P5-06 — Palette editor and picker depth** (M) — deps: P5-03.
+  Landed 2026-10-28. Presets `default`, `gray`, `pico8`, `dawnbringer16`;
+  `:pal insert/delete/sort/name` with colours and names kept parallel and
+  mirrored into the document when indexed. `.ase` reads/writes UTF-16 palette
+  names (flag bit 1) and `.vpx` stores them. The picker gained a hue wheel and
+  the last 12 recent colours; the side panel has a name field and preset combo.
+  5 new tests (125 total): presets, index edits/name/sprite sync, recent dedup
+  and cap, `.ase` name flag/length + round trip, and wheel angle mapping. UI:
+  wheel/name field not screenshotted (manual check: drag the ring, type a name,
+  click a recent swatch).
 - [ ] **P5-08 — Header and small-chunk fidelity** (M) — deps: P5-03, P5-07.
   Grid origin + size (`.vpx` migration), transparent index, palette names, tag
   direction 3.

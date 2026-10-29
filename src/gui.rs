@@ -576,6 +576,21 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     if bg != editor.bg {
         editor.set_bg(bg);
     }
+    if !editor.recent_colors.is_empty() {
+        ui.horizontal_wrapped(|ui| {
+            ui.label("recent");
+            for c in editor.recent_colors.clone() {
+                let col = Color32::from_rgb(c.0, c.1, c.2);
+                if ui
+                    .add(egui::Button::new("").fill(col).min_size(Vec2::splat(16.0)))
+                    .on_hover_text(format!("#{:02x}{:02x}{:02x}", c.0, c.1, c.2))
+                    .clicked()
+                {
+                    editor.set_fg(c);
+                }
+            }
+        });
+    }
     ui.separator();
 
     ui.horizontal(|ui| {
@@ -586,6 +601,25 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         if ui.button("-").clicked() {
             editor.remove_palette_color();
         }
+        egui::ComboBox::from_id_salt("palette_preset")
+            .selected_text("preset")
+            .show_ui(ui, |ui| {
+                for p in crate::palette::PRESETS {
+                    if ui.selectable_label(false, *p).clicked() {
+                        editor.load_palette_preset(p);
+                    }
+                }
+            });
+    });
+    ui.horizontal(|ui| {
+        ui.label("name");
+        let mut name = editor.palette_name(editor.fg_idx).to_owned();
+        if ui
+            .add(egui::TextEdit::singleline(&mut name).desired_width(100.0))
+            .changed()
+        {
+            editor.set_palette_name(editor.fg_idx, &name);
+        }
     });
     egui::ScrollArea::vertical()
         .id_salt("palette")
@@ -593,21 +627,27 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 let mut drop: Option<(usize, usize)> = None;
+                let names = editor.palette_names.clone();
                 for (i, c) in editor.palette.clone().into_iter().enumerate() {
                     let col = Color32::from_rgba_unmultiplied(c.0, c.1, c.2, 255);
                     let mut btn = egui::Button::new("").fill(col).min_size(Vec2::splat(20.0));
                     if i == editor.fg_idx {
                         btn = btn.stroke(Stroke::new(2.0, Color32::WHITE));
                     }
+                    let name = names.get(i).map(String::as_str).unwrap_or("");
+                    let hint = if name.is_empty() {
+                        format!("#{:02x}{:02x}{:02x}", c.0, c.1, c.2)
+                    } else {
+                        format!("{name}\n#{:02x}{:02x}{:02x}", c.0, c.1, c.2)
+                    };
                     // A swatch drags onto another to reorder; plain clicks still
                     // pick fg (left) and bg (right).
                     let src = ui.dnd_drag_source(egui::Id::unique(("swatch", i)), i, |ui| {
-                        ui.add(btn)
-                            .on_hover_text(format!("#{:02x}{:02x}{:02x}", c.0, c.1, c.2))
+                        ui.add(btn).on_hover_text(hint)
                     });
                     let resp = src.inner;
                     if resp.clicked() {
-                        editor.fg = c;
+                        editor.set_fg(c);
                         editor.fg_idx = i;
                     }
                     if resp.secondary_clicked() {
@@ -940,6 +980,42 @@ fn color_editor(ui: &mut egui::Ui, label: &str, color: &mut Rgba, hex: &mut (Str
             *color = crate::color::from_hsv(nh, ns / 100.0, nv / 100.0);
         }
     });
+
+    let (resp, painter) = ui.allocate_painter(Vec2::splat(88.0), Sense::click_and_drag());
+    let center = resp.rect.center();
+    let outer = resp.rect.width().min(resp.rect.height()) * 0.46;
+    let inner = outer * 0.70;
+    for i in 0..72 {
+        let a0 = (i as f32 * 5.0).to_radians();
+        let a1 = ((i + 1) as f32 * 5.0).to_radians();
+        let hue = crate::color::from_hsv(i as f32 * 5.0, 1.0, 1.0);
+        let color = Color32::from_rgb(hue.0, hue.1, hue.2);
+        let points = vec![
+            center + Vec2::new(a0.cos(), a0.sin()) * inner,
+            center + Vec2::new(a0.cos(), a0.sin()) * outer,
+            center + Vec2::new(a1.cos(), a1.sin()) * outer,
+            center + Vec2::new(a1.cos(), a1.sin()) * inner,
+        ];
+        painter.add(egui::Shape::convex_polygon(points, color, Stroke::NONE));
+    }
+    if (resp.clicked() || resp.dragged())
+        && let Some(pos) = resp.interact_pointer_pos()
+        && (pos - center).length() >= inner * 0.9
+    {
+        let (_, s, v) = crate::color::to_hsv(*color);
+        *color = crate::color::from_hsv(wheel_hue(center, pos), s, v);
+    }
+    let (h, _, _) = crate::color::to_hsv(*color);
+    let marker =
+        center + Vec2::new(h.to_radians().cos(), h.to_radians().sin()) * ((inner + outer) / 2.0);
+    painter.circle_filled(marker, 3.0, Color32::WHITE);
+    painter.circle_stroke(marker, 3.0, Stroke::new(1.0, Color32::BLACK));
+}
+
+/// Angle of `pos` around `center`, 0° at +x and 90° at +y (screen down).
+fn wheel_hue(center: Pos2, pos: Pos2) -> f32 {
+    let d = pos - center;
+    d.y.atan2(d.x).to_degrees().rem_euclid(360.0)
 }
 
 /// Blend-mode dropdown; returns whether the mode changed.
@@ -1588,6 +1664,7 @@ const HELP: &[&str] = &[
     "  :crop [x y w h]   :trim   (crop to a rect/selection, or to content)",
     "  :mode auto|rgba|grayscale|indexed   :dither none|bayer2|bayer4|bayer8|floyd",
     "  :aspect <x> <y>   :sgrid <w> <h>",
+    "  :pal preset <name>|insert <i> [#hex]|delete <i>|sort [rgb|luma|hue]|name <i> <name>",
     "  :profile srgb|linear   (converts the pixels; the palette follows)",
     "  :renderer glow|wgpu    (wgpu also needs a build with --features wgpu)",
     "  :slices <dir> [cols rows]   (one png per grid cell + a slices.json)",
@@ -1596,3 +1673,17 @@ const HELP: &[&str] = &[
     "  :importsheet sheet.png [cols rows]   (frames from a sheet + its .json)",
     "  :recent [n]   (last 10 files; drop a file on the window to open it)",
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wheel_maps_screen_angles() {
+        let c = Pos2::new(50.0, 50.0);
+        assert!((wheel_hue(c, Pos2::new(100.0, 50.0)) - 0.0).abs() < 0.01);
+        assert!((wheel_hue(c, Pos2::new(50.0, 100.0)) - 90.0).abs() < 0.01);
+        assert!((wheel_hue(c, Pos2::new(0.0, 50.0)) - 180.0).abs() < 0.01);
+        assert!((wheel_hue(c, Pos2::new(50.0, 0.0)) - 270.0).abs() < 0.01);
+    }
+}

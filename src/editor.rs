@@ -233,6 +233,9 @@ pub struct Editor {
     pub fg: Rgba,
     pub bg: Rgba,
     pub palette: Vec<Rgba>,
+    pub palette_names: Vec<String>,
+    /// Last colours picked, newest first (max 12); shown by the picker.
+    pub recent_colors: Vec<Rgba>,
     pub fg_idx: usize,
     pub bg_idx: usize,
     pub active_layer: usize,
@@ -310,6 +313,7 @@ impl Editor {
         let fg_idx = 12; // white
         let fg = palette[fg_idx];
         let bg = palette[0];
+        let palette_names = vec![String::new(); palette.len()];
         Self {
             sprite: Sprite::new(width, height),
             cursor: (0, 0),
@@ -321,6 +325,8 @@ impl Editor {
             fg,
             bg,
             palette,
+            palette_names,
+            recent_colors: Vec::new(),
             fg_idx,
             bg_idx: 0,
             active_layer: 0,
@@ -1031,10 +1037,7 @@ impl Editor {
         let comp = self.sprite.composite(self.active_frame);
         let c = comp[(y * self.sprite.width + x) as usize];
         if !c.is_transparent() {
-            self.fg = c;
-            if let Some(i) = self.palette.iter().position(|&p| p == c) {
-                self.fg_idx = i;
-            }
+            self.set_fg(c);
         }
     }
 
@@ -1126,17 +1129,28 @@ impl Editor {
 
     // ---- palette ----
 
-    pub fn load_palette(&mut self, mut colors: Vec<Rgba>) {
+    pub fn load_palette(&mut self, colors: Vec<Rgba>) {
+        self.load_palette_named(colors, Vec::new());
+    }
+
+    /// Replace the palette and its names. Indexed sprites insert a transparent
+    /// slot if needed and remap the pixels when the colours changed.
+    pub fn load_palette_named(&mut self, mut colors: Vec<Rgba>, mut names: Vec<String>) {
         if colors.is_empty() {
             return;
         }
+        names.resize(colors.len(), String::new());
+        names.truncate(colors.len());
         if self.sprite.is_indexed() {
             if !colors.iter().any(|c| c.3 == 0) {
                 colors.insert(0, Rgba::TRANSPARENT);
+                names.insert(0, String::new());
             }
             colors.truncate(256);
+            names.truncate(colors.len());
             let remap = colors != self.sprite.palette;
             self.sprite.palette = colors.clone();
+            self.sprite.palette_names = names.clone();
             let ti = self.sprite.transparent_slot();
             self.sprite.transparent_index = ti;
             if remap {
@@ -1146,6 +1160,7 @@ impl Editor {
             self.touch();
         }
         self.palette = colors;
+        self.palette_names = names;
         self.fg_idx = self.fg_idx.min(self.palette.len() - 1);
         self.bg_idx = self.bg_idx.min(self.palette.len() - 1);
         self.fg = self.palette[self.fg_idx];
@@ -1187,21 +1202,150 @@ impl Editor {
 
     pub fn add_palette_color(&mut self) {
         if !self.palette.contains(&self.fg) {
-            self.palette.push(self.fg);
-            self.fg_idx = self.palette.len() - 1;
+            let at = self.palette.len();
+            self.insert_palette_at(at, self.fg);
+            self.fg_idx = at;
         }
     }
 
-    pub fn remove_palette_color(&mut self) {
-        if self.palette.len() > 1 {
-            self.palette.remove(self.fg_idx);
-            if self.fg_idx >= self.palette.len() {
-                self.fg_idx = self.palette.len() - 1;
-            }
-            self.bg_idx = self.bg_idx.min(self.palette.len() - 1);
-            self.fg = self.palette[self.fg_idx];
-            self.bg = self.palette[self.bg_idx];
+    /// Insert a colour at `index` (clamped), with an empty name. Indexed
+    /// sprites keep the new entry in the document palette immediately.
+    pub fn insert_palette_at(&mut self, index: usize, color: Rgba) {
+        if self.palette.len() >= 256 {
+            self.msg = "palette: 256 entries max".into();
+            return;
         }
+        self.palette_names.resize(self.palette.len(), String::new());
+        let i = index.min(self.palette.len());
+        self.palette.insert(i, color);
+        self.palette_names.insert(i, String::new());
+        if i <= self.fg_idx {
+            self.fg_idx += 1;
+        }
+        if i <= self.bg_idx {
+            self.bg_idx += 1;
+        }
+        self.sync_palette_to_sprite(false);
+        self.msg = format!("palette: inserted at {i}");
+    }
+
+    /// Remove the entry at `index`; indexed pixels that used it snap to the
+    /// nearest remaining colour.
+    pub fn remove_palette_at(&mut self, index: usize) {
+        if self.palette.len() <= 1 || index >= self.palette.len() {
+            return;
+        }
+        self.palette_names.resize(self.palette.len(), String::new());
+        self.palette.remove(index);
+        self.palette_names.remove(index);
+        let (fg, bg) = (self.fg, self.bg);
+        self.fg_idx = self
+            .palette
+            .iter()
+            .position(|c| *c == fg)
+            .unwrap_or(index.min(self.palette.len() - 1));
+        self.bg_idx = self.palette.iter().position(|c| *c == bg).unwrap_or(0);
+        self.fg = self.palette[self.fg_idx];
+        self.bg = self.palette[self.bg_idx];
+        self.sync_palette_to_sprite(true);
+        self.msg = format!("palette: removed {index}");
+    }
+
+    pub fn remove_palette_color(&mut self) {
+        self.remove_palette_at(self.fg_idx);
+    }
+
+    /// Sort colours and names together; fg/bg keep their colours. `key` is
+    /// `rgb` (default), `luma` or `hue`.
+    pub fn sort_palette(&mut self, key: &str) {
+        self.palette_names.resize(self.palette.len(), String::new());
+        let mut order: Vec<usize> = (0..self.palette.len()).collect();
+        let key = key.to_ascii_lowercase();
+        match key.as_str() {
+            "hue" => order.sort_by(|&a, &b| {
+                let (ha, sa, va) = crate::color::to_hsv(self.palette[a]);
+                let (hb, sb, vb) = crate::color::to_hsv(self.palette[b]);
+                ha.total_cmp(&hb)
+                    .then(sa.total_cmp(&sb))
+                    .then(va.total_cmp(&vb))
+            }),
+            "luma" | "luminance" => order.sort_by_key(|&i| {
+                let c = self.palette[i];
+                299 * u32::from(c.0) + 587 * u32::from(c.1) + 114 * u32::from(c.2)
+            }),
+            _ => order.sort_by_key(|&i| {
+                let c = self.palette[i];
+                (c.0, c.1, c.2)
+            }),
+        }
+        let (fg, bg) = (self.fg, self.bg);
+        self.palette = order.iter().map(|&i| self.palette[i]).collect();
+        let old_names = std::mem::take(&mut self.palette_names);
+        self.palette_names = order
+            .iter()
+            .map(|&i| old_names.get(i).cloned().unwrap_or_default())
+            .collect();
+        self.fg_idx = self.palette.iter().position(|c| *c == fg).unwrap_or(0);
+        self.bg_idx = self.palette.iter().position(|c| *c == bg).unwrap_or(0);
+        self.fg = fg;
+        self.bg = bg;
+        self.sync_palette_to_sprite(false);
+        self.msg = format!("palette: sorted by {key}");
+    }
+
+    pub fn set_palette_name(&mut self, index: usize, name: &str) {
+        if index >= self.palette.len() {
+            return;
+        }
+        self.palette_names.resize(self.palette.len(), String::new());
+        self.palette_names[index] = name.to_string();
+        if self.sprite.is_indexed() {
+            self.sprite.palette_names = self.palette_names.clone();
+            self.dirty = true;
+            self.touch();
+        }
+        self.msg = format!("palette: name {index}");
+    }
+
+    pub fn palette_name(&self, index: usize) -> &str {
+        self.palette_names
+            .get(index)
+            .map(String::as_str)
+            .unwrap_or("")
+    }
+
+    /// Load a named preset (`default`, `gray`, `pico8`, `dawnbringer16`).
+    pub fn load_palette_preset(&mut self, name: &str) -> bool {
+        match crate::palette::preset(name) {
+            Some(colors) => {
+                let n = colors.len();
+                self.load_palette(colors);
+                self.msg = format!("palette: {name} ({n})");
+                true
+            }
+            None => {
+                self.msg = format!("unknown palette preset: {name}");
+                false
+            }
+        }
+    }
+
+    /// Mirror the picker palette into the document when the sprite is indexed.
+    fn sync_palette_to_sprite(&mut self, remap: bool) {
+        if !self.sprite.is_indexed() {
+            return;
+        }
+        self.palette_names.resize(self.palette.len(), String::new());
+        self.palette_names.truncate(self.palette.len());
+        self.sprite.palette = self.palette.clone();
+        self.sprite.palette_names = self.palette_names.clone();
+        let ti = self.sprite.transparent_slot();
+        self.sprite.transparent_index = ti;
+        if remap {
+            self.sprite.remap_to_palette();
+        }
+        self.dirty = true;
+        self.touch();
     }
 
     /// Move a palette entry, keeping fg/bg pointing at the same colour.
@@ -1209,8 +1353,11 @@ impl Editor {
         if from >= self.palette.len() || to >= self.palette.len() || from == to {
             return;
         }
+        self.palette_names.resize(self.palette.len(), String::new());
         let c = self.palette.remove(from);
         self.palette.insert(to, c);
+        let name = self.palette_names.remove(from);
+        self.palette_names.insert(to, name);
         let track = |idx: usize| {
             if idx == from {
                 to
@@ -1224,6 +1371,7 @@ impl Editor {
         };
         self.fg_idx = track(self.fg_idx);
         self.bg_idx = track(self.bg_idx);
+        self.sync_palette_to_sprite(false);
         self.msg = format!("palette {from} -> {to}");
     }
 
@@ -1233,6 +1381,16 @@ impl Editor {
         if let Some(i) = self.palette.iter().position(|c| *c == colour) {
             self.fg_idx = i;
         }
+        self.note_color(colour);
+    }
+
+    fn note_color(&mut self, colour: Rgba) {
+        if colour.3 == 0 {
+            return;
+        }
+        self.recent_colors.retain(|c| *c != colour);
+        self.recent_colors.insert(0, colour);
+        self.recent_colors.truncate(12);
     }
 
     pub fn set_bg(&mut self, colour: Rgba) {
@@ -1660,7 +1818,10 @@ impl Editor {
                 });
                 self.redo.clear();
                 self.palette_lock = false;
-                self.load_palette(self.sprite.palette.clone());
+                self.load_palette_named(
+                    self.sprite.palette.clone(),
+                    self.sprite.palette_names.clone(),
+                );
             }
         }
         self.dirty = true;
@@ -1686,7 +1847,10 @@ impl Editor {
             });
             self.redo.clear();
             self.palette_lock = false;
-            self.load_palette(self.sprite.palette.clone());
+            self.load_palette_named(
+                self.sprite.palette.clone(),
+                self.sprite.palette_names.clone(),
+            );
             self.dirty = true;
             self.touch();
         }
@@ -2843,7 +3007,10 @@ impl Editor {
         self.bundle_stage = None;
         self.palette_lock = false;
         if self.sprite.is_indexed() && !self.sprite.palette.is_empty() {
-            self.load_palette(self.sprite.palette.clone());
+            self.load_palette_named(
+                self.sprite.palette.clone(),
+                self.sprite.palette_names.clone(),
+            );
         }
         self.dirty = false;
         self.touch();
@@ -3332,6 +3499,68 @@ mod tests {
         assert_eq!(e.sprite.color_mode, ColorMode::Auto);
         assert_eq!(e.sprite.get(l, f, 0, 0), Rgba(255, 0, 0, 255));
         assert_eq!(e.sprite.get(l, f, 1, 0), Rgba(0, 0, 255, 255));
+    }
+
+    #[test]
+    fn palette_edits_keep_names_and_sprite_in_sync() {
+        use crate::sprite::ColorMode;
+        let mut e = Editor::new(1, 1);
+        e.set_color_mode(ColorMode::Indexed);
+        e.load_palette(vec![
+            Rgba::rgb(10, 20, 30),
+            Rgba::rgb(200, 30, 40),
+            Rgba::rgb(50, 60, 70),
+        ]);
+        // Indexed load inserts transparent at 0.
+        assert_eq!(e.palette.len(), 4);
+        e.set_palette_name(1, "skin");
+        e.set_palette_name(2, "blood");
+        assert_eq!(e.palette_name(1), "skin");
+        assert_eq!(e.sprite.palette_names[1], "skin");
+
+        e.insert_palette_at(1, Rgba::rgb(1, 2, 3));
+        assert_eq!(e.palette_name(2), "skin", "name follows the colour");
+        assert_eq!(e.sprite.palette_names[2], "skin");
+        e.remove_palette_at(1);
+        assert_eq!(e.palette_name(1), "skin");
+
+        e.sort_palette("rgb");
+        let skin = e
+            .palette
+            .iter()
+            .position(|c| (c.0, c.1, c.2) == (10, 20, 30))
+            .unwrap();
+        assert_eq!(e.palette_name(skin), "skin");
+        assert_eq!(e.sprite.palette_names[skin], "skin");
+        assert_eq!(e.sprite.palette, e.palette);
+        assert_eq!(e.sprite.palette[e.sprite.transparent_index as usize].3, 0);
+    }
+
+    #[test]
+    fn palette_presets_and_recent_colours() {
+        let mut e = Editor::new(1, 1);
+        assert!(e.load_palette_preset("pico8"));
+        assert_eq!(e.palette.len(), 16);
+        assert_eq!(e.palette[e.fg_idx], e.fg);
+        assert!(!e.load_palette_preset("no-such-preset"));
+
+        for i in 0..20u8 {
+            e.set_fg(Rgba::rgb(i, 0, 0));
+        }
+        assert_eq!(e.recent_colors.len(), 12);
+        assert_eq!(e.recent_colors[0], Rgba::rgb(19, 0, 0));
+        e.set_fg(Rgba::rgb(5, 0, 0));
+        assert_eq!(e.recent_colors[0], Rgba::rgb(5, 0, 0));
+        assert_eq!(
+            e.recent_colors
+                .iter()
+                .filter(|c| **c == Rgba::rgb(5, 0, 0))
+                .count(),
+            1,
+            "recent colours are deduplicated"
+        );
+        e.set_fg(Rgba::TRANSPARENT);
+        assert_ne!(e.recent_colors[0], Rgba::TRANSPARENT);
     }
 
     #[test]

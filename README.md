@@ -130,6 +130,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:profile srgb\|linear` / `:renderer glow\|wgpu` | colour profile / renderer (applied on next launch) |
 | `:fg #rrggbb` / `:bg #rrggbb` | set fg / bg exactly |
 | `:pal load\|save <file>` / `:pal move <from> <to>` / `:pal from-sprite` / `:pal lock on\|off` | palette I/O, reorder, derive from the frame, lock |
+| `:pal preset <name>` / `:pal insert <i> [#hex]` / `:pal delete <i>` / `:pal sort [rgb\|luma\|hue]` / `:pal name <i> <name>` | presets, index edits, sort, names |
 | `:slices <dir> [cols rows]` | one PNG per grid cell plus a `.slices.json` sidecar |
 | `:ops <file.json>` | replay a JSON op list as one undo step |
 | `:export out.png\|out.ase\|<stem> [scale]` | PNG frame · `.ase` sprite · bare stem = sheet + GIF + meta JSON; `[scale 1-16]` upscales rasters |

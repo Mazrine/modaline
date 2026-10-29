@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **120 tests green** (112 lib + 8 bin)
+- `cargo test` → **125 tests green** (116 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-04 dithering engine** (see batch 43).
+- Last completed batch: **P5-06 palette editor and picker** (see batch 44).
 
 ## How to resume
 
@@ -249,6 +249,13 @@ Read, in order:
     FS `B B W W` ramp, determinism across all four modes, editor conversion +
     undo/palette sync, and dithered `.ase` indices surviving save→load.
     Gradients reuse the same engine in P5-22.
+44. **P5-06 — palette editor and picker depth** — presets (default, gray,
+    pico8, dawnbringer16), `:pal insert/delete/sort/name`, parallel colour and
+    name vectors mirrored into the document when indexed, and `.ase` UTF-16
+    palette names (flag bit 1) + `.vpx` persistence. Picker gained a hue wheel
+    and the last 12 recent colours; the palette panel has a name field and
+    preset combo. 5 new tests (125 total). UI not screenshotted; manual check:
+    drag the wheel, type a name, click a recent swatch.
 
 ## Next step (exact)
 
@@ -257,7 +264,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-06** — palette editor/picker depth (first open task), then continue
+- **P5-08** — header and small-chunk fidelity (first open task), then continue
   down the P5 roadmap in dependency order.
 
 ## Known limitations (do not forget)

@@ -182,7 +182,14 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
     emit_raw(&mut body, &mut count, ChunkAnchor::FrameStart);
     if frame == 0 {
         if let OutDepth::Indexed { palette, .. } = depth {
-            write_palette_chunk(&mut body, palette);
+            // Names describe the document palette; an auto-generated palette
+            // has its own order and no names.
+            let names: &[String] = if s.is_indexed() {
+                &s.palette_names
+            } else {
+                &[]
+            };
+            write_palette_chunk(&mut body, palette, names);
             count += 1;
             emit_raw(&mut body, &mut count, ChunkAnchor::Palette);
         }
@@ -235,15 +242,27 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
     out.extend_from_slice(&f);
 }
 
-fn write_palette_chunk(out: &mut Vec<u8>, palette: &[Rgba]) {
+fn write_palette_chunk(out: &mut Vec<u8>, palette: &[Rgba], names: &[String]) {
     let mut b = Vec::new();
     b.extend_from_slice(&(palette.len() as u32).to_le_bytes()); // new palette size
     b.extend_from_slice(&0u32.to_le_bytes()); // first color index
     b.extend_from_slice(&(palette.len().saturating_sub(1) as u32).to_le_bytes());
     b.extend_from_slice(&[0u8; 8]); // reserved
-    for c in palette {
-        b.extend_from_slice(&0u16.to_le_bytes()); // no color name
+    for (i, c) in palette.iter().enumerate() {
+        let name = names.get(i).map(String::as_str).unwrap_or("");
+        if name.is_empty() {
+            b.extend_from_slice(&0u16.to_le_bytes());
+        } else {
+            b.extend_from_slice(&1u16.to_le_bytes()); // has a name
+        }
         b.extend_from_slice(&[c.0, c.1, c.2, c.3]);
+        if !name.is_empty() {
+            let units: Vec<u16> = name.encode_utf16().collect();
+            b.extend_from_slice(&(units.len() as u16).to_le_bytes());
+            for u in units {
+                b.extend_from_slice(&u.to_le_bytes());
+            }
+        }
     }
     write_chunk(out, CHUNK_PALETTE, &b);
 }
@@ -409,6 +428,7 @@ struct Import {
     height: u32,
     frames: usize,
     palette: Vec<Rgba>,
+    palette_names: Vec<String>,
     transparent_index: u8,
     /// `[layer][frame]`; `None` means an empty cel.
     cels: Vec<Vec<Option<Cel>>>,
@@ -615,6 +635,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         // Undeclared indexed slots are opaque black, matching Aseprite's
         // padded palette; the transparent index overrides its own slot.
         palette: vec![Rgba(0, 0, 0, 255); 256],
+        palette_names: vec![String::new(); 256],
         transparent_index: data[28],
         cels: Vec::new(),
         layer_tilesets: Vec::new(),
@@ -679,7 +700,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
                     anchor = ChunkAnchor::Tileset(ti);
                 }
                 CHUNK_PALETTE => {
-                    parse_palette_new(body, &mut im.palette)?;
+                    parse_palette_new(body, &mut im.palette, &mut im.palette_names)?;
                     anchor = ChunkAnchor::Palette;
                 }
                 CHUNK_PALETTE_RGB => {
@@ -759,6 +780,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         cels,
         tags: im.tags,
         palette,
+        palette_names: im.palette_names[..palette_len.min(im.palette_names.len())].to_vec(),
         transparent_index: im.transparent_index,
         color_mode: match depth {
             32 => crate::sprite::ColorMode::Rgba,
@@ -949,7 +971,7 @@ fn decode_pixels(
     (cw, ch, out)
 }
 
-fn parse_palette_new(body: &[u8], palette: &mut [Rgba]) -> Result<()> {
+fn parse_palette_new(body: &[u8], palette: &mut [Rgba], names: &mut [String]) -> Result<()> {
     // DWORD new palette size, DWORD first index, DWORD last index, 8 reserved.
     let first = u32_at(body, 4) as usize;
     let last = u32_at(body, 8) as usize;
@@ -965,9 +987,19 @@ fn parse_palette_new(body: &[u8], palette: &mut [Rgba]) -> Result<()> {
         *slot = Rgba(body[p + 2], body[p + 3], body[p + 4], body[p + 5]);
         p += 6;
         if flags & 1 != 0 {
-            // skip a UTF-16 name
             let name_len = u16_at(body, p) as usize;
-            p += 2 + name_len * 2;
+            p += 2;
+            let end = p + name_len * 2;
+            if let Some(raw) = body.get(p..end) {
+                let units: Vec<u16> = raw
+                    .chunks_exact(2)
+                    .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                    .collect();
+                if let Some(name) = names.get_mut(idx) {
+                    *name = String::from_utf16_lossy(&units);
+                }
+            }
+            p = end;
         }
     }
     Ok(())
@@ -1582,6 +1614,36 @@ mod tests {
         assert_eq!(back.transparent_index, ti);
         assert_eq!(back.get(2, 0, 10, 8), color);
         assert_eq!(back.get(2, 0, 11, 8), Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn palette_names_round_trip_through_ase() {
+        let mut s = Sprite::new(2, 1);
+        s.set(0, 0, 0, 0, Rgba(200, 30, 40, 255));
+        s.palette = vec![
+            Rgba::TRANSPARENT,
+            Rgba(200, 30, 40, 255),
+            Rgba(10, 20, 30, 255),
+        ];
+        s.palette_names = vec![String::new(), "blood".into(), "sky".into()];
+        s.transparent_index = 0;
+        s.color_mode = crate::sprite::ColorMode::Indexed;
+
+        let path = tmp("vixel_ase_palette_names.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let body = walk_chunks(&data)
+            .into_iter()
+            .find(|(_, k, _)| *k == CHUNK_PALETTE)
+            .expect("palette chunk")
+            .2;
+        // 20-byte header, entry 0 has no name (6 bytes), entry 1 starts at 26.
+        assert_eq!(u16_at(&body, 26) & 1, 1, "name flag");
+        assert_eq!(u16_at(&body, 32), 5, "UTF-16 name length");
+
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.palette_names[..3], s.palette_names[..3]);
     }
 
     #[test]
