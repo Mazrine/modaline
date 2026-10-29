@@ -135,6 +135,8 @@ thin shells:
   release. Keep new canvas drag modes out of the paint path.
 - Canvas geometry goes through `View::cell()` (zoom × aspect); never multiply
   overlay coordinates by `zoom` directly, or wide-pixel sprites drift.
+- Preview state is independent (`View::preview_tick`, `preview_frame`,
+  `preview_zoom`); keep it out of the editor's active-frame playback.
 - Tile preview extents use `Editor::tile_offsets()`/`tile_x`/`tile_y`; the
   canvas extent and hit area must match or seam clicks land outside.
 - Tilesets live in `Sprite.tilesets` keyed by `Tileset.id`; layers reference

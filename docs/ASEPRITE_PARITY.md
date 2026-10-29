@@ -33,7 +33,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Linked cels (authoring + write) | Covered | P5-12 |
 | Cel z-index | Covered | P5-11 |
 | Timeline layer×frame grid + per-cel cells | Missing | P5-37 |
-| Preview window / fullscreen | Missing | P5-36 |
+| Preview window / fullscreen | Covered | P5-36 |
 
 ## Layers
 
@@ -221,7 +221,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Capability | Status | Task |
 |---|---|---|
 | Multiple documents / tabs | Missing | P5-52 |
-| Preview window / fullscreen | Missing | P5-36 |
+| Preview window / fullscreen | Covered | P5-36 |
 | Linear undo/redo (strokes, structural, properties) | Covered | — |
 | Undo history panel | Missing | P5-38 |
 | Non-linear undo | Missing | P5-38 |

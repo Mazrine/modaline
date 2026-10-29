@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, Vec2};
 
 use crate::brush::BrushKind;
@@ -79,6 +81,19 @@ pub struct View {
     /// Transform the selection mask instead of pixels when handles are on.
     pub transform_selection_only: bool,
     transform_drag: Option<TransformDrag>,
+    /// Independent preview: its own frame clock, playback, loop and zoom.
+    pub preview_open: bool,
+    pub preview_os: bool,
+    pub preview_playing: bool,
+    pub preview_loop: bool,
+    pub preview_fullscreen: bool,
+    pub preview_frame: usize,
+    pub preview_zoom: u32,
+    preview_next: Option<Instant>,
+    preview_tex: Option<TextureHandle>,
+    preview_key: (usize, u64),
+    preview_os_tex: Option<TextureHandle>,
+    preview_os_key: (usize, u64),
 }
 
 impl View {
@@ -108,6 +123,18 @@ impl View {
             transform_mode: false,
             transform_selection_only: false,
             transform_drag: None,
+            preview_open: false,
+            preview_os: false,
+            preview_playing: false,
+            preview_loop: true,
+            preview_fullscreen: false,
+            preview_frame: 0,
+            preview_zoom: 2,
+            preview_next: None,
+            preview_tex: None,
+            preview_key: (usize::MAX, u64::MAX),
+            preview_os_tex: None,
+            preview_os_key: (usize::MAX, u64::MAX),
         }
     }
 
@@ -226,8 +253,153 @@ pub fn draw(
         canvas(ui, editor, view, texture, onion_prev, onion_next)
     });
 
+    preview_window(ui.ctx(), editor, view);
+    preview_viewport(ui.ctx(), editor, view);
+
     if editor.mode == Mode::Help {
         help(ui.ctx());
+    }
+}
+
+impl View {
+    /// Advance the preview clock; independent of the editor's active frame.
+    pub fn preview_tick(&mut self, durations: &[u32], now: Instant) {
+        if !self.preview_playing || durations.is_empty() {
+            self.preview_next = None;
+            return;
+        }
+        let idx = self.preview_frame.min(durations.len() - 1);
+        self.preview_frame = idx;
+        let dur = Duration::from_millis(durations[idx].max(16) as u64);
+        match self.preview_next {
+            None => self.preview_next = Some(now + dur),
+            Some(next) if now >= next => {
+                if idx + 1 < durations.len() {
+                    self.preview_frame = idx + 1;
+                } else if self.preview_loop {
+                    self.preview_frame = 0;
+                } else {
+                    self.preview_playing = false;
+                    self.preview_next = None;
+                    return;
+                }
+                let dur = Duration::from_millis(durations[self.preview_frame].max(16) as u64);
+                self.preview_next = Some(now + dur);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn preview_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
+    if !view.preview_open {
+        return;
+    }
+    let mut open = view.preview_open;
+    egui::Window::new("preview")
+        .open(&mut open)
+        .resizable(true)
+        .default_size([320.0, 240.0])
+        .show(ctx, |ui| preview_ui(ui, editor, view, false));
+    view.preview_open = open;
+}
+
+fn preview_viewport(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
+    if !view.preview_os {
+        return;
+    }
+    let builder = egui::ViewportBuilder::default()
+        .with_title("vixel preview")
+        .with_inner_size([480.0, 360.0])
+        .with_fullscreen(view.preview_fullscreen);
+    ctx.show_viewport_immediate(
+        egui::ViewportId::from_hash_of("vixel-preview"),
+        builder,
+        |pctx, _class| {
+            egui::CentralPanel::default().show(pctx, |ui| {
+                preview_ui(ui, editor, view, true);
+            });
+        },
+    );
+}
+
+fn preview_ui(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View, os: bool) {
+    let count = editor.sprite.frames.len();
+    if count == 0 {
+        return;
+    }
+    view.preview_frame = view.preview_frame.min(count - 1);
+    let durations: Vec<u32> = editor
+        .sprite
+        .frames
+        .iter()
+        .map(|f| u32::from(f.duration_ms))
+        .collect();
+    view.preview_tick(&durations, Instant::now());
+    if view.preview_playing {
+        ui.ctx().request_repaint_after(Duration::from_millis(
+            durations[view.preview_frame].max(16) as u64,
+        ));
+    }
+
+    ui.horizontal(|ui| {
+        if ui
+            .selectable_label(
+                view.preview_playing,
+                if view.preview_playing {
+                    "pause"
+                } else {
+                    "play"
+                },
+            )
+            .clicked()
+        {
+            view.preview_playing = !view.preview_playing;
+            view.preview_next = None;
+        }
+        ui.checkbox(&mut view.preview_loop, "loop");
+        ui.add(
+            egui::DragValue::new(&mut view.preview_zoom)
+                .range(1..=16)
+                .prefix("zoom "),
+        );
+        if !os {
+            ui.checkbox(&mut view.preview_os, "OS window");
+        } else {
+            ui.checkbox(&mut view.preview_fullscreen, "fullscreen");
+        }
+    });
+    let mut frame = view.preview_frame + 1;
+    if ui
+        .add(egui::Slider::new(&mut frame, 1..=count).text("frame"))
+        .changed()
+    {
+        view.preview_frame = frame - 1;
+    }
+
+    let key = (view.preview_frame, editor.revision);
+    let (slot, cached) = if os {
+        (&mut view.preview_os_tex, &mut view.preview_os_key)
+    } else {
+        (&mut view.preview_tex, &mut view.preview_key)
+    };
+    if *cached != key || slot.is_none() {
+        upload(
+            ui,
+            slot,
+            "preview",
+            frame_composite(editor, view.preview_frame),
+        );
+        *cached = key;
+    }
+    if let Some(tex) = slot {
+        let z = view.preview_zoom as f32;
+        let size = Vec2::new(
+            editor.sprite.width as f32 * z,
+            editor.sprite.height as f32 * z,
+        );
+        ui.separator();
+        ui.image((tex.id(), size));
     }
 }
 
@@ -695,6 +867,10 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.checkbox(&mut view.show_grid, "pixel grid");
     ui.checkbox(&mut view.show_aspect, "wide px")
         .on_hover_text("render with the sprite's pixel aspect ratio");
+    ui.checkbox(&mut view.preview_open, "preview")
+        .on_hover_text("independent preview window");
+    ui.checkbox(&mut view.preview_os, "preview OS")
+        .on_hover_text("preview in a separate OS viewport");
     ui.checkbox(&mut view.onion.enabled, "onion skin");
     if view.onion.enabled {
         ui.horizontal(|ui| {
@@ -2373,6 +2549,29 @@ const HELP: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_playback_is_independent_and_loops() {
+        use std::time::Duration;
+        let mut view = View::new();
+        view.preview_playing = true;
+        view.preview_loop = true;
+        let t = Instant::now();
+        view.preview_tick(&[100, 100], t);
+        assert_eq!(view.preview_frame, 0);
+        view.preview_tick(&[100, 100], t + Duration::from_millis(150));
+        assert_eq!(view.preview_frame, 1, "advances on its own clock");
+        view.preview_tick(&[100, 100], t + Duration::from_millis(300));
+        assert_eq!(view.preview_frame, 0, "loops");
+
+        view.preview_loop = false;
+        view.preview_frame = 1;
+        view.preview_next = None;
+        view.preview_tick(&[100, 100], t);
+        view.preview_tick(&[100, 100], t + Duration::from_millis(150));
+        assert!(!view.preview_playing, "stops at the end without loop");
+        assert_eq!(view.preview_frame, 1);
+    }
 
     #[test]
     fn wide_pixels_scale_cells_and_hit_testing() {

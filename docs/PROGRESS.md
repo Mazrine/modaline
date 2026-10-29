@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **201 tests green** (190 lib + 11 bin)
+- `cargo test` → **202 tests green** (190 lib + 12 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-35 cel operations** (see batch 72).
+- Last completed batch: **P5-36 preview window** (see batch 73).
 
 ## How to resume
 
@@ -396,6 +396,9 @@ Read, in order:
   copy/cut/paste, `:celdel` empty-cel vs `:delframe`, `:celinfo`, and timeline
   copy/cut/paste/empty buttons beside z/link controls. 1 new test (201 total):
   copy/paste/cut and empty-cel-vs-frame.
+73. **P5-36 — preview window** — floating preview with independent frame clock,
+  play/pause/loop/zoom/scrubber, optional OS viewport and fullscreen. 1 new test
+  (202 total): independent playback/loop/stop.
 
 ## Next step (exact)
 
@@ -404,7 +407,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-36** — preview window (first open task), then continue down the P5 roadmap
+- **P5-37** — timeline UX (first open task), then continue down the P5 roadmap
   in dependency order.
 
 ## Known limitations (do not forget)

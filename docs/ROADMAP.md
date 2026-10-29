@@ -478,9 +478,14 @@ met; blocked tasks are marked with the reason.
   `:celcopy`, `:celcut`, `:celpaste`, `:celdel`, `:celinfo`. 1 new test (201
   total): copy/paste/cut and empty-cel-vs-frame. Timeline buttons are UI-only
   (manual check).
-- [ ] **P5-36 — Preview window** (M) — deps: none.
-  In-window preview + optional OS viewport; independent playback/zoom/loop,
-  fullscreen.
+- [x] **P5-36 — Preview window** (M) — deps: none.
+  Landed 2026-10-28. "preview" opens a floating window; "preview OS" mirrors it
+  in a separate egui viewport with a fullscreen toggle. The preview has its own
+  frame/clock (`View::preview_tick`), play/pause, loop, zoom 1-16 and a frame
+  scrubber, independent of the editor's active frame. Textures are cached per
+  preview context/revision. 1 new test (202 total): independent playback and
+  loop/stop behaviour. Both viewport modes are UI-only and were not
+  screenshotted (manual check).
 - [ ] **P5-37 — Timeline UX** (M) — deps: P5-34.
   Layer×frame grid, onion controls, tag editor, drag multi-select, per-cel
   thumbnails.

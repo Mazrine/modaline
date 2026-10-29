@@ -136,6 +136,9 @@ L-shaped corners for the 1 px pencil/eraser.
   transparency checkerboard, cursor + selection + floating-paste previews.
   **Wide pixels** render at the sprite's `pixel_aspect` (checkbox "wide px");
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
+- **preview**: a floating window (or separate OS viewport) with independent
+  play/pause, loop, zoom 1-16 and frame scrubber; fullscreen is available on the
+  OS viewport.
 - **design grid** (1-64 px, its own tone) with **snap**: the cursor steps one
   cell and every canvas pick rounds down to the cell.
 - **filters** (panel + `:filter`): invert, brightness, contrast, hue,
