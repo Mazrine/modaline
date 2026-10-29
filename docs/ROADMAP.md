@@ -302,8 +302,16 @@ met; blocked tasks are marked with the reason.
   tests (147 total): sharing/COW, prefer-linked frames, frame-op remapping,
   type-1 round trip, and link/unlink undo. UI toggle not screenshotted (manual
   check: link a cel, paint it, see only that frame change).
-- [ ] **P5-13 — Layer flags and UUIDs** (M) — deps: P5-07.
-  Lock movement, collapsed group, layer UUID + header bit.
+- [x] **P5-13 — Layer flags and UUIDs** (M) — deps: P5-07.
+  Landed 2026-10-28. `Layer.lock_movement` (flag 4), `collapsed` (flag 32) and
+  `uuid` (16 bytes). `.ase` parses/writes UUIDs plus header bit 4 (and fixes
+  the tileset/UUID field order). New layers and duplicates mint UUIDs when the
+  sprite already uses them; cut, move and free transform refuse a movement-
+  locked layer. `:movelock`, `:collapse`, `:layeruuid [new|clear]` and the
+  panel `mv`/`col` toggles expose them; collapsed groups hide their children.
+  4 new tests (151 total): flag+UUID bytes/round trip, fixture UUID
+  preservation, movement lock, and UUID minting. Collapsed UI not screenshotted
+  (manual check: collapse a group and reopen the file).
 - [ ] **P5-14 — User data 0x2020** (M) — deps: P5-07.
   Text/color/properties on layer/cel/tag/slice/tileset; implement the
   “attaches to the previous chunk” ordering rule.

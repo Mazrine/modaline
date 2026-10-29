@@ -546,6 +546,22 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             Some("off") | Some("false") | Some("0") => editor.set_prefer_linked(false),
             _ => editor.msg = "usage: :preferlink on|off".into(),
         },
+        "movelock" | "lockmove" => match arg {
+            Some("on") | Some("true") | Some("1") => editor.set_layer_lock_movement(true),
+            Some("off") | Some("false") | Some("0") => editor.set_layer_lock_movement(false),
+            _ => editor.msg = "usage: :movelock on|off".into(),
+        },
+        "collapse" | "collapsed" => match arg {
+            Some("on") | Some("true") | Some("1") => editor.set_layer_collapsed(true),
+            Some("off") | Some("false") | Some("0") => editor.set_layer_collapsed(false),
+            _ => editor.msg = "usage: :collapse on|off".into(),
+        },
+        "layeruuid" | "uuid" => match arg {
+            Some("new") => editor.new_layer_uuid(),
+            Some("clear") => editor.clear_layer_uuid(),
+            None => editor.msg = format!("layer uuid: {}", editor.layer_uuid_hex()),
+            _ => editor.msg = "usage: :layeruuid [new|clear]".into(),
+        },
         "tagrepeat" => match arg.and_then(|s| s.parse::<u16>().ok()) {
             Some(n) => editor.set_tag_repeat(n),
             None => editor.msg = "usage: :tagrepeat <n> (0 = forever)".into(),

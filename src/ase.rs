@@ -150,6 +150,9 @@ fn write_header(out: &mut Vec<u8>, s: &Sprite, depth: &OutDepth) {
     if s.layers.iter().any(|l| l.group) {
         flags |= 2; // group blend/opacity valid
     }
+    if s.layers.iter().any(|l| l.uuid.is_some()) {
+        flags |= 4; // layers carry UUIDs
+    }
     h[14..18].copy_from_slice(&flags.to_le_bytes());
     h[18..20].copy_from_slice(&0u16.to_le_bytes()); // speed (deprecated)
     if let OutDepth::Indexed {
@@ -226,8 +229,9 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
             count += 1;
             emit_raw(&mut body, &mut count, ChunkAnchor::Palette);
         }
+        let has_uuid = s.layers.iter().any(|l| l.uuid.is_some());
         for (i, layer) in s.layers.iter().enumerate() {
-            write_layer_chunk(&mut body, layer);
+            write_layer_chunk(&mut body, layer, has_uuid);
             count += 1;
             emit_raw(&mut body, &mut count, ChunkAnchor::Layer(i as u16));
         }
@@ -314,12 +318,15 @@ fn write_palette_chunk(out: &mut Vec<u8>, palette: &[Rgba], names: &[String]) {
     write_chunk(out, CHUNK_PALETTE, &b);
 }
 
-fn write_layer_chunk(out: &mut Vec<u8>, layer: &Layer) {
+fn write_layer_chunk(out: &mut Vec<u8>, layer: &Layer, has_uuid: bool) {
     let name = layer.name.as_bytes();
     let mut b = Vec::new();
     let mut flags: u16 = if layer.visible { 1 } else { 0 };
     if layer.editable {
         flags |= 2; // editable
+    }
+    if layer.lock_movement {
+        flags |= 4;
     }
     if layer.background {
         flags |= 8; // background
@@ -329,6 +336,9 @@ fn write_layer_chunk(out: &mut Vec<u8>, layer: &Layer) {
     }
     if layer.prefer_linked {
         flags |= 16; // new frames prefer linked cels
+    }
+    if layer.collapsed {
+        flags |= 32; // group displayed collapsed
     }
     b.extend_from_slice(&flags.to_le_bytes());
     b.extend_from_slice(&(layer.group as u16).to_le_bytes()); // 0 image, 1 group
@@ -340,6 +350,9 @@ fn write_layer_chunk(out: &mut Vec<u8>, layer: &Layer) {
     b.extend_from_slice(&[0u8; 3]);
     b.extend_from_slice(&(name.len() as u16).to_le_bytes());
     b.extend_from_slice(name);
+    if has_uuid {
+        b.extend_from_slice(&layer.uuid.unwrap_or([0u8; 16]));
+    }
     write_chunk(out, CHUNK_LAYER, &b);
 }
 
@@ -987,10 +1000,22 @@ fn parse_layer(body: &[u8], has_uuid: bool) -> Result<(Layer, u32)> {
     let name_len = u16_at(body, 16) as usize;
     let name_bytes = &body.get(18..18 + name_len).unwrap_or(&[]);
     let name = String::from_utf8_lossy(name_bytes).into_owned();
+    let mut end = 18 + name_len;
     let tileset = if kind == 2 {
-        u32_at(body, 18 + name_len + if has_uuid { 16 } else { 0 })
+        let t = u32_at(body, end);
+        end += 4;
+        t
     } else {
         0
+    };
+    let uuid = if has_uuid {
+        body.get(end..end + 16).map(|b| {
+            let mut u = [0u8; 16];
+            u.copy_from_slice(b);
+            u
+        })
+    } else {
+        None
     };
     Ok((
         Layer {
@@ -1009,6 +1034,9 @@ fn parse_layer(body: &[u8], has_uuid: bool) -> Result<(Layer, u32)> {
             background: flags & 8 != 0,
             reference: flags & 64 != 0,
             prefer_linked: flags & 16 != 0,
+            lock_movement: flags & 4 != 0,
+            collapsed: flags & 32 != 0,
+            uuid,
         },
         tileset,
     ))
@@ -1928,6 +1956,57 @@ mod tests {
         assert_eq!(back.transparent_index, ti);
         assert_eq!(back.get(2, 0, 10, 8), color);
         assert_eq!(back.get(2, 0, 11, 8), Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn layer_flags_and_uuid_round_trip() {
+        let mut s = Sprite::new(2, 2);
+        s.layers[0].lock_movement = true;
+        s.layers[0].collapsed = true;
+        let uuid = [1, 2, 3, 4, 5, 6, 0x47, 8, 0x89, 10, 11, 12, 13, 14, 15, 16];
+        s.layers[0].uuid = Some(uuid);
+
+        let path = tmp("vixel_ase_layer_uuid.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        assert_eq!(u32_at(&data, 14) & 4, 4, "header UUID flag");
+        let body = walk_chunks(&data)
+            .into_iter()
+            .find(|(_, k, _)| *k == CHUNK_LAYER)
+            .expect("layer chunk")
+            .2;
+        assert_eq!(u16_at(&body, 0) & 4, 4, "lock movement flag");
+        assert_eq!(u16_at(&body, 0) & 32, 32, "collapsed flag");
+        let name_len = u16_at(&body, 16) as usize;
+        assert_eq!(&body[18 + name_len..18 + name_len + 16], &uuid);
+
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(back.layers[0].lock_movement);
+        assert!(back.layers[0].collapsed);
+        assert_eq!(back.layers[0].uuid, Some(uuid));
+
+        let mut plain = Sprite::new(1, 1);
+        plain.layers[0].uuid = None;
+        let path = tmp("vixel_ase_no_uuid.ase");
+        save(&plain, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(u32_at(&data, 14) & 4, 0, "no UUIDs, no header flag");
+    }
+
+    #[test]
+    fn fixture_layer_uuids_survive_save() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ase/test_nrgba.ase");
+        let a = load(&src).unwrap();
+        assert!(a.layers.iter().all(|l| l.uuid.is_some()));
+        let out = tmp("vixel_ase_fixture_uuid.ase");
+        save(&a, &out).unwrap();
+        let b = load(&out).unwrap();
+        let _ = std::fs::remove_file(&out);
+        let before: Vec<_> = a.layers.iter().map(|l| l.uuid).collect();
+        let after: Vec<_> = b.layers.iter().map(|l| l.uuid).collect();
+        assert_eq!(after, before);
     }
 
     #[test]

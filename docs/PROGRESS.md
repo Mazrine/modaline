@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **147 tests green** (138 lib + 9 bin)
+- `cargo test` → **151 tests green** (142 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-12 linked-cel authoring** (see batch 49).
+- Last completed batch: **P5-13 layer flags and UUIDs** (see batch 50).
 
 ## How to resume
 
@@ -287,6 +287,13 @@ Read, in order:
     links; frame insert/duplicate/remove/move remap or materialise links, and
     global operations materialise first. 5 new tests (147 total): sharing/COW,
     prefer-linked frames, frame-op remapping, type-1 round trip, link undo.
+50. **P5-13 — layer flags and UUIDs** — `Layer.lock_movement` (flag 4),
+    `collapsed` (flag 32) and `uuid` (16 bytes); `.ase` reads/writes UUIDs and
+    header bit 4, fixing the tileset/UUID order. New layers/duplicates mint
+    UUIDs when the sprite uses them; cut/move/free-transform refuse locked
+    layers. `:movelock`, `:collapse`, `:layeruuid` and panel `mv`/`col`
+    toggles; collapsed groups hide children. 4 new tests (151 total): flag and
+    UUID bytes/round trip, fixture UUIDs, movement lock, UUID minting.
 
 ## Next step (exact)
 
@@ -295,8 +302,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-13** — layer flags and UUIDs (first open task), then continue down the
-  P5 roadmap in dependency order.
+- **P5-14** — user data 0x2020 (first open task), then continue down the P5
+  roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

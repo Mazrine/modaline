@@ -184,6 +184,8 @@ pub struct LayerProps {
     pub blend: crate::sprite::BlendMode,
     pub background: bool,
     pub reference: bool,
+    pub lock_movement: bool,
+    pub collapsed: bool,
 }
 
 /// One undoable change.
@@ -1958,6 +1960,10 @@ impl Editor {
     /// three are one affine map, so they compose in the order rotate, scale,
     /// skew; the inverse map is what samples the source.
     pub fn free_transform(&mut self, angle_deg: f32, sx: f32, sy: f32, skew_deg: f32) {
+        if !self.sprite.layer_movable(self.active_layer) {
+            self.msg = "layer movement is locked".into();
+            return;
+        }
         let (w, h) = (self.sprite.width, self.sprite.height);
         let (l, f) = (self.active_layer, self.active_frame);
         let sel = self.current_selection();
@@ -2474,6 +2480,10 @@ impl Editor {
 
     /// Cut the selection: copy it, then clear to transparent (one undo step).
     pub fn cut(&mut self) {
+        if !self.sprite.layer_movable(self.active_layer) {
+            self.msg = "layer movement is locked".into();
+            return;
+        }
         if let Some(sel) = self.current_selection() {
             self.clipboard = Some(self.selection_to_clipboard(&sel));
             self.clear_pixels(&sel);
@@ -2484,6 +2494,10 @@ impl Editor {
 
     /// Cut the selection and float it (move), entering paste mode.
     pub fn start_move(&mut self) {
+        if !self.sprite.layer_movable(self.active_layer) {
+            self.msg = "layer movement is locked".into();
+            return;
+        }
         if let Some(sel) = self.current_selection() {
             self.clipboard = Some(self.selection_to_clipboard(&sel));
             self.clear_pixels(&sel);
@@ -2691,6 +2705,8 @@ impl Editor {
             blend: l.blend,
             background: l.background,
             reference: l.reference,
+            lock_movement: l.lock_movement,
+            collapsed: l.collapsed,
         }
     }
 
@@ -2702,6 +2718,8 @@ impl Editor {
             l.blend = p.blend;
             l.background = p.background;
             l.reference = p.reference;
+            l.lock_movement = p.lock_movement;
+            l.collapsed = p.collapsed;
         }
     }
 
@@ -2748,6 +2766,57 @@ impl Editor {
         } else {
             self.msg = "cel is not linked".into();
         }
+    }
+
+    pub fn set_layer_lock_movement(&mut self, on: bool) {
+        let l = self.active_layer;
+        let before = self.layer_props(l);
+        self.sprite.layers[l].lock_movement = on;
+        self.record_layer_props(l, before);
+        self.msg = if on {
+            "layer movement locked".into()
+        } else {
+            "layer movement unlocked".into()
+        };
+    }
+
+    pub fn set_layer_collapsed(&mut self, on: bool) {
+        let l = self.active_layer;
+        let before = self.layer_props(l);
+        self.sprite.layers[l].collapsed = on;
+        self.record_layer_props(l, before);
+        self.msg = if on {
+            "group collapsed".into()
+        } else {
+            "group expanded".into()
+        };
+    }
+
+    pub fn layer_uuid_hex(&self) -> String {
+        match self.sprite.layers[self.active_layer].uuid {
+            Some(u) => u.iter().map(|b| format!("{b:02x}")).collect(),
+            None => "none".into(),
+        }
+    }
+
+    pub fn new_layer_uuid(&mut self) {
+        let l = self.active_layer;
+        let before = self.sprite.clone();
+        self.sprite.layers[l].uuid = Some(crate::sprite::mint_uuid(l));
+        self.snapshot(before);
+        self.msg = format!("layer uuid: {}", self.layer_uuid_hex());
+    }
+
+    pub fn clear_layer_uuid(&mut self) {
+        let l = self.active_layer;
+        if self.sprite.layers[l].uuid.is_none() {
+            self.msg = "layer has no uuid".into();
+            return;
+        }
+        let before = self.sprite.clone();
+        self.sprite.layers[l].uuid = None;
+        self.snapshot(before);
+        self.msg = "layer uuid cleared".into();
     }
 
     pub fn set_prefer_linked(&mut self, on: bool) {
@@ -4230,6 +4299,40 @@ mod tests {
         assert!(e.advance_frame());
         assert_eq!(e.active_frame, 1, "bounces off the start");
         assert_eq!(e.play_dir, 1);
+    }
+
+    #[test]
+    fn movement_lock_blocks_transform_and_cut() {
+        let mut e = Editor::new(2, 1);
+        e.paint_pixel(0, 0, Rgba(200, 0, 0, 255));
+        e.sprite.layers[0].lock_movement = true;
+        assert!(!e.sprite.layer_movable(0));
+        e.free_transform(90.0, 1.0, 1.0, 0.0);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba(200, 0, 0, 255));
+        assert!(e.msg.contains("locked"));
+        e.set_layer_lock_movement(false);
+        assert!(e.sprite.layer_movable(0));
+    }
+
+    #[test]
+    fn layer_uuid_minting_and_new_layers() {
+        let mut e = Editor::new(1, 1);
+        assert_eq!(e.layer_uuid_hex(), "none");
+        e.new_layer_uuid();
+        let first = e.sprite.layers[0].uuid.expect("uuid");
+        assert_eq!(first[6] >> 4, 4, "v4 shape");
+        assert_eq!(first[8] & 0xc0, 0x80, "variant bits");
+        assert_eq!(e.layer_uuid_hex().len(), 32);
+        e.undo();
+        assert_eq!(e.sprite.layers[0].uuid, None);
+
+        e.new_layer_uuid();
+        e.add_layer();
+        let second = e.sprite.layers[1].uuid.expect("new layer uuid");
+        assert_ne!(second, e.sprite.layers[0].uuid.unwrap());
+        e.active_layer = 1;
+        e.clear_layer_uuid();
+        assert_eq!(e.sprite.layers[1].uuid, None);
     }
 
     #[test]

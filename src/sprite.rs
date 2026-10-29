@@ -32,6 +32,25 @@ fn full() -> u8 {
     255
 }
 
+/// Aseprite layer UUID (v4-shaped, not cryptographic).
+pub(crate) fn mint_uuid(seed: usize) -> [u8; 16] {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let mut x = now ^ ((std::process::id() as u128) << 32) ^ seed as u128;
+    let mut u = [0u8; 16];
+    for b in &mut u {
+        x = x
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        *b = (x >> 64) as u8;
+    }
+    u[6] = (u[6] & 0x0f) | 0x40;
+    u[8] = (u[8] & 0x3f) | 0x80;
+    u
+}
+
 impl Cel {
     pub fn blank(w: u32, h: u32) -> Self {
         Self {
@@ -156,6 +175,15 @@ pub struct Layer {
     /// New frames on this layer link to the previous frame's cel.
     #[serde(default)]
     pub prefer_linked: bool,
+    /// Aseprite's "lock movement": content cannot be cut/moved/transformed.
+    #[serde(default)]
+    pub lock_movement: bool,
+    /// A group layer is displayed collapsed in the layer list.
+    #[serde(default)]
+    pub collapsed: bool,
+    /// Aseprite layer UUID (written when any layer has one).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uuid: Option<[u8; 16]>,
 }
 
 fn yes() -> bool {
@@ -176,6 +204,9 @@ impl Default for Layer {
             background: false,
             reference: false,
             prefer_linked: false,
+            lock_movement: false,
+            collapsed: false,
+            uuid: None,
         }
     }
 }
@@ -915,6 +946,13 @@ impl Sprite {
         k
     }
 
+    /// Can this layer's content be cut, moved or transformed?
+    pub fn layer_movable(&self, i: usize) -> bool {
+        self.layers
+            .get(i)
+            .is_some_and(|l| !l.group && !l.lock_movement)
+    }
+
     /// Can `i` (and all its ancestor groups) be painted on right now?
     pub fn layer_editable(&self, i: usize) -> bool {
         let mut ok = self.layers[i].editable
@@ -1250,11 +1288,13 @@ impl Sprite {
     pub fn add_layer_after(&mut self, idx: usize) {
         let name = format!("Layer {}", self.layers.len() + 1);
         let child_level = self.layers[idx].child_level;
+        let use_uuid = self.layers.iter().any(|l| l.uuid.is_some());
         self.layers.insert(
             idx + 1,
             Layer {
                 name,
                 child_level,
+                uuid: use_uuid.then(|| mint_uuid(idx)),
                 ..Default::default()
             },
         );
@@ -1266,12 +1306,14 @@ impl Sprite {
     pub fn add_group_after(&mut self, idx: usize) {
         let name = format!("Group {}", self.layers.len() + 1);
         let child_level = self.layers[idx].child_level;
+        let use_uuid = self.layers.iter().any(|l| l.uuid.is_some());
         self.layers.insert(
             idx + 1,
             Layer {
                 name,
                 group: true,
                 child_level,
+                uuid: use_uuid.then(|| mint_uuid(idx)),
                 ..Default::default()
             },
         );
@@ -1287,6 +1329,9 @@ impl Sprite {
         }
         let mut layer = self.layers[idx].clone();
         layer.name = format!("{} copy", layer.name);
+        if layer.uuid.is_some() {
+            layer.uuid = Some(mint_uuid(idx));
+        }
         let cels = self.cels[idx].clone();
         self.layers.insert(idx, layer);
         self.cels.insert(idx, cels);

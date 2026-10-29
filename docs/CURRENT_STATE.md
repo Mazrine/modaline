@@ -60,7 +60,9 @@ L-shaped corners for the 1 px pencil/eraser.
 
 ## Layers
 
-- visibility toggle, opacity (0–255), 19 **blend modes** (normal, multiply,
+- visibility toggle, **lock movement** (`:movelock`, `mv`), **collapsed groups**
+  (`:collapse`, `col`), **layer UUIDs** (`:layeruuid [new|clear]`), opacity
+  (0–255), 19 **blend modes** (normal, multiply,
   screen, overlay, darken, lighten, color dodge/burn, hard/soft light,
   difference, exclusion, hue, saturation, color, luminosity, add, subtract,
   divide — W3C source-over math, Aseprite's divide),
@@ -172,6 +174,8 @@ L-shaped corners for the 1 px pencil/eraser.
     Cel offsets, dimensions, z-index and linked-cel references are preserved
     on import and written back (type 1), so partial/off-canvas cels, stacking
     order and links round-trip instead of being rasterized into the canvas.
+    Layer flag bits (editable, background, reference, prefer-linked, lock
+    movement, collapsed) and layer UUIDs (header bit 4) round-trip.
   - Reads RGBA (32), grayscale (16) and indexed (8) pixels, new and legacy
     palette chunks, layer names/visibility/blend/opacity, layer groups (type +
     child level), the editable flag, **per-cel opacity** and frame durations.
@@ -249,7 +253,8 @@ middle-drag = pan.
 `pal sort [rgb|luma|hue]` · `pal name <i> <name>` ·
 `mode auto|rgba|grayscale|indexed` · `dither none|bayer2|bayer4|bayer8|floyd` ·
 `aspect <x> <y>` · `sgrid [x y] <w> <h>` · `celz <n>` ·
-`link <frame>` · `unlink` · `preferlink on|off` ·
+`link <frame>` · `unlink` · `preferlink on|off` · `movelock on|off` ·
+`collapse on|off` · `layeruuid [new|clear]` ·
 `slices <dir> [cols rows]` · `export <file> [scale]` ·
 `profile [srgb|linear|icc <file>|gamma <g>|clear]` ·
 `renderer glow|wgpu` ·

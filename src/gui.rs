@@ -762,6 +762,20 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     });
     let count = editor.sprite.layers.len();
+    let mut hidden = vec![false; count];
+    let mut collapsed_at: Option<u16> = None;
+    for (is_hidden, layer) in hidden.iter_mut().zip(&editor.sprite.layers) {
+        if let Some(level) = collapsed_at {
+            if layer.child_level > level {
+                *is_hidden = true;
+                continue;
+            }
+            collapsed_at = None;
+        }
+        if layer.group && layer.collapsed {
+            collapsed_at = Some(layer.child_level);
+        }
+    }
     let mut selected = editor.active_layer;
     let mut toggle_mask = None;
     let mut toggle_ref = None;
@@ -772,7 +786,10 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     egui::ScrollArea::vertical()
         .id_salt("layers")
         .show(ui, |ui| {
-            for i in 0..count {
+            for (i, is_hidden) in hidden.iter().enumerate() {
+                if *is_hidden {
+                    continue;
+                }
                 let before = editor.layer_props(i);
                 // Each row is a drag source carrying its own index, and every
                 // row is a drop target: drag a layer onto another to move it
@@ -783,7 +800,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                     ui.horizontal(|ui| {
                         ui.add_space(indent);
                         let label = if layer.group {
-                            format!("▾ {}", layer.name)
+                            format!("{} {}", if layer.collapsed { "▸" } else { "▾" }, layer.name)
                         } else {
                             layer.name.clone()
                         };
@@ -802,6 +819,24 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                             .on_hover_text("editable (lock)")
                             .changed()
                         {
+                            prop_edits.push((i, before));
+                        }
+                        if !layer.group
+                            && ui
+                                .selectable_label(layer.lock_movement, "mv")
+                                .on_hover_text("lock movement (cut/move/transform)")
+                                .clicked()
+                        {
+                            layer.lock_movement = !layer.lock_movement;
+                            prop_edits.push((i, before));
+                        }
+                        if layer.group
+                            && ui
+                                .selectable_label(layer.collapsed, "col")
+                                .on_hover_text("collapse this group")
+                                .clicked()
+                        {
+                            layer.collapsed = !layer.collapsed;
                             prop_edits.push((i, before));
                         }
                         if ui
@@ -1686,7 +1721,7 @@ const HELP: &[&str] = &[
     "  :tag <name> [from to] / :tagdel [name]   (named frame ranges)",
     "  :tagdir forward|reverse|pingpong|pingpong-reverse   :tagrepeat <n>   (0 = forever)",
     "  :framemove <from> <to>   :celz <n>   :link <frame>   :unlink",
-    "  :preferlink on|off   (new frames link to the previous one)",
+    "  :preferlink on|off   :movelock on|off   :collapse on|off   :layeruuid [new|clear]",
     "  :newlayer / :dellayer / :layerup / :layerdown / :layername <name>",
     "  :duplayer   :merge   :flatten   (duplicate / merge down / flatten)",
     "  :newgroup / :indent / :outdent / :lock / :unlock   (layer groups)",

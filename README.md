@@ -96,6 +96,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:framemove <from> <to>` | move a frame (or drag a timeline thumbnail) |
 | `:celz <n>` | active cel z-index (+ moves towards the front) |
 | `:link <frame>` / `:unlink` / `:preferlink on\|off` | linked cels in the active layer |
+| `:movelock on\|off` / `:collapse on\|off` / `:layeruuid [new\|clear]` | layer movement lock, group collapse, UUID |
 | `:tag <name> [from to]` | create/update a named frame tag |
 | `:tagdel [name]` | delete a frame tag (default: the active one) |
 | `:tagdir forward\|reverse\|pingpong\|pingpong-reverse` | play direction of the active tag |
@@ -241,6 +242,7 @@ stroke-grouped undo/redo (**structural layer/frame/tag edits and panel
 properties undo too**),
 **`.ase`/`.aseprite` + PNG + `.vpx` import/export**, **sheet + GIF + meta JSON
 export**, **sprite properties** (colour mode, pixel ratio, grid size + origin) and
+**layer flags** (movement lock, collapsed groups, UUIDs),
 **sRGB/linear colour profiles**, **custom palettes** (`.gpl`/`.hex`/`.pal`),
 **OS clipboard**, **tile mode** (3x3 seamless preview + wrapping cursor),
 **frame tags + drag reorder**, full vim keymap (normal/draw/visual/paste/command
