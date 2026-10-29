@@ -48,7 +48,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Lock movement | Covered | P5-13 |
 | Prefer linked cels | Covered | P5-12 |
 | Collapsed group | Covered | P5-13 |
-| Alpha masks | Covered (vixel extension) | — |
+| Alpha masks | Covered (Modaline extension) | — |
 | Duplicate / merge down / flatten | Covered | — |
 | Layer UUID | Covered | P5-13 |
 | Layer user data | Covered | P5-14 |
@@ -66,7 +66,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Palette import/export (`.gpl`, `.hex`, `.pal`) | Covered | — |
 | Palette editor: insert/delete/sort/presets/names | Covered | P5-06 |
 | Colour picker wheel + recent colours | Covered | P5-06 |
-| sRGB/linear working profiles | Covered (vixel) | — |
+| sRGB/linear working profiles | Covered (Modaline) | — |
 | ICC embedding (`.ase` 0x2007) | Covered | P5-09 |
 | Background colour sprite property | Covered (sprite user-data colour; `:bgcolor`, side picker, `.ase`/`.vpx`) | P5-60 |
 | Wide pixels rendering (pixel ratio) | Covered | P5-26 |
@@ -140,7 +140,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Editable text objects | Covered | P5-16 |
 | Fonts + sizes + alignment | Covered (bitmap; TTF not accepted) | P5-28 |
 | `.ase` text properties round-trip | Covered | P5-16 |
-| Bitmap text stamp (`:text`) | Covered (vixel shortcut) | — |
+| Bitmap text stamp (`:text`) | Covered (Modaline shortcut) | — |
 
 ## Files and formats
 
@@ -160,7 +160,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Deprecated chunks (0x2006/0x2016/0x2017) | Preserved (raw) | P5-17 |
 | `.vpx` project JSON | Covered | — |
 | PNG import/export | Covered | — |
-| Sheet PNG + meta import/export | Covered (vixel format) | — |
+| Sheet PNG + meta import/export | Covered (Modaline format) | — |
 | Image sequence export | Covered | P5-40 |
 | Filename templates (`{frame}`, `{layer}`, `{tag}`, `{title}`, `{duration}`) | Covered | P5-40 |
 | JPG / BMP / TGA / WebP | Covered (static read/write) | P5-43 |
@@ -208,7 +208,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Lua scripting API | Covered (sandboxed engine; matrix in `docs/SCRIPTING.md`; Image/Cel/Selection/Dialog/`app.fs` landed in P6-02, dialogs headless) | P5-49, P5-50, P6-02 |
 | Script from CLI / `:script` | Covered | P5-49 |
 | `.aseprite-extension` packages | Covered (zip/manifest install/remove, scripts run sandboxed, themes listed/applied) | P5-51 |
-| JSON `Op` replay (vixel-specific automation) | Covered | — |
+| JSON `Op` replay (Modaline-specific automation) | Covered | — |
 
 ## Customization
 
@@ -234,7 +234,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Incremental rendering / large-canvas performance | Covered (revision/frame cache, dirty-rect texture uploads and dirty-rect compositing) | P6-04 |
 | Filter threading | Covered (filters over 512×512 run on a worker with progress/cancel; UI stays responsive) | P6-05 |
 
-## vixel extras (not parity gaps)
+## Modaline extras (not parity gaps)
 
 These are deliberate differences, not rows to close:
 
@@ -253,5 +253,5 @@ These are deliberate differences, not rows to close:
 | Item | Reason | Re-open condition |
 |---|---|---|
 | PCX/FLC/FLI export | Import is covered (P6-06); the formats are obsolete and the import crates do not write them | A consumer requires export |
-| Custom GPU shaders | Not an Aseprite capability (vixel extra) | A shader can be verified on real hardware |
+| Custom GPU shaders | Not an Aseprite capability (Modaline extra) | A shader can be verified on real hardware |
 | Web/Wasm build | Aseprite has no web build; product choice | Product requirement changes |

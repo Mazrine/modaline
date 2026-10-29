@@ -1,6 +1,6 @@
 # Third-party notices
 
-vixel is distributed under the GNU General Public License v3.0 or later (see
+Modaline is distributed under the GNU General Public License v3.0 or later (see
 `LICENSE`). This file lists the third-party material that is **included in the
 repository or the built binary**, separate from normal Cargo dependencies
 (which are fetched by the build and keep their own licenses).
@@ -41,6 +41,6 @@ For a binary release, generate a complete notice file with `cargo about` or
 
 ## Trademarks
 
-Aseprite is a trademark of its respective owner (Igara Studio S.A.). vixel is
+Aseprite is a trademark of its respective owner (Igara Studio S.A.). Modaline is
 an independent project, not affiliated with or endorsed by Aseprite. The name
 is used only to describe file-format and feature compatibility.

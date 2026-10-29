@@ -94,7 +94,7 @@ pub fn is_png(path: &Path) -> bool {
         .is_some_and(|e| e.eq_ignore_ascii_case("png"))
 }
 
-/// Static image formats vixel can read and write.
+/// Static image formats modaline can read and write.
 pub fn is_image(path: &Path) -> bool {
     path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
         matches!(
@@ -124,7 +124,7 @@ pub fn is_importable(path: &Path) -> bool {
     is_image(path) || is_pcx(path) || is_flic(path)
 }
 
-/// Load whatever file vixel can open, dispatched on the extension. The one
+/// Load whatever file modaline can open, dispatched on the extension. The one
 /// place that dispatch lives, so `:open` and the command line cannot drift.
 pub fn load_any(path: &Path) -> Result<Sprite> {
     if is_ase(path) {
@@ -149,7 +149,7 @@ pub enum ExportLayers {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AtlasFormat {
-    Vixel,
+    Modaline,
     JsonHash,
     JsonArray,
 }
@@ -157,7 +157,7 @@ pub enum AtlasFormat {
 impl AtlasFormat {
     pub fn name(self) -> &'static str {
         match self {
-            AtlasFormat::Vixel => "vixel",
+            AtlasFormat::Modaline => "modaline",
             AtlasFormat::JsonHash => "hash",
             AtlasFormat::JsonArray => "array",
         }
@@ -165,7 +165,7 @@ impl AtlasFormat {
 
     pub fn parse(s: &str) -> Option<Self> {
         Some(match s {
-            "vixel" | "default" => AtlasFormat::Vixel,
+            "modaline" | "default" => AtlasFormat::Modaline,
             "hash" | "json-hash" | "jsonhash" => AtlasFormat::JsonHash,
             "array" | "json-array" | "jsonarray" => AtlasFormat::JsonArray,
             _ => return None,
@@ -264,7 +264,7 @@ impl Default for ExportConfig {
             shape_padding: 0,
             inner_padding: 0,
             extrude: 0,
-            atlas: AtlasFormat::Vixel,
+            atlas: AtlasFormat::Modaline,
             gif_loop: 0,
             gif_dither: false,
             gif_colors: 256,
@@ -383,7 +383,7 @@ pub fn export_config(sprite: &Sprite, cfg: &ExportConfig, stem: &Path) -> Result
     let title = stem
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "vixel".into());
+        .unwrap_or_else(|| "modaline".into());
     let mut paths = Vec::new();
     if cfg.sheet {
         let sheet_path = with_suffix(stem, ".sheet.png");
@@ -481,7 +481,7 @@ fn write_sequence(sprite: &Sprite, cfg: &ExportConfig, stem: &Path) -> Result<Ve
     let title = stem
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "vixel".into());
+        .unwrap_or_else(|| "modaline".into());
     let tag = cfg.tag.as_deref().unwrap_or("all");
     let scale = cfg.scale.clamp(1, 16);
     let per_layer = cfg.per_layer || cfg.filename.contains("{layer}");
@@ -879,7 +879,7 @@ pub fn sheet_frame_rects(sprite: &Sprite, sheet: &Sheet, cfg: &ExportConfig) -> 
     out
 }
 
-/// Write vixel, JSON-hash or JSON-array atlas metadata.
+/// Write modaline, JSON-hash or JSON-array atlas metadata.
 pub fn export_meta_format(
     sprite: &Sprite,
     sheet: &Sheet,
@@ -889,7 +889,7 @@ pub fn export_meta_format(
     cfg: &ExportConfig,
     title: &str,
 ) -> Result<()> {
-    if cfg.atlas == AtlasFormat::Vixel {
+    if cfg.atlas == AtlasFormat::Modaline {
         return export_meta(sprite, sheet.clone(), image, path);
     }
     let rects = sheet_frame_rects(sprite, sheet, cfg);
@@ -1869,7 +1869,7 @@ mod tests {
             filename: "{title}_{frame}".into(),
             ..Default::default()
         };
-        let dir = std::env::temp_dir().join(format!("vixel-atlas-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-atlas-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         export_config(&s, &cfg, &dir.join("walk")).unwrap();
@@ -1917,7 +1917,7 @@ mod tests {
             .collect();
         assert!(unique.len() <= 8, "{unique:?}");
         assert_eq!(out.get_pixel(0, 0).0[3], 0, "transparent stays out");
-        let dir = std::env::temp_dir().join(format!("vixel-gifopt-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-gifopt-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("anim.gif");
@@ -1942,7 +1942,7 @@ mod tests {
             extrude: 1,
             ..Default::default()
         };
-        let dir = std::env::temp_dir().join(format!("vixel-sheet-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-sheet-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("sheet.png");
@@ -1962,7 +1962,7 @@ mod tests {
         let mut s = Sprite::new(2, 2);
         s.add_frame_after(0);
         s.add_frame_after(1);
-        let dir = std::env::temp_dir().join(format!("vixel-sheet-grid-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-sheet-grid-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
@@ -2000,7 +2000,7 @@ mod tests {
             repeat: 2,
             user_data: None,
         });
-        let dir = std::env::temp_dir().join(format!("vixel-atlas-in-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-atlas-in-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let cfg = ExportConfig {
@@ -2024,7 +2024,7 @@ mod tests {
 
     #[test]
     fn xml_atlas_imports_subtextures() {
-        let dir = std::env::temp_dir().join(format!("vixel-xml-atlas-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-xml-atlas-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let mut img = image::RgbaImage::new(4, 2);
@@ -2049,7 +2049,7 @@ mod tests {
 
     #[test]
     fn image_sequence_imports_in_natural_order() {
-        let dir = std::env::temp_dir().join(format!("vixel-seq-in-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-seq-in-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for (name, color) in [
@@ -2078,7 +2078,7 @@ mod tests {
         let mut s = Sprite::new(2, 2);
         s.set(0, 0, 0, 0, Rgba::rgb(200, 10, 20));
         s.set(0, 0, 1, 1, Rgba(0, 80, 255, 255));
-        let dir = std::env::temp_dir().join(format!("vixel-formats-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-formats-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for ext in ["bmp", "tga", "webp", "jpg"] {
@@ -2124,7 +2124,7 @@ mod tests {
         let top = s.layers.len() - 1;
         s.set(top, 0, 1, 1, Rgba::rgb(0, 0, 255));
         s.add_frame_after(0);
-        let dir = std::env::temp_dir().join(format!("vixel-seq-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-seq-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let cfg = ExportConfig {
             sheet: false,
@@ -2194,7 +2194,7 @@ mod tests {
         s.add_frame_after(0);
         s.set(0, 0, 0, 0, Rgba::rgb(255, 0, 0));
         s.set(0, 1, 1, 1, Rgba::rgb(0, 255, 0));
-        let dir = std::env::temp_dir().join(format!("vixel-exportcfg-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-exportcfg-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let stem = dir.join("anim");
@@ -2230,7 +2230,7 @@ mod tests {
             ],
             ..Default::default()
         });
-        let path = std::env::temp_dir().join(format!("vixel-ts-export-{}.png", std::process::id()));
+        let path = std::env::temp_dir().join(format!("modaline-ts-export-{}.png", std::process::id()));
         export_tileset(&s, Some(9), &path).unwrap();
         let img = image::open(&path).unwrap().to_rgba8();
         let _ = std::fs::remove_file(&path);
@@ -2270,7 +2270,7 @@ mod tests {
                 ..Default::default()
             }],
         ));
-        let path = std::env::temp_dir().join(format!("vixel-tileset-{}.vpx", std::process::id()));
+        let path = std::env::temp_dir().join(format!("modaline-tileset-{}.vpx", std::process::id()));
         save_project(&s, &path).unwrap();
         let back = load_project(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2350,7 +2350,7 @@ mod tests {
             }],
             user_data: None,
         });
-        let dir = std::env::temp_dir().join(format!("vixel-named-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-named-{}", std::process::id()));
         let paths = export_named_slices(&s, 0, &dir, "art").expect("named slices");
         assert_eq!(paths.len(), 2, "one png + metadata");
         let png = paths
@@ -2370,7 +2370,7 @@ mod tests {
         s.set(0, 0, 0, 0, Rgba(255, 0, 0, 255));
         s.set(0, 0, 3, 1, Rgba(0, 0, 255, 255));
         s.grid = (2, 2);
-        let dir = std::env::temp_dir().join(format!("vixel-slices-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-slices-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let paths = export_slices(&s, 0, &dir, "art", 0, 0).expect("slices");
         assert_eq!(paths.len(), 5, "4 cells + the sidecar");
@@ -2391,7 +2391,7 @@ mod tests {
         let mut s = Sprite::new(2, 2);
         s.set(0, 0, 1, 1, Rgba(12, 34, 56, 255));
         s.set(0, 0, 0, 0, Rgba(255, 0, 0, 128));
-        let path = std::env::temp_dir().join("vixel_png_roundtrip_test.png");
+        let path = std::env::temp_dir().join("modaline_png_roundtrip_test.png");
         export_png(&s, 0, &path).unwrap();
         let loaded = import_image(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2421,7 +2421,7 @@ mod tests {
     #[test]
     fn a_sheet_round_trips_through_import() {
         let s = animation(6);
-        let dir = std::env::temp_dir().join(format!("vixel-importsheet-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-importsheet-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let paths = export_animation(&s, &dir.join("idle"), None).unwrap();
@@ -2445,7 +2445,7 @@ mod tests {
     #[test]
     fn export_scale_upscales_raster_outputs() {
         let s = animation(2);
-        let dir = std::env::temp_dir().join(format!("vixel-scale-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-scale-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
@@ -2477,7 +2477,7 @@ mod tests {
     #[test]
     fn a_twenty_four_frame_sheet_is_a_six_by_four_grid() {
         let s = animation(24);
-        let path = std::env::temp_dir().join("vixel_sheet_test.sheet.png");
+        let path = std::env::temp_dir().join("modaline_sheet_test.sheet.png");
         let sheet = export_sheet(&s, &path, None).unwrap();
         assert_eq!((sheet.columns, sheet.rows), (6, 4));
         assert_eq!((sheet.frame_w, sheet.frame_h), (3, 2));
@@ -2506,7 +2506,7 @@ mod tests {
     #[test]
     fn the_meta_describes_the_sheet_well_enough_to_slice_it() {
         let s = animation(7);
-        let dir = std::env::temp_dir().join("vixel_meta_test");
+        let dir = std::env::temp_dir().join("modaline_meta_test");
         let stem = dir.join("idle");
         let paths = export_animation(&s, &stem, None).unwrap();
         assert_eq!(paths.len(), 3);
@@ -2531,7 +2531,7 @@ mod tests {
     fn the_gif_holds_every_frame_and_loops() {
         use image::AnimationDecoder;
         let s = animation(5);
-        let path = std::env::temp_dir().join("vixel_gif_test.gif");
+        let path = std::env::temp_dir().join("modaline_gif_test.gif");
         export_gif(&s, &path).unwrap();
         let decoder = image::codecs::gif::GifDecoder::new(std::io::BufReader::new(
             std::fs::File::open(&path).unwrap(),
@@ -2555,7 +2555,7 @@ mod tests {
         s.quantize_to_palette();
         s.palette_names = vec![String::new(), "blue".into(), "red".into()];
         let path = std::env::temp_dir().join(format!(
-            "vixel_palette_roundtrip_{}.vpx",
+            "modaline_palette_roundtrip_{}.vpx",
             std::process::id()
         ));
         save_project(&s, &path).unwrap();
@@ -2573,7 +2573,7 @@ mod tests {
         let mut s = Sprite::new(2, 2);
         s.set(0, 0, 1, 1, Rgba(1, 2, 3, 255));
         let path =
-            std::env::temp_dir().join(format!("vixel_cel_migrate_{}.vpx", std::process::id()));
+            std::env::temp_dir().join(format!("modaline_cel_migrate_{}.vpx", std::process::id()));
         save_project(&s, &path).unwrap();
         let json = std::fs::read_to_string(&path).unwrap();
         let old = json
@@ -2596,7 +2596,7 @@ mod tests {
         s.grid = (8, 6);
         s.grid_origin = (3, -4);
         let path =
-            std::env::temp_dir().join(format!("vixel_grid_origin_{}.vpx", std::process::id()));
+            std::env::temp_dir().join(format!("modaline_grid_origin_{}.vpx", std::process::id()));
         save_project(&s, &path).unwrap();
         let json = std::fs::read_to_string(&path).unwrap();
         let back = load_project(&path).unwrap();
@@ -2619,7 +2619,7 @@ mod tests {
         // mistaken for a PNG or an Aseprite file.
         let mut s = Sprite::new(3, 2);
         s.set(0, 0, 1, 1, Rgba(9, 8, 7, 255));
-        let path = std::env::temp_dir().join("vixel_load_any_test.vpx");
+        let path = std::env::temp_dir().join("modaline_load_any_test.vpx");
         save_project(&s, &path).unwrap();
         let loaded = load_any(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2633,7 +2633,7 @@ mod tests {
     fn project_round_trip_keeps_sprite_background_colour() {
         let mut s = Sprite::new(2, 2);
         s.set_background_color(Some(Rgba::rgb(7, 8, 9)));
-        let path = std::env::temp_dir().join("vixel_bg_roundtrip.vpx");
+        let path = std::env::temp_dir().join("modaline_bg_roundtrip.vpx");
         save_project(&s, &path).unwrap();
         let loaded = load_project(&path).unwrap();
         let _ = std::fs::remove_file(&path);

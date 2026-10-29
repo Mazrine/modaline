@@ -29,9 +29,9 @@ Xvfb :95 -screen 0 1400x900x24 >/dev/null 2>&1 &
 sleep 1
 nix run nixpkgs#twm >/dev/null 2>&1 &    # gives the window keyboard focus
 sleep 1
-target/debug/vixel > log.txt 2>&1 &
+target/debug/modaline > log.txt 2>&1 &
 sleep 9
-WID=$(xdotool search --name '^vixel$' | head -1)
+WID=$(xdotool search --name '^modaline' | head -1)
 xdotool windowfocus $WID; xdotool windowraise $WID
 sleep 1
 

@@ -7,7 +7,7 @@ use crate::brush::BrushKind;
 use crate::color::Rgba;
 use crate::editor::{Editor, Ink, LayerProps, Mode, SelectionOp, Shape, Symmetry, TileMode, Tool};
 use crate::sprite::{BlendMode, DitherMode, ellipse_points, line_points, rect_points};
-use vixel::pen;
+use modaline::pen;
 
 /// Onion-skin settings: how many frames each side, how strong, and the two
 /// tints. Aseprite's default is one red behind and one green ahead.
@@ -491,7 +491,7 @@ fn browser_activate(editor: &mut Editor, view: &mut View, path: PathBuf) {
                 Ok(()) => {
                     view.browser_open = false;
                 }
-                Err(e) => editor.msg = vixel::status!("open failed: {e:#}"),
+                Err(e) => editor.msg = modaline::status!("open failed: {e:#}"),
             }
         }
         BrowserMode::Save => {
@@ -501,7 +501,7 @@ fn browser_activate(editor: &mut Editor, view: &mut View, path: PathBuf) {
             }
             match editor.save_path(&path) {
                 Ok(()) => view.browser_open = false,
-                Err(e) => editor.msg = vixel::status!("save failed: {e:#}"),
+                Err(e) => editor.msg = modaline::status!("save failed: {e:#}"),
             }
         }
     }
@@ -823,7 +823,7 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
                             });
                         });
                     egui::CollapsingHeader::new(view.tr("prefs.keys")).show(ui, |ui| {
-                        let line = vixel::status!(
+                        let line = modaline::status!(
                             "{} actions bound, {} conflicts",
                             view.keymap.bindings.len(),
                             view.keymap.conflicts().len()
@@ -836,7 +836,7 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
                     });
                     egui::CollapsingHeader::new(view.tr("prefs.workspace")).show(ui, |ui| {
                         {
-                            let line = vixel::status!("layout: {}", view.layout.name);
+                            let line = modaline::status!("layout: {}", view.layout.name);
                             ui.label(line.render(&view.i18n));
                         }
                         if ui.button(view.tr("prefs.reset_layout")).clicked() {
@@ -1036,7 +1036,7 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                     .selected_text(cfg.atlas.name())
                     .show_ui(ui, |ui| {
                         for format in [
-                            crate::io::AtlasFormat::Vixel,
+                            crate::io::AtlasFormat::Modaline,
                             crate::io::AtlasFormat::JsonHash,
                             crate::io::AtlasFormat::JsonArray,
                         ] {
@@ -1065,15 +1065,15 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                             let stem = p.file_stem()?.to_string_lossy().into_owned();
                             Some(p.with_file_name(stem))
                         })
-                        .unwrap_or_else(|| std::path::PathBuf::from("vixel"))
+                        .unwrap_or_else(|| std::path::PathBuf::from("modaline"))
                 } else {
                     std::path::PathBuf::from(view.export_path.trim())
                 };
                 match crate::io::export_config(&editor.sprite, cfg, &stem) {
                     Ok(paths) => {
-                        editor.msg = vixel::status!("exported {} files", paths.len());
+                        editor.msg = modaline::status!("exported {} files", paths.len());
                     }
-                    Err(e) => editor.msg = vixel::status!("export failed: {e:#}"),
+                    Err(e) => editor.msg = modaline::status!("export failed: {e:#}"),
                 }
             }
         });
@@ -1144,7 +1144,7 @@ fn preview_viewport(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
         .with_inner_size([480.0, 360.0])
         .with_fullscreen(view.preview_fullscreen);
     ctx.show_viewport_immediate(
-        egui::ViewportId::from_hash_of("vixel-preview"),
+        egui::ViewportId::from_hash_of("modaline-preview"),
         builder,
         |pctx, _class| {
             egui::CentralPanel::default().show(pctx, |ui| {
@@ -1270,7 +1270,7 @@ fn tool_shortcut(tool: Tool) -> &'static str {
 
 fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("vixel").strong());
+        ui.label(egui::RichText::new("modaline").strong());
         ui.separator();
         ui.label(format!("[{}]", view.value("mode", mode_name(editor.mode))));
         ui.separator();
@@ -1442,7 +1442,7 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             ui.label(egui::RichText::new("▏").weak());
         } else if let Some((name, progress)) = editor.filter_progress() {
             {
-                let line = vixel::status!("filter: {name} {progress}%");
+                let line = modaline::status!("filter: {name} {progress}%");
                 ui.label(line.render(&view.i18n));
             }
         } else {
@@ -2147,10 +2147,10 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             .selected_text(&editor.text_font)
             .show_ui(ui, |ui| {
                 if ui
-                    .selectable_label(editor.text_font == "vixel", "vixel")
+                    .selectable_label(editor.text_font == "modaline", "modaline")
                     .clicked()
                 {
-                    editor.text_font = "vixel".into();
+                    editor.text_font = "modaline".into();
                     changed = true;
                 }
             });
@@ -2244,7 +2244,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.horizontal(|ui| {
         let (cx, cy) = editor.symmetry_center();
         {
-            let line = vixel::status!("centre {cx:.0},{cy:.0}");
+            let line = modaline::status!("centre {cx:.0},{cy:.0}");
             ui.label(line.render(&view.i18n));
         }
         if ui
@@ -3826,7 +3826,7 @@ mod tests {
 
     #[test]
     fn browser_entries_sort_dirs_first_and_filter() {
-        let dir = std::env::temp_dir().join(format!("vixel-browser-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-browser-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("zdir")).unwrap();
         std::fs::write(dir.join("alpha.txt"), b"x").unwrap();

@@ -1,4 +1,4 @@
-# vixel
+# Modaline
 
 A keyboard-first, **vim-style pixel art editor** with Aseprite-grade rendering —
 a native GUI window (not a terminal) in Rust.
@@ -22,7 +22,7 @@ nix develop
 cargo run --release
 ```
 
-`steam-run ./target/release/vixel` still works as a fallback.
+`steam-run ./target/release/modaline` still works as a fallback.
 
 ## Keymap
 
@@ -125,10 +125,10 @@ keyboard-first, but the mouse is fully wired.)
 | `:exportcfg <stem> [--frames a b] [--tag name] [--layers ...] [--merge] [--trim] [--padding n]` | configured sheet/GIF/meta export |
 | `:exportcfg <stem> --sequence [--per-layer] [--pattern <tpl>]` | PNG sequence with `{frame}/{layer}/{tag}/{title}/{duration}` |
 | `:exportcfg <stem> --layout h\|v\|rows\|columns\|packed [--columns n] [--rows n] [--border n] [--shape n] [--inner n] [--extrude n]` | sheet layout, padding and extrusion |
-| `:exportcfg <stem> --atlas vixel\|hash\|array [--gif-loop n] [--gif-colors n] [--gif-dither]` | atlas metadata and GIF options |
+| `:exportcfg <stem> --atlas modaline\|hash\|array [--gif-loop n] [--gif-colors n] [--gif-dither]` | atlas metadata and GIF options |
 | `:celselect <layer> <frame>` / `:celclear` / `:exportcels <dir>` | multi-cel selection and per-cel PNG export |
 | `:celcopy` / `:celcut` / `:celpaste` / `:celdel` / `:celinfo` | whole-cel clipboard, empty cel vs frame, cel status |
-| `vixel --export-tileset in.ase [out.png]` | headless atlas export |
+| `modaline --export-tileset in.ase [out.png]` | headless atlas export |
 | `:tilepick` / `:tileerase` | pick the tile under the cursor / place the empty tile |
 | `:fliph` / `:flipv` / `:rot90` | mirror H / V / rotate 90° (selection if any, else whole sprite) |
 | `:sym none\|h\|v\|both\|radial [axes]` | set symmetry (mirror painting) |
@@ -146,10 +146,10 @@ keyboard-first, but the mouse is fully wired.)
 | `:rotsprite on\|off` / `:pivot <x> <y>\|clear` | supersampled rotation and a custom transform pivot |
 | `:text <string>` | stamp 8x8 bitmap text at the cursor |
 | `:textobj <string>` | create/edit an editable text object (stored in cel user data) |
-| `:textfont vixel` / `:textsize <8-64>` / `:textalign left\|center\|right` | text tool font, size and alignment |
+| `:textfont modaline` / `:textsize <8-64>` / `:textalign left\|center\|right` | text tool font, size and alignment |
 | `:grid <px>` / `:snap [on\|off]` | design grid and snapping |
 | `:brush <1-64>` / `:brush square\|circle <n>` / `:brush spacing <pct>` | brush size, built-in shape, stamp spacing |
-| `:brush load\|save\|use\|list [name]` | custom PNG brush and the `vixel/brushes` library |
+| `:brush load\|save\|use\|list [name]` | custom PNG brush and the `modaline/brushes` library |
 | `:pressure <0-100>` / `:pressure auto` | manual pressure override; `auto` follows pen force |
 | `:spray <dots> [radius]` / `:shade <pct>` / `:blur <radius>` | airbrush, shade, and blur-tool depth |
 | `:contour [width] [inside\|outside]` | contour the cursor region with the chosen ring |
@@ -256,7 +256,7 @@ src/
   ase.rs      `.ase` / `.aseprite` import + export
   palette.rs  `.gpl` / `.hex` / `.pal` palette I/O
   ops.rs      an `Op` list replayed through `Editor::apply`
-  config.rs   `$XDG_CONFIG_HOME/vixel/config.json`
+  config.rs   `$XDG_CONFIG_HOME/modaline/config.json`
   lib.rs      the model half as a library (no GUI dependency)
   main.rs     window + run_native
 ```
@@ -297,15 +297,15 @@ modes), **keyboard pan/brush-size**, **contextual status hints + `:tips`**, and
 ## Headless CLI
 
 ```sh
-vixel -b in.ase --sheet out.png --data out.json --scale 2 --frame-range 1 8
-vixel -b in.vpx --gif out.gif --gif-loop 0 --gif-dither --gif-colors 64
-vixel -b in.vpx --color-mode indexed --dither bayer4 --save-as out.ase
-vixel -b in.vpx --list-tags --list-layers
-vixel -b in.ase --split-layers out/ --split-tags tags/ --palette pal.gpl
-vixel -b in.ase --split-grid grid/ --columns 4 --rows 2 --export-tileset tiles.png
+modaline -b in.ase --sheet out.png --data out.json --scale 2 --frame-range 1 8
+modaline -b in.vpx --gif out.gif --gif-loop 0 --gif-dither --gif-colors 64
+modaline -b in.vpx --color-mode indexed --dither bayer4 --save-as out.ase
+modaline -b in.vpx --list-tags --list-layers
+modaline -b in.ase --split-layers out/ --split-tags tags/ --palette pal.gpl
+modaline -b in.ase --split-grid grid/ --columns 4 --rows 2 --export-tileset tiles.png
 ```
 
-`-b/--batch` never opens a window. Run `vixel -b --help` for all options
+`-b/--batch` never opens a window. Run `modaline -b --help` for all options
 (save-as/sheet/data/gif, filters, trim/crop, layouts, atlas metadata, lists).
 
 Aseprite scripting (Lua 5.4 via `mlua`) and `.aseprite-extension` packages are
@@ -318,7 +318,7 @@ custom GPU shaders.
 
 ## License
 
-vixel is free software under the **GNU General Public License v3.0 or later**
+Modaline is free software under the **GNU General Public License v3.0 or later**
 (`GPL-3.0-or-later`). See [`LICENSE`](LICENSE) for the full text. There is no
 warranty; use at your own risk.
 
@@ -326,5 +326,5 @@ warranty; use at your own risk.
   see [`tests/fixtures/README.md`](tests/fixtures/README.md).
 - Palettes, fonts and dependency notices are listed in
   [`THIRD_PARTY.md`](THIRD_PARTY.md).
-- Aseprite is a trademark of Igara Studio S.A.; vixel is an independent
+- Aseprite is a trademark of Igara Studio S.A.; Modaline is an independent
   project, not affiliated with or endorsed by Aseprite.

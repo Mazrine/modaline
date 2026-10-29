@@ -1,12 +1,12 @@
-//! Headless batch mode: `vixel -b input [options]`.
+//! Headless batch mode: `modaline -b input [options]`.
 
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 
-use vixel::editor::Editor;
-use vixel::io;
-use vixel::sprite::{ColorMode, DitherMode};
+use modaline::editor::Editor;
+use modaline::io;
+use modaline::sprite::{ColorMode, DitherMode};
 
 pub fn run(args: &[String]) -> Result<()> {
     let mut input: Option<PathBuf> = None;
@@ -160,7 +160,7 @@ pub fn run(args: &[String]) -> Result<()> {
         i += 1;
     }
 
-    let input = input.context("usage: vixel -b <input> [options] (try --help)")?;
+    let input = input.context("usage: modaline -b <input> [options] (try --help)")?;
     let mut editor = Editor::new(1, 1);
     editor.replace_sprite(io::load_any(&input)?);
     if let Some((x, y, w, h)) = crop {
@@ -176,7 +176,7 @@ pub fn run(args: &[String]) -> Result<()> {
         editor.set_color_mode(mode);
     }
     if let Some(path) = script_path.as_ref() {
-        let out = vixel::script::run_file(&mut editor, path).map_err(anyhow::Error::msg)?;
+        let out = modaline::script::run_file(&mut editor, path).map_err(anyhow::Error::msg)?;
         if !out.is_empty() {
             println!("{out}");
         }
@@ -271,7 +271,7 @@ pub fn run(args: &[String]) -> Result<()> {
                 .or(Some(&input))
                 .and_then(|p| p.file_stem())
                 .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "vixel".into());
+                .unwrap_or_else(|| "modaline".into());
             io::export_meta_format(view, &sheet, &image_name, size, data, &cfg, &title)?;
             println!("{}", data.display());
         }
@@ -299,7 +299,7 @@ pub fn run(args: &[String]) -> Result<()> {
             .or(Some(&input))
             .and_then(|p| p.file_stem())
             .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "vixel".into());
+            .unwrap_or_else(|| "modaline".into());
         for layer in 0..view.layers.len() {
             if view.layers[layer].group {
                 continue;
@@ -358,7 +358,7 @@ pub fn run(args: &[String]) -> Result<()> {
     }
     if let Some(path) = palette_path.as_ref() {
         let view = view.as_ref().unwrap();
-        vixel::palette::save(&view.palette, path)?;
+        modaline::palette::save(&view.palette, path)?;
         println!("{}", path.display());
     }
 
@@ -386,7 +386,7 @@ pub fn run(args: &[String]) -> Result<()> {
 
 fn print_help() {
     println!(
-        "vixel -b <input> [options]\n\
+        "modaline -b <input> [options]\n\
          \n\
          Outputs:\n\
          \x20 --save-as <path>       save transformed sprite (.ase/image/.vpx)\n\
@@ -399,7 +399,7 @@ fn print_help() {
          \x20 --color-mode auto|rgba|grayscale|indexed  --dither none|bayer2|bayer4|bayer8|floyd\n\
          \x20 --layout h|v|rows|columns|packed  --columns N  --rows N\n\
          \x20 --border N  --shape N  --inner N  --extrude N  --padding N\n\
-         \x20 --atlas vixel|hash|array  --gif-loop N  --gif-colors N  --gif-dither\n\
+         \x20 --atlas modaline|hash|array  --gif-loop N  --gif-colors N  --gif-dither\n\
          \x20 --filename <tpl>  --ignore-empty  --merge\n\
          Splits:\n\
          \x20 --split-layers <dir>  --split-tags <dir>  --split-slices <dir>\n\

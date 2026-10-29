@@ -38,7 +38,7 @@ pub struct Config {
     pub undo_limit: usize,
     /// The renderer asked for at startup: "glow" (default) or "wgpu". The
     /// request is honoured only by a build with the `wgpu` feature; otherwise
-    /// vixel says so and falls back to glow.
+    /// modaline says so and falls back to glow.
     pub renderer: String,
     /// Recently opened files, newest first (`:recent`).
     pub recent: Vec<String>,
@@ -134,15 +134,15 @@ impl Default for Config {
     }
 }
 
-/// `$XDG_CONFIG_HOME/vixel`, else `~/.config/vixel`.
+/// `$XDG_CONFIG_HOME/modaline`, else `~/.config/modaline`.
 pub(crate) fn dir() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("vixel"))
+    Some(base.join("modaline"))
 }
 
-/// `$XDG_CONFIG_HOME/vixel/config.json`, else `~/.config/vixel/config.json`.
+/// `$XDG_CONFIG_HOME/modaline/config.json`, else `~/.config/modaline/config.json`.
 pub fn path() -> Option<PathBuf> {
     dir().map(|d| d.join("config.json"))
 }
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn the_config_round_trips_through_a_file() {
-        let dir = std::env::temp_dir().join(format!("vixel-config-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-config-{}", std::process::id()));
         let path = dir.join("config.json");
         let mut c = Config {
             zoom: 7,

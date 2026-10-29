@@ -15,10 +15,10 @@
 ## How to resume
 
 ```sh
-cd ~/projects/vixel
+cd ~/projects/modaline
 cargo test
 cargo clippy --all-targets
-steam-run cargo run --release      # or: cargo build --release && steam-run ./target/release/vixel
+steam-run cargo run --release      # or: cargo build --release && steam-run ./target/release/modaline
 ```
 
 Read, in order:
@@ -105,7 +105,7 @@ Read, in order:
     used to receive the `.vpx` JSON) and only quits after a successful save,
     reporting a failed one instead of exiting. 2 new tests (75 total).
 19. **Autosave / crash recovery** — a dirty sprite is written to
-    `$XDG_CONFIG_HOME/vixel/recovery.vpx` every 30 s; a successful save or a
+    `$XDG_CONFIG_HOME/modaline/recovery.vpx` every 30 s; a successful save or a
     forced quit removes it, so a clean session never resurrects a stale
     snapshot. `:recover [file]` loads it (dirty, with no project path) so `:w`
     names the destination, and startup offers it in the status line instead of
@@ -198,7 +198,7 @@ Read, in order:
     and embedded tilesets but there is no fixture or consumer for editing. It
     moved to `docs/ROADMAP.md` → "Explicitly out of scope" with that plan and
     the re-open condition. P4 is otherwise empty. No code changed; 97 tests.
-37. **Parity programme opened** — the capability review found vixel at roughly
+37. **Parity programme opened** — the capability review found Modaline at roughly
     60% of Aseprite's feature surface (~80–85% of the core hand-drawn loop). P5
     (full capability parity) is now in `docs/ROADMAP.md`; the living matrix is
     `docs/ASEPRITE_PARITY.md`; the detailed rationale/architecture is in
@@ -328,7 +328,7 @@ Read, in order:
     ink math and per-tool/alpha-lock behaviour. `:ink`/`:alphalock` and a panel
     selector.
 56. **P5-19 — custom brushes** — `Brush` coverage masks with square/circle
-    built-ins and PNG customs; percentage spacing; the `vixel/brushes` library
+    built-ins and PNG customs; percentage spacing; the `modaline/brushes` library
     (`:brush load|save|use|list`); freehand, shapes and symmetry stamp the
     mask; cursor previews its coverage. 4 new tests (169 total): builtins, PNG
     round trip, custom-mask limits, circle/shape/spacing.
@@ -542,6 +542,11 @@ Read, in order:
   for Sweetie 16 (CC0), font8x8 (MIT), egui fonts (OFL/UFL) and dependency
   licenses; Aseprite trademark disclaimer. No code changes.
 
+108. **Renamed to Modaline** — crate/binary/tests, UI titles/help/tips, config
+  and extension directories (`~/.config/modaline`), docs, flake and fixtures
+  README. No behavior change; 292 tests still pass. The old `vixel` config dir
+  is not migrated (pre-release).
+
 ## Next step (exact)
 
 **P6 is complete (7/7); P7 is open (1/5).** P7-00 (pen pressure) landed with
@@ -585,7 +590,7 @@ that remain after P7. Anything marked Missing/Partial in
 - Tilemap layers are rasterized on `.ase` import; tilesets are not kept (tile
   editing is out of scope, see ROADMAP).
 - `.ase` import ignores external tileset files (flag 1) and cel z-index.
-- `.ase` files exported by vixel before this batch have non-conformant chunk
+- ``.ase` files exported by Modaline before this batch have non-conformant chunk
   sizes and may not load; re-export them with the current build.
 - Lasso/polygon are mouse-driven; keyboard selection is marquee (`v`) + magic
   wand (`w`).

@@ -1959,6 +1959,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "modaline"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "eframe",
+ "evdev",
+ "flate2",
+ "flic",
+ "font8x8",
+ "image",
+ "mlua",
+ "pcx",
+ "quick-xml 0.38.4",
+ "serde",
+ "serde_json",
+ "zip",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3565,25 +3584,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "vixel"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "eframe",
- "evdev",
- "flate2",
- "flic",
- "font8x8",
- "image",
- "mlua",
- "pcx",
- "quick-xml 0.38.4",
- "serde",
- "serde_json",
- "zip",
-]
 
 [[package]]
 name = "walkdir"

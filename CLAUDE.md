@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Context for Claude Code (and other agents) working on **vixel**.
+Context for Claude Code (and other agents) working on **Modaline**.
 
 ## Project
 
@@ -13,7 +13,7 @@ checkerboard, onion skin, per-layer blend modes — all driven by vim keys.
 ```sh
 cargo build && cargo test && cargo clippy --all-targets
 cargo run --release
-steam-run ./target/release/vixel   # NixOS: needed for wayland/xkbcommon libs
+steam-run ./target/release/modaline   # NixOS: needed for wayland/xkbcommon libs
 ```
 
 ## Rules

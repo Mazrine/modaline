@@ -1,4 +1,4 @@
-//! vixel's model half: sprites, cels, colour, palettes, file i/o and the editor
+//! modaline's model half: sprites, cels, colour, palettes, file i/o and the editor
 //! state machine.
 //!
 //! It has no GUI dependency on purpose, so another tool can read, composite or

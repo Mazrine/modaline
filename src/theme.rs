@@ -137,7 +137,7 @@ pub fn install_font(ctx: &egui::Context, spec: &str, size: f32) -> Result<()> {
     if !spec.is_empty() && !spec.eq_ignore_ascii_case("default") {
         let bytes = std::fs::read(spec).with_context(|| format!("read font {spec}"))?;
         fonts.font_data.insert(
-            "vixel-ui".into(),
+            "modaline-ui".into(),
             Arc::new(egui::FontData::from_owned(bytes)),
         );
         for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
@@ -145,7 +145,7 @@ pub fn install_font(ctx: &egui::Context, spec: &str, size: f32) -> Result<()> {
                 .families
                 .entry(family)
                 .or_default()
-                .insert(0, "vixel-ui".into());
+                .insert(0, "modaline-ui".into());
         }
     }
     ctx.set_fonts(fonts);
@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn a_theme_file_round_trips_and_applies_missing_fields() {
-        let dir = std::env::temp_dir().join(format!("vixel-theme-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-theme-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("mine.json");
         let mut custom = builtin("midnight").unwrap();

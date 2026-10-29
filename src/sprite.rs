@@ -415,7 +415,7 @@ fn tag_color() -> Rgba {
     Rgba(120, 170, 255, 255)
 }
 
-/// Where an opaque `.ase` chunk sat relative to the chunks vixel understands.
+/// Where an opaque `.ase` chunk sat relative to the chunks modaline understands.
 /// User-data chunks attach to the preceding object, so preserving this anchor
 /// keeps slices, tag/layer/cel user data and unknown chunks attached across an
 /// open→save round trip.
@@ -489,7 +489,7 @@ impl UserData {
             text,
             font: get("font")
                 .and_then(|v| v.as_string())
-                .unwrap_or("vixel")
+                .unwrap_or("modaline")
                 .to_string(),
             size: get("size").and_then(|v| v.as_i32()).unwrap_or(8).max(1) as u32,
             align: get("align")

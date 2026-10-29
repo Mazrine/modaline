@@ -1,6 +1,6 @@
 # Pen and tablet support
 
-vixel reads pen **pressure** directly from Linux evdev, so both a Wacom tablet
+Modaline reads pen **pressure** directly from Linux evdev, so both a Wacom tablet
 using the kernel/X driver and an OpenTabletDriver (OTD) virtual tablet work on
 X11, where winit/egui expose no pressure at all.
 
@@ -20,7 +20,7 @@ OTD recovers on its own.
 
 ## Requirements
 
-The user running vixel must be able to read `/dev/input/event*`:
+The user running Modaline must be able to read `/dev/input/event*`:
 
 ```sh
 groups            # needs "input"
@@ -35,7 +35,7 @@ users.users.youruser.extraGroups = [ "input" ];
 hardware.opentabletdriver.enable = true;
 ```
 
-OTD users: vixel prefers a device whose name contains `OpenTabletDriver`, then
+OTD users: Modaline prefers a device whose name contains `OpenTabletDriver`, then
 `Wacom`, then `pen`/`stylus`/`tablet`. When OTD is running it grabs the physical
 tablet, so the virtual device is the one that reports pressure.
 
@@ -72,4 +72,4 @@ tablet, so the virtual device is the one that reports pressure.
 3. Pressure is always 100% → a manual `:pressure` override is active; run
    `:pressure auto`.
 4. Clicks work but no pressure → another process (OTD) grabbed the physical
-   device; vixel reads the OTD virtual tablet instead. Make sure OTD is running.
+   device; Modaline reads the OTD virtual tablet instead. Make sure OTD is running.

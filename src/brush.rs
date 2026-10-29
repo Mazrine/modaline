@@ -127,12 +127,12 @@ pub fn save(brush: &Brush, path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// `$XDG_CONFIG_HOME/vixel/brushes`, else `~/.config/vixel/brushes`.
+/// `$XDG_CONFIG_HOME/modaline/brushes`, else `~/.config/modaline/brushes`.
 pub fn dir() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("vixel").join("brushes"))
+    Some(base.join("modaline").join("brushes"))
 }
 
 /// Library names (PNG stems), sorted.
@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn png_brushes_round_trip_and_list() {
-        let dir = std::env::temp_dir().join(format!("vixel-brush-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-brush-{}", std::process::id()));
         let brush = Brush::new("test", 3, 2, vec![0, 255, 0, 128, 64, 255]);
         let path = dir.join("test.png");
         save(&brush, &path).unwrap();

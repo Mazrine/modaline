@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for AI agents working on **vixel** — a keyboard-first, vim-style pixel
+Guidance for AI agents working on **Modaline** — a keyboard-first, vim-style pixel
 art editor in Rust (native GUI, not a terminal).
 
 ## What this is
@@ -18,7 +18,7 @@ cargo build
 cargo test
 cargo clippy --all-targets        # must be clean before committing
 cargo run --release
-steam-run ./target/release/vixel  # fallback without the devShell
+steam-run ./target/release/modaline  # fallback without the devShell
 ```
 
 The GUI can't run headless; verify with `cargo test` (model logic) and, on a
@@ -169,7 +169,7 @@ thin shells:
 - UI strings go through `View::tr(key)` with keys in `lang/en.json`; add the
   translation to `lang/pt-BR.json` or it falls back to English.
 - Status messages are `Status` values: build one with `crate::status!` in the
-  library or `vixel::status!` in the shell so the `format!` template is
+  library or `modaline::status!` in the shell so the `format!` template is
   recorded (plain `.into()` literals translate by exact text). Add the English
   template to `lang/en.json` `messages` and its translation to
   `lang/pt-BR.json`; enum names embedded in messages go in both `values` maps;

@@ -1737,7 +1737,7 @@ mod tests {
     #[test]
     fn color_mode_and_pixel_ratio_round_trip_through_ase() {
         use crate::sprite::ColorMode;
-        let dir = std::env::temp_dir().join(format!("vixel-ase-mode-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-ase-mode-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         for mode in [ColorMode::Rgba, ColorMode::Grayscale, ColorMode::Indexed] {
             let mut s = Sprite::new(4, 4);
@@ -1772,7 +1772,7 @@ mod tests {
         s.layers[0].prefer_linked = true;
         s.color_mode = crate::sprite::ColorMode::Rgba;
 
-        let path = tmp("vixel_ase_linked_write.ase");
+        let path = tmp("modaline_ase_linked_write.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let body = walk_chunks(&data)
@@ -1799,7 +1799,7 @@ mod tests {
         let mut s = Sprite::new(1, 1);
         s.set(0, 0, 0, 0, Rgba(255, 0, 0, 255));
         s.cels[0][0].z_index = -3;
-        let path = tmp("vixel_ase_celz.ase");
+        let path = tmp("modaline_ase_celz.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let body = walk_chunks(&data)
@@ -1835,7 +1835,7 @@ mod tests {
             tilemap: None,
         };
         let composite = s.composite(0);
-        let path = tmp("vixel_ase_bounds.ase");
+        let path = tmp("modaline_ase_bounds.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let body = walk_chunks(&data)
@@ -1861,7 +1861,7 @@ mod tests {
             gamma: 1.0,
             icc: vec![0, 1, 2, 3, 4, 5],
         });
-        let path = tmp("vixel_ase_icc.ase");
+        let path = tmp("modaline_ase_icc.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let body = walk_chunks(&data)
@@ -1893,7 +1893,7 @@ mod tests {
     fn linear_profile_is_written_as_fixed_gamma() {
         let mut s = Sprite::new(1, 1);
         s.color_profile = crate::sprite::ColorProfile::Linear;
-        let path = tmp("vixel_ase_linear.ase");
+        let path = tmp("modaline_ase_linear.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let body = walk_chunks(&data)
@@ -1917,7 +1917,7 @@ mod tests {
         let profile = a.ase_profile.clone().expect("prop.ase has an ICC profile");
         assert_eq!(profile.kind, 2);
         assert_eq!(profile.icc.len(), 536);
-        let out = tmp("vixel_ase_icc_fixture.ase");
+        let out = tmp("modaline_ase_icc_fixture.ase");
         save(&a, &out).unwrap();
         let b = load(&out).unwrap();
         let _ = std::fs::remove_file(&out);
@@ -1929,7 +1929,7 @@ mod tests {
         let mut s = Sprite::new(2, 2);
         s.grid = (8, 6);
         s.grid_origin = (-4, 7);
-        let path = tmp("vixel_ase_grid.ase");
+        let path = tmp("modaline_ase_grid.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         assert_eq!(i16_at(&data, 36), -4);
@@ -1954,7 +1954,7 @@ mod tests {
             repeat: 0,
             user_data: None,
         });
-        let path = tmp("vixel_ase_tag3.ase");
+        let path = tmp("modaline_ase_tag3.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let body = walk_chunks(&data)
@@ -1978,7 +1978,7 @@ mod tests {
         s.add_frame_after(0);
         s.set(0, 1, 1, 0, Rgba(0, 255, 0, 255));
 
-        let path = std::env::temp_dir().join("vixel_ase_roundtrip.ase");
+        let path = std::env::temp_dir().join("modaline_ase_roundtrip.ase");
         save(&s, &path).unwrap();
         let loaded = load(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2012,7 +2012,7 @@ mod tests {
         s.layers[1].background = true;
         s.layers[1].reference = true;
 
-        let path = std::env::temp_dir().join("vixel_ase_groups.ase");
+        let path = std::env::temp_dir().join("modaline_ase_groups.ase");
         save(&s, &path).unwrap();
         let loaded = load(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2031,7 +2031,7 @@ mod tests {
         let mut s = Sprite::new(1, 1);
         s.set_background_color(Some(Rgba(12, 34, 56, 255)));
         s.user_data.as_mut().unwrap().text = "sprite note".into();
-        let path = std::env::temp_dir().join("vixel_ase_background.ase");
+        let path = std::env::temp_dir().join("modaline_ase_background.ase");
         save(&s, &path).unwrap();
         let loaded = load(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2059,7 +2059,7 @@ mod tests {
         let mut s = Sprite::new(2, 1);
         s.set(0, 0, 0, 0, Rgba(10, 10, 10, 255));
         s.set(0, 0, 1, 0, Rgba(200, 200, 200, 128));
-        let (loaded, depth) = saved_depth(&s, "vixel_ase_gray.ase");
+        let (loaded, depth) = saved_depth(&s, "modaline_ase_gray.ase");
         assert_eq!(depth, 16);
         assert_eq!(loaded.get(0, 0, 0, 0), Rgba(10, 10, 10, 255));
         assert_eq!(loaded.get(0, 0, 1, 0), Rgba(200, 200, 200, 128));
@@ -2071,7 +2071,7 @@ mod tests {
         s.set(0, 0, 0, 0, Rgba(255, 0, 0, 255));
         s.set(0, 0, 1, 0, Rgba(0, 0, 255, 128));
         s.set(0, 0, 2, 0, Rgba(0, 0, 0, 0));
-        let (loaded, depth) = saved_depth(&s, "vixel_ase_indexed.ase");
+        let (loaded, depth) = saved_depth(&s, "modaline_ase_indexed.ase");
         assert_eq!(depth, 8);
         assert_eq!(loaded.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
         assert_eq!(loaded.get(0, 0, 1, 0), Rgba(0, 0, 255, 128));
@@ -2084,7 +2084,7 @@ mod tests {
         for x in 0..300u32 {
             s.set(0, 0, x, 0, Rgba((x % 256) as u8, (x / 256) as u8, 7, 255));
         }
-        let (loaded, depth) = saved_depth(&s, "vixel_ase_rgba.ase");
+        let (loaded, depth) = saved_depth(&s, "modaline_ase_rgba.ase");
         assert_eq!(depth, 32);
         assert_eq!(loaded.get(0, 0, 299, 0), Rgba(43, 1, 7, 255));
     }
@@ -2094,7 +2094,7 @@ mod tests {
         let mut s = Sprite::new(1, 1);
         s.set(0, 0, 0, 0, Rgba(255, 255, 255, 255));
         s.cels[0][0].opacity = 96;
-        let (loaded, _) = saved_depth(&s, "vixel_ase_celop.ase");
+        let (loaded, _) = saved_depth(&s, "modaline_ase_celop.ase");
         assert_eq!(loaded.cels[0][0].opacity, 96);
         assert!(loaded.composite(0)[0].3 < 100);
     }
@@ -2222,7 +2222,7 @@ mod tests {
         ]));
         data.extend(ase_frame(&[(CHUNK_CEL, cel_chunk(0, 1, &link))]));
 
-        let s = load_bytes("vixel_ase_linked.ase", data);
+        let s = load_bytes("modaline_ase_linked.ase", data);
         assert_eq!(s.frames.len(), 2);
         assert_eq!(s.get(0, 0, 0, 0), Rgba(255, 0, 0, 255));
         assert_eq!(s.get(0, 1, 0, 0), Rgba(255, 0, 0, 255));
@@ -2287,7 +2287,7 @@ mod tests {
             (CHUNK_CEL, cel_chunk(0, 3, &cel)),
         ]));
 
-        let s = load_bytes("vixel_ase_tilemap.ase", data);
+        let s = load_bytes("modaline_ase_tilemap.ase", data);
         assert_eq!(s.tilesets.len(), 1);
         assert_eq!(s.tilesets[0].id, 5, "ID retained, not a list index");
         assert_eq!(s.tilesets[0].base_index, 1);
@@ -2308,7 +2308,7 @@ mod tests {
         assert_eq!(s.get(0, 0, 3, 1), Rgba(0, 0, 255, 255));
 
         // Written tileset + type-3 cel survive an open→save→open round trip.
-        let path = tmp("vixel_tilemap_roundtrip.ase");
+        let path = tmp("modaline_tilemap_roundtrip.ase");
         save(&s, &path).unwrap();
         let back = load(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2323,7 +2323,7 @@ mod tests {
     #[test]
     fn external_png_tileset_pixels_are_resolved_on_load() {
         use crate::sprite::{ExternalFile, TileRef, TilemapCel, Tileset};
-        let dir = std::env::temp_dir().join(format!("vixel-ext-ts-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-ext-ts-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let mut img = image::RgbaImage::new(2, 2);
         for (i, c) in [
@@ -2388,7 +2388,7 @@ mod tests {
             image: Vec::new(),
             external: Some((7, 9)),
         });
-        let path = tmp("vixel_external_tileset.ase");
+        let path = tmp("modaline_external_tileset.ase");
         save(&s, &path).unwrap();
         let back = load(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2422,7 +2422,7 @@ mod tests {
             repeat: 0,
             user_data: None,
         });
-        let path = tmp("vixel_ase_tags.ase");
+        let path = tmp("modaline_ase_tags.ase");
         save(&s, &path).unwrap();
         let loaded = load(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2499,7 +2499,7 @@ mod tests {
             let mut s = Sprite::new(1, 1);
             s.set(0, 0, 0, 0, Rgba(1, 2, 3, 255));
             s.layers[0].blend = mode;
-            let path = tmp(&format!("vixel_ase_blend_{mode:?}.ase"));
+            let path = tmp(&format!("modaline_ase_blend_{mode:?}.ase"));
             save(&s, &path).unwrap();
             let back = load(&path).unwrap();
             let _ = std::fs::remove_file(&path);
@@ -2520,7 +2520,7 @@ mod tests {
             repeat: 0,
             user_data: None,
         });
-        let path = tmp("vixel_ase_counts.ase");
+        let path = tmp("modaline_ase_counts.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2548,10 +2548,10 @@ mod tests {
             (0x2020, vec![9, 9]), // after the cel (user-data shape)
             (0x2222, vec![7]),    // still after the cel
         ]));
-        let s = load_bytes("vixel_ase_unknown.ase", data);
+        let s = load_bytes("modaline_ase_unknown.ase", data);
         assert_eq!(s.raw_chunks.len(), 4);
 
-        let path = tmp("vixel_ase_unknown_rt.ase");
+        let path = tmp("modaline_ase_unknown_rt.ase");
         save(&s, &path).unwrap();
         let out = std::fs::read(&path).unwrap();
         let chunks = walk_chunks(&out);
@@ -2587,7 +2587,7 @@ mod tests {
                 .join("tests/fixtures/ase")
                 .join(name);
             let a = load(&src).unwrap_or_else(|e| panic!("{name}: {e}"));
-            let out = tmp(&format!("vixel_ase_rt_{name}"));
+            let out = tmp(&format!("modaline_ase_rt_{name}"));
             save(&a, &out).unwrap();
             let b = load(&out).unwrap();
             let _ = std::fs::remove_file(&out);
@@ -2633,7 +2633,7 @@ mod tests {
         s.set(2, 0, 10, 8, color);
         s.set(2, 0, 11, 8, Rgba::TRANSPARENT);
 
-        let out = tmp("vixel_ase_indexed_edit.ase");
+        let out = tmp("modaline_ase_indexed_edit.ase");
         save(&s, &out).unwrap();
         let data = std::fs::read(&out).unwrap();
         assert_eq!(data[28], ti, "header transparent index");
@@ -2662,7 +2662,7 @@ mod tests {
         let mut s = Sprite::new(8, 8);
         let object = TextObject {
             text: "Hi".into(),
-            font: "vixel".into(),
+            font: "modaline".into(),
             size: 16,
             align: 1,
             antialias: false,
@@ -2672,7 +2672,7 @@ mod tests {
         let ud = s.cels[0][0].user_data.get_or_insert_default();
         assert!(ud.set_text_object(&object));
         ud.color = Some(Rgba(1, 2, 3, 4));
-        let path = tmp("vixel_ase_text_object.ase");
+        let path = tmp("modaline_ase_text_object.ase");
         save(&s, &path).unwrap();
         let back = load(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2694,7 +2694,7 @@ mod tests {
             kind: 1,
             name: "tiles.ase".into(),
         });
-        let path = tmp("vixel_ase_external.ase");
+        let path = tmp("modaline_ase_external.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let body = walk_chunks(&data)
@@ -2775,11 +2775,11 @@ mod tests {
             (0x2016, vec![0u8; 20]),
             (0x2017, vec![1, 2, 3]),
         ]));
-        let s = load_bytes("vixel_ase_deprecated.ase", data);
+        let s = load_bytes("modaline_ase_deprecated.ase", data);
         for kind in [0x2006, 0x2016, 0x2017] {
             assert!(s.raw_chunks.iter().any(|c| c.kind == kind), "{kind:#x}");
         }
-        let path = tmp("vixel_ase_deprecated_rt.ase");
+        let path = tmp("modaline_ase_deprecated_rt.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let back = load(&path).unwrap();
@@ -2818,7 +2818,7 @@ mod tests {
                 flags: 2,
             }),
         });
-        let path = tmp("vixel_ase_slice.ase");
+        let path = tmp("modaline_ase_slice.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let body = walk_chunks(&data)
@@ -2847,7 +2847,7 @@ mod tests {
         assert_eq!(a.slices[0].name, "slice1");
         assert!(a.slices[0].nine_patch && a.slices[0].pivot);
         assert_eq!(a.slices[0].keys.len(), 1);
-        let out = tmp("vixel_ase_slice_fixture.ase");
+        let out = tmp("modaline_ase_slice_fixture.ase");
         save(&a, &out).unwrap();
         let b = load(&out).unwrap();
         let _ = std::fs::remove_file(&out);
@@ -2862,7 +2862,7 @@ mod tests {
         let uuid = [1, 2, 3, 4, 5, 6, 0x47, 8, 0x89, 10, 11, 12, 13, 14, 15, 16];
         s.layers[0].uuid = Some(uuid);
 
-        let path = tmp("vixel_ase_layer_uuid.ase");
+        let path = tmp("modaline_ase_layer_uuid.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         assert_eq!(u32_at(&data, 14) & 4, 4, "header UUID flag");
@@ -2884,7 +2884,7 @@ mod tests {
 
         let mut plain = Sprite::new(1, 1);
         plain.layers[0].uuid = None;
-        let path = tmp("vixel_ase_no_uuid.ase");
+        let path = tmp("modaline_ase_no_uuid.ase");
         save(&plain, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2896,7 +2896,7 @@ mod tests {
         let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ase/test_nrgba.ase");
         let a = load(&src).unwrap();
         assert!(a.layers.iter().all(|l| l.uuid.is_some()));
-        let out = tmp("vixel_ase_fixture_uuid.ase");
+        let out = tmp("modaline_ase_fixture_uuid.ase");
         save(&a, &out).unwrap();
         let b = load(&out).unwrap();
         let _ = std::fs::remove_file(&out);
@@ -2920,7 +2920,7 @@ mod tests {
             (CHUNK_TAGS, one_tag("walk")),
             (CHUNK_USER_DATA, ud_chunk("tag", Some(Rgba(9, 8, 7, 255)))),
         ]));
-        let s = load_bytes("vixel_ase_userdata.ase", data);
+        let s = load_bytes("modaline_ase_userdata.ase", data);
         assert_eq!(s.layers[0].user_data.as_ref().unwrap().text, "layer");
         assert_eq!(
             s.layers[0].user_data.as_ref().unwrap().color,
@@ -2930,7 +2930,7 @@ mod tests {
         assert_eq!(s.tags[0].user_data.as_ref().unwrap().text, "tag");
         assert_eq!(s.tags[0].color, Rgba(9, 8, 7, 255));
 
-        let path = tmp("vixel_ase_userdata_rt.ase");
+        let path = tmp("modaline_ase_userdata_rt.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let uds = walk_chunks(&data)
@@ -2962,7 +2962,7 @@ mod tests {
             properties: Vec::new(),
             flags: 1,
         });
-        let path = tmp("vixel_ase_userdata_props.ase");
+        let path = tmp("modaline_ase_userdata_props.ase");
         save(&s, &path).unwrap();
         let back = load(&path).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -2982,7 +2982,7 @@ mod tests {
             .iter()
             .map(|f| f.iter().map(|c| c.user_data.clone()).collect::<Vec<_>>())
             .collect();
-        let out = tmp("vixel_ase_userdata_fixture.ase");
+        let out = tmp("modaline_ase_userdata_fixture.ase");
         save(&a, &out).unwrap();
         let b = load(&out).unwrap();
         let _ = std::fs::remove_file(&out);
@@ -3016,7 +3016,7 @@ mod tests {
         s.transparent_index = 0;
         s.color_mode = crate::sprite::ColorMode::Indexed;
 
-        let path = tmp("vixel_ase_palette_names.ase");
+        let path = tmp("modaline_ase_palette_names.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         let body = walk_chunks(&data)
@@ -3052,7 +3052,7 @@ mod tests {
         s.dither_to_palette(DitherMode::Bayer2);
         let composite = s.composite(0);
 
-        let path = tmp("vixel_ase_dither.ase");
+        let path = tmp("modaline_ase_dither.ase");
         save(&s, &path).unwrap();
         let data = std::fs::read(&path).unwrap();
         assert_eq!(u16_at(&data, 32) as usize, s.palette.len());

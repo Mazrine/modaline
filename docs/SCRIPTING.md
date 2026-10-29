@@ -63,7 +63,7 @@ integration test.
 | `app.transaction(fn)` | Runs the callback and returns its value | Covered (undo is still one script step) |
 | `app.command` | `Undo`, `Redo`, `NewLayer`, `NewFrame` | Covered; broader command set missing |
 | `Sprite` | width/height/frameCount/layerCount/activeLayer/activeFrame | Covered (read-only) |
-| `Sprite` methods | `resize`, `newLayer`, `newFrame`, `getPixel`, `setPixel`, `save`, `saveAs`, `flatten`, `crop`, `newTag`, `setFrameDuration`, `frameDuration`, `cel`, `setCelImage` | Partial: `newLayer`/`newFrame` return a 1-based index, not Aseprite userdata; pixel methods are a vixel extension to the sprite |
+| `Sprite` methods | `resize`, `newLayer`, `newFrame`, `getPixel`, `setPixel`, `save`, `saveAs`, `flatten`, `crop`, `newTag`, `setFrameDuration`, `frameDuration`, `cel`, `setCelImage` | Partial: `newLayer`/`newFrame` return a 1-based index, not Aseprite userdata; pixel methods are a Modaline extension to the sprite |
 | `Layer` | name/visible/opacity/editable/isBackground/isReference | Partial: no `cel`, `newCel`, groups or blend setters |
 | `Image` | `Image(w,h)`, `getPixel`, `setPixel`, `clear([color])`, `width`, `height`, `bounds` | Covered (detached pixel buffer) |
 | `Cel` | `layer`, `frame`, `bounds`, `image`, `isEmpty` via `sprite:cel(l, f)` | Covered as a snapshot: `image` is a copy; write back with `sprite:setCelImage(l, f, img)` |
@@ -94,7 +94,7 @@ supports `name`, `displayName`, `version`, `author` (string or `{name}`),
 `description` and `contributes.scripts`/`contributes.themes`. Installs reject
 absolute/`..` paths, more than 500 files, files over 10 MiB, or more than 50 MiB
 total. `:ext run <id>` executes contributed scripts in the sandbox; `:ext theme
-<id> [n]` applies a vixel JSON theme from the package.
+<id> [n]` applies a Modaline JSON theme from the package.
 
 ## Availability check (2026-10-28; resolved 2026-10-29)
 

@@ -11,7 +11,7 @@ pub const PRESETS: &[&str] = &["default", "gray", "pico8", "dawnbringer16"];
 
 pub fn preset(name: &str) -> Option<Vec<Rgba>> {
     Some(match name.to_ascii_lowercase().as_str() {
-        "default" | "vixel" => crate::color::default_palette(),
+        "default" | "modaline" => crate::color::default_palette(),
         "gray" | "grey" | "grayscale" | "greyscale" => (0..16)
             .map(|i| {
                 let v = (i * 17) as u8;
@@ -158,7 +158,7 @@ fn parse_jasc(text: &str) -> Vec<Rgba> {
 }
 
 fn to_gpl(palette: &[Rgba]) -> String {
-    let mut s = String::from("GIMP Palette\nName: vixel\nColumns: 8\n#\n");
+    let mut s = String::from("GIMP Palette\nName: modaline\nColumns: 8\n#\n");
     for c in palette {
         s.push_str(&format!(
             "{:3} {:3} {:3}\t#{:02x}{:02x}{:02x}\n",

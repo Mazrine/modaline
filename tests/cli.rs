@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use vixel::color::Rgba;
-use vixel::io;
-use vixel::sprite::{ColorMode, Sprite, Tag};
+use modaline::color::Rgba;
+use modaline::io;
+use modaline::sprite::{ColorMode, Sprite, Tag};
 
 fn dir(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("vixel-cli-{name}-{}", std::process::id()));
+    let d = std::env::temp_dir().join(format!("modaline-cli-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d
@@ -22,7 +22,7 @@ fn fixture(dir: &Path) -> PathBuf {
         from: 0,
         to: 1,
         color: Rgba::rgb(1, 2, 3),
-        direction: vixel::sprite::PlayDirection::Forward,
+        direction: modaline::sprite::PlayDirection::Forward,
         repeat: 0,
         user_data: None,
     });
@@ -32,7 +32,7 @@ fn fixture(dir: &Path) -> PathBuf {
 }
 
 fn run(args: &[String]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_vixel"))
+    Command::new(env!("CARGO_BIN_EXE_modaline"))
         .args(args)
         .output()
         .unwrap()
@@ -148,7 +148,7 @@ fn batch_splits_layers_tags_and_palette() {
         from: 0,
         to: 1,
         color: Rgba::rgb(1, 2, 3),
-        direction: vixel::sprite::PlayDirection::Forward,
+        direction: modaline::sprite::PlayDirection::Forward,
         repeat: 0,
         user_data: None,
     });
@@ -181,7 +181,7 @@ fn batch_splits_layers_tags_and_palette() {
 
 #[test]
 fn batch_splits_grid_slices_and_tileset() {
-    use vixel::sprite::{Slice, SliceKey, Tileset};
+    use modaline::sprite::{Slice, SliceKey, Tileset};
     let d = dir("split2");
     let mut s = Sprite::new(2, 2);
     s.slices.push(Slice {

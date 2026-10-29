@@ -1119,7 +1119,7 @@ mod tests {
 
     #[test]
     fn app_fs_is_sandboxed_to_the_project_root() {
-        let dir = std::env::temp_dir().join(format!("vixel-fs-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-fs-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut e = Editor::new(2, 2);
         e.script_root = Some(dir.clone());

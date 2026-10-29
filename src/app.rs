@@ -8,7 +8,7 @@ use crate::editor::Editor;
 use crate::gui::{self, View};
 use crate::input;
 use crate::io;
-use vixel::pen;
+use modaline::pen;
 
 /// How often a dirty sprite is snapshotted to the recovery file.
 const AUTOSAVE: Duration = Duration::from_secs(30);
@@ -47,14 +47,14 @@ impl Doc {
         view.language = config.language.clone();
         match crate::i18n::resolve(&config.language) {
             Ok(catalog) => view.i18n = crate::i18n::Translator::new(catalog),
-            Err(e) => editor.msg = vixel::status!("language: {e}"),
+            Err(e) => editor.msg = modaline::status!("language: {e}"),
         }
         view.browser_favourites = config.favourites.iter().map(PathBuf::from).collect();
         view.pen_enabled = config.pen_enabled;
         if let Some(path) = path
             && let Err(e) = editor.open_path(&path)
         {
-            editor.msg = vixel::status!("open failed: {e}");
+            editor.msg = modaline::status!("open failed: {e}");
         }
         Doc {
             editor,
@@ -78,7 +78,7 @@ impl Doc {
     }
 }
 
-pub struct VixelApp {
+pub struct ModalineApp {
     docs: Vec<Doc>,
     active: usize,
     /// Last title sent to the window manager, so a fix bundle names its part.
@@ -94,7 +94,7 @@ pub struct VixelApp {
     pen: pen::PenReader,
 }
 
-impl VixelApp {
+impl ModalineApp {
     /// `path` is the optional file from the command line. A file that will not
     /// load is reported in the status line instead of blocking startup: a bad
     /// argument must still give you an editor.
@@ -136,7 +136,7 @@ impl VixelApp {
         Self {
             docs,
             active,
-            title: "vixel".into(),
+            title: "modaline".into(),
             theme_applied: config.theme.clone(),
             font_applied: (config.ui_font.clone(), config.ui_font_size),
             config,
@@ -335,8 +335,8 @@ fn snapshot(editor: &mut Editor) {
         let _ = std::fs::create_dir_all(dir);
     }
     editor.msg = match io::save_project(&editor.sprite, &path) {
-        Ok(()) => vixel::status!("autosaved ({})", path.display()),
-        Err(e) => vixel::status!("autosave failed: {e}"),
+        Ok(()) => modaline::status!("autosaved ({})", path.display()),
+        Err(e) => modaline::status!("autosave failed: {e}"),
     };
 }
 
@@ -348,7 +348,7 @@ fn clear_recovery() {
     }
 }
 
-impl eframe::App for VixelApp {
+impl eframe::App for ModalineApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Tab navigation: Ctrl/Cmd-Tab cycles, Ctrl/Cmd-T new, Ctrl/Cmd-W close.
         let (mut next_tab, mut prev_tab, mut new_tab, mut close_tab) = (false, false, false, false);
@@ -395,13 +395,13 @@ impl eframe::App for VixelApp {
         if theme_spec != self.theme_applied {
             match crate::theme::resolve(&theme_spec) {
                 Ok(theme) => crate::theme::apply(ui.ctx(), &theme),
-                Err(e) => self.docs[self.active].editor.msg = vixel::status!("theme: {e}"),
+                Err(e) => self.docs[self.active].editor.msg = modaline::status!("theme: {e}"),
             }
             self.theme_applied = theme_spec;
         }
         if (font_spec.clone(), font_size) != self.font_applied {
             if let Err(e) = crate::theme::install_font(ui.ctx(), &font_spec, font_size) {
-                self.docs[self.active].editor.msg = vixel::status!("font: {e}");
+                self.docs[self.active].editor.msg = modaline::status!("font: {e}");
             }
             self.font_applied = (font_spec, font_size);
         }
@@ -441,8 +441,8 @@ impl eframe::App for VixelApp {
             .any(|(i, d)| i != self.active && d.editor.dirty);
         let doc = &mut self.docs[self.active];
         let title = match &doc.editor.bundle_stage {
-            Some(stage) => format!("vixel — {stage} {}", doc.view.tr("title.fix")),
-            None => format!("vixel — {}", doc.title()),
+            Some(stage) => format!("modaline — {stage} {}", doc.view.tr("title.fix")),
+            None => format!("modaline — {}", doc.title()),
         };
         if title != self.title {
             ui.ctx()
@@ -543,12 +543,12 @@ impl eframe::App for VixelApp {
 mod tests {
     use super::*;
 
-    fn app_with(count: usize) -> VixelApp {
+    fn app_with(count: usize) -> ModalineApp {
         let config = Config::default();
-        VixelApp {
+        ModalineApp {
             docs: (0..count).map(|_| Doc::new(&config, None)).collect(),
             active: 0,
-            title: "vixel".into(),
+            title: "modaline".into(),
             theme_applied: config.theme.clone(),
             font_applied: (config.ui_font.clone(), config.ui_font_size),
             config,
@@ -623,7 +623,7 @@ mod tests {
 
     #[test]
     fn closing_clean_documents_feeds_reopen_and_dirty_closes_do_not() {
-        let dir = std::env::temp_dir().join(format!("vixel-reopen-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-reopen-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("reopen.vpx");
         crate::io::save_project(&crate::sprite::Sprite::new(2, 2), &path).unwrap();

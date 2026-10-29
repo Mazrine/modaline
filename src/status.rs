@@ -10,7 +10,7 @@ use std::ops::Deref;
 
 use crate::i18n::Translator;
 
-/// Build a `Status` from a literal format template. `vixel::status!` is the
+/// Build a `Status` from a literal format template. `modaline::status!` is the
 /// version the shell modules use (they live in the binary crate).
 #[macro_export]
 macro_rules! status {

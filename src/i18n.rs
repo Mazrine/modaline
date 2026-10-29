@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn catalogs_round_trip_and_partial_files_default() {
-        let dir = std::env::temp_dir().join(format!("vixel-lang-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-lang-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("xx.json");
         let custom = Catalog {

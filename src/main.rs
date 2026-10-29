@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use eframe::egui;
 // The model lives in the library crate now. These names are what the shell
 // modules above reach through their `crate::…` paths.
-use vixel::{ase, brush, color, editor, i18n, io, layout, ops, palette, script, sprite};
+use modaline::{ase, brush, color, editor, i18n, io, layout, ops, palette, script, sprite};
 
 /// The backend this build can actually run. A `wgpu` request on a glow-only
 /// build is a warning, not a crash: losing the setting is worse than losing the
@@ -26,25 +26,25 @@ fn pick_renderer(want_wgpu: bool) -> eframe::Renderer {
     }
     #[cfg(not(feature = "wgpu"))]
     if want_wgpu {
-        eprintln!("vixel was built without the wgpu feature; using glow");
+        eprintln!("modaline was built without the wgpu feature; using glow");
     }
     let _ = want_wgpu;
     eframe::Renderer::Glow
 }
 
 fn main() -> eframe::Result {
-    // Headless tileset export: `vixel --export-tileset in.ase [out.png]`.
+    // Headless tileset export: `modaline --export-tileset in.ase [out.png]`.
     let argv: Vec<String> = std::env::args().collect();
     if argv.iter().any(|a| a == "-b" || a == "--batch") {
         if let Err(e) = cli::run(&argv) {
-            eprintln!("vixel: {e:#}");
+            eprintln!("modaline: {e:#}");
             std::process::exit(1);
         }
         return Ok(());
     }
     if let Some(pos) = argv.iter().position(|a| a == "--export-tileset") {
         let Some(input) = argv.get(pos + 1).map(PathBuf::from) else {
-            eprintln!("usage: vixel --export-tileset <file.ase|.vpx> [out.png]");
+            eprintln!("usage: modaline --export-tileset <file.ase|.vpx> [out.png]");
             std::process::exit(2);
         };
         let sprite = match input.extension().and_then(|e| e.to_str()) {
@@ -74,7 +74,7 @@ fn main() -> eframe::Result {
         }
     }
     // Optional first argument: the file to open, so another tool can launch
-    // `vixel assets/fixes/<look>.vpx` instead of making the user press `:open`.
+    // `modaline assets/fixes/<look>.vpx` instead of making the user press `:open`.
     let mut args = std::env::args_os().skip(1);
     let path = args
         .next()
@@ -96,13 +96,13 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([size.0, size.1])
-            .with_title("vixel"),
+            .with_title("modaline"),
         renderer,
         ..Default::default()
     };
     eframe::run_native(
-        "vixel",
+        "modaline",
         options,
-        Box::new(move |cc| Ok(Box::new(app::VixelApp::new(cc, path)))),
+        Box::new(move |cc| Ok(Box::new(app::ModalineApp::new(cc, path)))),
     )
 }

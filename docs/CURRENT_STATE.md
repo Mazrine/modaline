@@ -4,7 +4,7 @@ Last updated: 2026-10-28 — P1-P3 shipped; the open set is `docs/ROADMAP.md` P4
 
 ## Summary
 
-`vixel` is a working, keyboard-first pixel-art editor in Rust with a native GUI
+`modaline` is a working, keyboard-first pixel-art editor in Rust with a native GUI
 window (`eframe` 0.37, OpenGL/`glow`, wgpu-swappable). It has true 24-bit color,
 real alpha transparency, zoom, onion skinning, per-layer blend modes, animation
 frames, a full vim keymap, and `.ase`/`.aseprite` + PNG + `.vpx` file support.
@@ -177,7 +177,7 @@ L-shaped corners for the 1 px pencil/eraser.
   debug, 64 MiB, 50M instructions). Core `app`/sprite/layer/pixel API; scripts
   are one undo step. `:script <file.lua>`, `:lua <code>`, CLI `--script`; JSON
   `Op` replay remains available.
-- **CLI batch** (`vixel -b`): headless save-as/sheet/data/GIF export with
+- **CLI batch** (`modaline -b`): headless save-as/sheet/data/GIF export with
   scale, colour mode/dither, frame/tag/layer filters, trim/crop, layout and
   atlas/GIF options; `--list-*` prints structure. Splits: layers, tags, slices
   and grids; filename templates, ignore/merge, tileset and palette export.
@@ -202,7 +202,7 @@ L-shaped corners for the 1 px pencil/eraser.
   PNG sequences export per frame or per layer with `{frame}`, `{layer}`, `{tag}`,
   `{title}` and `{duration}` filename templates. Sheet layouts: horizontal,
   vertical, rows, columns, packed; border/shape/inner padding, extrusion and
-  trim, recorded in metadata. Atlas metadata can be vixel, JSON-hash or
+  trim, recorded in metadata. Atlas metadata can be `modaline`, JSON-hash or
   JSON-array (tags/layers/slices); GIF supports repeat count, palette size and
   ordered dithering. Static PNG/JPEG/BMP/TGA/WebP import and export dispatch by
   extension; JPEG flattens alpha. PCX (24-bit/paletted) and FLC/FLI (all frames
@@ -224,7 +224,7 @@ L-shaped corners for the 1 px pencil/eraser.
 - **text**: an 8x8 bitmap font at scale 1-8, stamped at the cursor as one undo
   step (`:text <string>`). The **Text tool** (`T`) places text objects on click;
   the panel edits multi-line text with live preview and commits one undo step
-  (`commit`), with font (bitmap "vixel"), size 8-64 and left/centre/right
+  (`commit`), with font (bitmap "modaline"), size 8-64 and left/centre/right
   alignment. Editable **text objects** store text, font, size,
   alignment, antialias flag and position in the cel's user-data properties and
   re-rasterise on edit (`:textobj <string>`); `.ase` text properties round-trip.
@@ -394,7 +394,7 @@ middle-drag = pan.
 
 ## Settings
 
-`$XDG_CONFIG_HOME/vixel/config.json` (or `~/.config/vixel`): window size, zoom,
+`$XDG_CONFIG_HOME/modaline/config.json` (or `~/.config/modaline`): window size, zoom,
 pixel grid, design grid, snap, onion settings, loop/ping-pong, the theme and the
 last 10 opened/saved files (`:recent`). Dropping a file on the window opens it,
 with the same dirty guard as `:open`.

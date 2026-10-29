@@ -1,5 +1,5 @@
 {
-  description = "vixel — a keyboard-first, vim-style pixel art editor";
+  description = "modaline — a keyboard-first, vim-style pixel art editor";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
@@ -36,7 +36,7 @@
               break
             fi
           done
-          echo "vixel devShell — run: cargo run --release"
+          echo "modaline devShell — run: cargo run --release"
         '';
       };
 

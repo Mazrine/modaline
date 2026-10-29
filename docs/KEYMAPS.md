@@ -1,6 +1,6 @@
 # Keymaps: vim now, Helix later
 
-vixel ships a vim-style keymap because that is what pixel-art and code people
+Modaline ships a vim-style keymap because that is what pixel-art and code people
 already know. This note records why Helix feels friendlier, what would actually
 translate to a canvas, and the phased plan (tracked as P7-01/P7-02 in
 `docs/ROADMAP.md`).
@@ -10,7 +10,7 @@ translate to a canvas, and the phased plan (tracked as P7-01/P7-02 in
 - **Selection first, then verb.** You select what you mean, see it, then press
   `d`/`y`/`c`. vim's `dw` requires knowing the motion and verb order first.
 - **One mode fewer in practice.** Insert is the odd mode; normal/replace/visual
-  read the same way. In vixel the canvas is already "normal" and drawing is a
+  read the same way. In Modaline the canvas is already "normal" and drawing is a
   momentary mode (`i`), so the mental model is close.
 - **Discoverable menus.** `space` opens a which-key-style menu instead of
   requiring memorised `:` commands.
@@ -23,7 +23,7 @@ menu and fewer mode switches — not the text objects.
 
 ## Mapping proposal (canvas)
 
-| Helix idea | vixel today | Proposed Helix preset |
+| Helix idea | Modaline today | Proposed Helix preset |
 |---|---|---|
 | `v` extends selection, then `y/x/p` | same (`v`, `y`, `x`, `p`) | keep |
 | `u` undo, `U` redo | `u`, `Ctrl-r` | `u`, `U` |

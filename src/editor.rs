@@ -727,7 +727,7 @@ impl Editor {
             snap: false,
             text_scale: 1,
             text: String::new(),
-            text_font: "vixel".into(),
+            text_font: "modaline".into(),
             text_align: 0,
             text_edit_before: None,
             play_loop: true,
@@ -2081,7 +2081,7 @@ impl Editor {
             .unwrap_or(self.fg);
         let mut object = existing.unwrap_or(TextObject {
             text: String::new(),
-            font: "vixel".into(),
+            font: "modaline".into(),
             size: self.text_scale.clamp(1, 8) * 8,
             align: self.text_align.min(2),
             antialias: false,
@@ -5143,7 +5143,7 @@ impl Editor {
 
     /// Load a sprite by extension (`.ase`/`.aseprite`, `.png`, else the JSON
     /// project) and reset transient editor state. Shared by `:open` and the
-    /// command line, so `vixel foo.vpx` and `:open foo.vpx` are one code path.
+    /// command line, so `modaline foo.vpx` and `:open foo.vpx` are one code path.
     /// The path is remembered, so `:w` with no argument writes it back.
     pub fn open_path(&mut self, path: &std::path::Path) -> anyhow::Result<()> {
         let sprite = crate::io::load_any(path)?;
@@ -5233,7 +5233,7 @@ impl Editor {
 
     /// A fix bundle has a locked `base` and an editable `fix` layer. Land on
     /// `fix` in draw mode, so the first keypress paints; a plain project is
-    /// left exactly as vixel has always opened it.
+    /// left exactly as modaline has always opened it.
     fn adopt_bundle(&mut self, path: &std::path::Path) {
         let fix = self
             .sprite
@@ -6510,7 +6510,7 @@ mod tests {
         assert_eq!(e.grid, 8, "the design grid follows the sprite grid");
 
         // The three properties survive a .vpx round trip.
-        let path = std::env::temp_dir().join(format!("vixel-props-{}.vpx", std::process::id()));
+        let path = std::env::temp_dir().join(format!("modaline-props-{}.vpx", std::process::id()));
         crate::io::save_project(&e.sprite, &path).expect("save");
         let back = crate::io::load_project(&path).expect("load");
         assert_eq!(back.pixel_aspect, (2, 1));
@@ -6737,7 +6737,7 @@ mod tests {
         assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(200, 0, 0));
         assert_eq!(e.sprite.get(0, 1, 1, 0), Rgba::rgb(0, 200, 0));
 
-        let dir = std::env::temp_dir().join(format!("vixel-cels-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-cels-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(e.export_cels(&dir).unwrap(), 2);
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
@@ -6905,7 +6905,7 @@ mod tests {
     use super::*;
 
     fn bundle_dir(tag: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("vixel-{tag}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -7178,7 +7178,7 @@ mod tests {
     fn save_path_dispatches_project_ase_and_image() {
         let mut e = Editor::new(2, 2);
         e.paint_pixel(0, 0, Rgba::rgb(1, 2, 3));
-        let dir = std::env::temp_dir().join(format!("vixel-savepath-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-savepath-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let vpx = dir.join("x.vpx");
@@ -7361,7 +7361,7 @@ mod tests {
         assert_eq!((object.x, object.y), (5, 3));
         assert_eq!(object.size, 16);
         assert_eq!(object.align, 2);
-        assert_eq!(object.font, "vixel");
+        assert_eq!(object.font, "modaline");
         assert_eq!(e.undo.len(), 1);
         assert!(!e.sprite.get(0, 0, 5, 3).is_transparent());
     }
@@ -7649,7 +7649,7 @@ mod tests {
         assert!(e.profile_summary().contains("ICC (4 bytes)"));
 
         let path =
-            std::env::temp_dir().join(format!("vixel_ase_profile_{}.vpx", std::process::id()));
+            std::env::temp_dir().join(format!("modaline_ase_profile_{}.vpx", std::process::id()));
         crate::io::save_project(&e.sprite, &path).unwrap();
         let back = crate::io::load_project(&path).unwrap();
         let _ = std::fs::remove_file(&path);

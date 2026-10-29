@@ -66,7 +66,7 @@ Nothing left in P0.
   test on real hardware.
 - **Config/theme persistence** — `0d4fa93`. Window size, zoom, pixel/design
   grid, snap, onion settings, loop/ping-pong and the theme, in
-  `$XDG_CONFIG_HOME/vixel/config.json`. **Deferred: keymap customization** —
+  `$XDG_CONFIG_HOME/modaline/config.json`. **Deferred: keymap customization** —
   `input.rs` dispatches a flat match on `Key`; remapping needs an action layer
   in front of it, and nothing has asked for a remap yet. The config already has
   an `extra` map so a keymap can be added without breaking old files.
@@ -82,7 +82,7 @@ Nothing left in P0.
 - **`:wq` dispatch by extension** — a `.ase` name no longer receives `.vpx`
   JSON, and a failed save no longer quits.
 - **Autosave / crash recovery** — a dirty sprite is snapshotted to
-  `$XDG_CONFIG_HOME/vixel/recovery.vpx` every 30 s; `:recover` loads it (dirty,
+  `$XDG_CONFIG_HOME/modaline/recovery.vpx` every 30 s; `:recover` loads it (dirty,
   no project path, ready for `:w`); a successful save or a forced quit removes
   it.
 
@@ -175,7 +175,7 @@ met; blocked tasks are marked with the reason.
   bucket, outside seed, empty stroke, text+bounds, paste/contour,
   `Op::Px`/`Op::Fill`.
 - [x] **P5-07 — `.ase` unknown-chunk pass-through + harness** (M) — deps: none.
-  Landed 2026-10-28. `Sprite.raw_chunks` keeps every chunk vixel does not parse
+  Landed 2026-10-28. `Sprite.raw_chunks` keeps every chunk Modaline does not parse
   (slices, user data, ICC, ...) with its frame and a `ChunkAnchor` (frame start,
   layer/cel/palette/tags/tileset); `save` emits each group after the same
   object and falls back to the frame end when that object was not written.
@@ -248,7 +248,7 @@ met; blocked tasks are marked with the reason.
 - [x] **P5-19 — Custom brushes** (L) — deps: P5-18.
   Landed 2026-10-28. `Brush` coverage masks: square/circle built-ins and PNG
   custom brushes loaded through `:brush load`, saved to/loaded from the
-  `vixel/brushes` library, with percentage spacing. Freehand interpolation,
+  `modaline/brushes` library, with percentage spacing. Freehand interpolation,
   shapes and symmetry all stamp the mask; the canvas cursor previews its
   coverage. 4 new tests (169 total): built-in coverage, PNG round trip, custom
   mask limits, and circle/shape/spacing. UI preview not screenshotted (manual
@@ -391,7 +391,7 @@ met; blocked tasks are marked with the reason.
   survives. `.ase` text properties round-trip. 3 new tests (160 total):
   property codec, `.ase` text object, and editor rasterise/update/undo.
   Aseprite main still rasterises text (text layers are on its roadmap), so the
-  property layout is vixel's forward-compatible representation.
+  property layout is Modaline's forward-compatible representation.
 - [x] **P5-17 — External files + deprecated chunks** (S) — deps: P5-07.
   Landed 2026-10-28. `ExternalFile { id, kind, name }` is parsed from and
   written to 0x2008. Tileset flag 1 now records the external file/tileset IDs
@@ -406,7 +406,7 @@ met; blocked tasks are marked with the reason.
 - [x] **P5-28 — Text tool** (L) — deps: P5-16.
   Landed 2026-10-28. `Tool::Text` (`T`): click places a text object at the
   cursor; the panel edits multi-line text with live preview, and previews commit
-  as exactly one undo step (`commit`). Font is the 8x8 bitmap ("vixel" only —
+  as exactly one undo step (`commit`). Font is the 8x8 bitmap ("modaline" only —
   TTF is not accepted), size 8-64, alignment left/centre/right, colour from fg
   or the cel's stored text colour. Commands: `:textfont`, `:textsize`,
   `:textalign`; `:textobj` still edits/queries. 2 new tests (189 total): live
@@ -535,11 +535,11 @@ met; blocked tasks are marked with the reason.
   2 new tests (211 total): horizontal padding/extrude placement and
   vertical/columns grids.
 - [x] **P5-42 — Atlas metadata + GIF options** (M) — deps: P5-41.
-  Landed 2026-10-28. Atlas metadata supports vixel, JSON-hash and JSON-array
+  Landed 2026-10-28. Atlas metadata supports `modaline`, JSON-hash and JSON-array
   formats with per-frame rects/timing, `frameTags`, layers and slices; filenames
   reuse the sequence template. GIF export takes a repeat count (0 = forever),
   palette-size (RGB cube) and ordered-dither toggle via
-  `export_gif_configured`. Commands: `--atlas vixel|hash|array`,
+  `export_gif_configured`. Commands: `--atlas modaline|hash|array`,
   `--gif-loop n`, `--gif-colors n`, `--gif-dither`; dialog controls too.
   2 new tests (213 total): hash/array metadata with tags/layers/slices and GIF
   quantization/alpha/loop output.
@@ -571,7 +571,7 @@ met; blocked tasks are marked with the reason.
 ### Epic 9 — CLI and automation
 
 - [x] **P5-46 — CLI batch core** (L) — deps: P5-39, P5-40, P5-41, P5-42, P5-03, P5-04.
-  Landed 2026-10-28. `vixel -b input [options]` runs fully headless:
+  Landed 2026-10-28. `modaline -b input [options]` runs fully headless:
   `--save-as`, `--sheet`, `--data`, `--gif`, `--scale`, colour-mode/dither,
   frame/tag/layer filters, trim/crop, sheet layout/padding/extrude, atlas and GIF
   options, and `--list-layers/tags/frames/slices/tilesets/palette`. Output paths
@@ -616,7 +616,7 @@ met; blocked tasks are marked with the reason.
   under the config directory with path-traversal, file-count and 50 MB size
   limits; list/remove/get. `:ext install|list|remove|run|themes|theme`; scripts
   run through the sandboxed Lua engine and extension themes can be applied as
-  vixel JSON themes. 3 tests (261 total). Xvfb smoke installed `demo`, listed it
+  Modaline JSON themes. 3 tests (261 total). Xvfb smoke installed `demo`, listed it
   and ran its script (pixel painted).
 
 ### Epic 10 — App shell and UX
@@ -836,7 +836,7 @@ tablet depth, a Helix keymap preset, and the follow-ups from
 ## Explicitly out of scope (for now)
 
 - Web/Wasm build (Aseprite has no web build; product choice).
-- Custom GPU shaders (a vixel extra, not Aseprite parity; P3 deferral stays).
+- Custom GPU shaders (a Modaline extra, not Aseprite parity; P3 deferral stays).
 
 Verification: `docs/TESTING.md` drives the real GUI under Xvfb with a window
 manager and records what each pass proved.

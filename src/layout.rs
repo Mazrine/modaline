@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn layout_files_round_trip_and_missing_fields_default() {
-        let dir = std::env::temp_dir().join(format!("vixel-layout-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("modaline-layout-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("wide.json");
         let mut custom = builtin("animation").unwrap();

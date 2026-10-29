@@ -63,7 +63,7 @@ impl PenReader {
         {
             let sh = shared.clone();
             std::thread::Builder::new()
-                .name("vixel-pen".into())
+                .name("modaline-pen".into())
                 .spawn(move || run(sh))
                 .ok();
         }
