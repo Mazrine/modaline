@@ -13,6 +13,9 @@ app and the whole keyboard surface (commands, tools, `:text`) is testable.
 
 ## The rig
 
+With the flake, `nix develop` already sets `LD_LIBRARY_PATH`; the explicit
+`LIBS` dance below is only needed when running outside it.
+
 ```sh
 LIBS=$(nix build --print-out-paths --no-link nixpkgs#libx11 nixpkgs#libxcb \
   nixpkgs#libXcursor nixpkgs#libXrandr nixpkgs#libXi nixpkgs#libXext \

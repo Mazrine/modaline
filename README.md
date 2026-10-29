@@ -14,12 +14,15 @@ layers, and animation frames.
 cargo run --release
 ```
 
-On NixOS, the winit/wayland client libraries aren't on the default linker path,
-so run through the FHS wrapper (or provide them yourself):
+On NixOS, enter the flake devShell (it puts wayland/xkbcommon/libGL on
+`LD_LIBRARY_PATH`):
 
 ```sh
-steam-run ./target/release/vixel
+nix develop
+cargo run --release
 ```
+
+`steam-run ./target/release/vixel` still works as a fallback.
 
 ## Keymap
 

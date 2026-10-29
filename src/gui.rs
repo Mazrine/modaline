@@ -1844,7 +1844,9 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.collapsing(view.tr("ui.tool_depth"), |ui| {
         ui.horizontal(|ui| {
             ui.label(view.tr("ui.spray"));
-            ui.add(egui::Slider::new(&mut editor.spray_rate, 1..=64).prefix(view.tr("ui.dots_prefix")));
+            ui.add(
+                egui::Slider::new(&mut editor.spray_rate, 1..=64).prefix(view.tr("ui.dots_prefix")),
+            );
             ui.add(egui::Slider::new(&mut editor.spray_radius, 1..=64).prefix("r "));
         });
         ui.horizontal(|ui| {
@@ -1951,7 +1953,10 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             ui.label("y");
             ui.add(egui::DragValue::new(&mut editor.tile_y).range(1..=8));
             ui.checkbox(&mut editor.tile_preview, view.tr("ui.preview"));
-            ui.add(egui::Slider::new(&mut editor.tile_opacity, 0..=255).prefix(view.tr("ui.alpha_prefix")));
+            ui.add(
+                egui::Slider::new(&mut editor.tile_opacity, 0..=255)
+                    .prefix(view.tr("ui.alpha_prefix")),
+            );
         });
     }
     if editor
@@ -2452,8 +2457,10 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                         if blend_combo(ui, view, i, &mut layer.blend) {
                             prop_edits.push((i, before));
                         }
-                        let opacity =
-                            ui.add(egui::Slider::new(&mut layer.opacity, 0..=255).text(view.tr("ui.op_word")));
+                        let opacity = ui.add(
+                            egui::Slider::new(&mut layer.opacity, 0..=255)
+                                .text(view.tr("ui.op_word")),
+                        );
                         if opacity.drag_started() {
                             prop_drag = Some((i, before));
                         }

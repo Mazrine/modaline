@@ -39,18 +39,10 @@ impl Status {
     /// template is not translated or the placeholder shapes do not match.
     pub fn render(&self, tr: &Translator) -> String {
         let translated = tr.message(&self.template);
-        eprintln!(
-            "DBG tpl={:?} tr={:?} parts={:?} {:?}",
-            self.template,
-            translated,
-            literal_parts(&self.template),
-            literal_parts(&translated)
-        );
         if translated == self.template {
             return self.text.clone();
         }
-        substitute(&self.template, &translated, &self.text, tr)
-            .unwrap_or_else(|| self.text.clone())
+        substitute(&self.template, &translated, &self.text, tr).unwrap_or_else(|| self.text.clone())
     }
 
     pub fn text(&self) -> &str {
@@ -132,12 +124,7 @@ fn literal_parts(template: &str) -> Vec<String> {
 
 /// Rebuild `text` using the translated literal segments. `None` means the
 /// shapes disagree, so the caller keeps the English text.
-fn substitute(
-    template: &str,
-    translated: &str,
-    text: &str,
-    tr: &Translator,
-) -> Option<String> {
+fn substitute(template: &str, translated: &str, text: &str, tr: &Translator) -> Option<String> {
     let src = literal_parts(template);
     let dst = literal_parts(translated);
     if src.len() != dst.len() {
@@ -190,7 +177,9 @@ mod tests {
     fn enum_values_inside_messages_are_translated() {
         let s = Status::new("ink: {}", "ink: simple".into());
         let mut catalog = Catalog::default();
-        catalog.messages.insert("ink: {}".into(), "tinta: {}".into());
+        catalog
+            .messages
+            .insert("ink: {}".into(), "tinta: {}".into());
         catalog.values.insert("simple".into(), "simples".into());
         let tr = Translator::new(catalog);
         assert_eq!(s.render(&tr), "tinta: simples");

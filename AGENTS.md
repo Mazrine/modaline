@@ -13,12 +13,12 @@ art editor in Rust (native GUI, not a terminal).
 ## Commands
 
 ```sh
+nix develop                       # NixOS: LD_LIBRARY_PATH for wayland/xkbcommon
 cargo build
 cargo test
 cargo clippy --all-targets        # must be clean before committing
 cargo run --release
-steam-run ./target/release/vixel  # NixOS: wayland/xkbcommon libs aren't on the
-                                  # default linker path, so run via steam-run
+steam-run ./target/release/vixel  # fallback without the devShell
 ```
 
 The GUI can't run headless; verify with `cargo test` (model logic) and, on a
@@ -224,5 +224,5 @@ thin shells:
 ## NixOS runtime note
 
 The wayland/xkbcommon client libraries are not on the default loader path in a
-plain shell. `cargo run` will fail with `NoWaylandLib`; use `steam-run` (see
-Commands). A proper `flake.nix` devShell is a welcome future addition.
+plain shell, so `cargo run` fails with `NoWaylandLib`. Use `nix develop` (the
+flake devShell sets `LD_LIBRARY_PATH`), or `steam-run` as a fallback.
