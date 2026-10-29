@@ -10,7 +10,7 @@
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-47 CLI batch advanced** (see batch 84).
+- Last completed batch: **P5-48 scripting decision** (see batch 85).
 
 ## How to resume
 
@@ -435,6 +435,10 @@ Read, in order:
 84. **P5-47 — CLI batch advanced** — split layers/tags/slices/grid, filename
   templates, ignore/merge, tileset and palette export. 2 integration tests (224
   total).
+85. **P5-48 — scripting decision** — `docs/SCRIPTING.md` compares Lua/mlua,
+  Rhai, QuickJS/WASM, Python and JSON Op; chose Lua/mlua 0.10 for Aseprite
+  compatibility, with sandbox/limits/API plan. Offline check found no mlua
+  source/cache, so P5-49/P5-50/P5-51 are Blocked (dependency, not design).
 
 ## Next step (exact)
 
@@ -443,8 +447,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-48** — scripting engine decision (first open task), then continue down
-  the P5 roadmap in dependency order.
+- **P5-52** — multi-document/tabs (first unblocked task; P5-49/50/51 are blocked
+  on offline `mlua`), then continue down the P5 roadmap.
 
 ## Known limitations (do not forget)
 

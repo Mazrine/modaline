@@ -136,6 +136,9 @@ L-shaped corners for the 1 px pencil/eraser.
   transparency checkerboard, cursor + selection + floating-paste previews.
   **Wide pixels** render at the sprite's `pixel_aspect` (checkbox "wide px");
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
+- **scripting**: engine decision is Lua via `mlua` (`docs/SCRIPTING.md`), chosen
+  for Aseprite-script compatibility; implementation is blocked because the crate
+  is not available offline. JSON `Op` replay remains the working automation path.
 - **CLI batch** (`vixel -b`): headless save-as/sheet/data/GIF export with
   scale, colour mode/dither, frame/tag/layer filters, trim/crop, layout and
   atlas/GIF options; `--list-*` prints structure. Splits: layers, tags, slices

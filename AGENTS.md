@@ -150,6 +150,9 @@ thin shells:
   Atlas/sequence imports live in `import_atlas`/`import_sequence_dir`; keep
   metadata-only layers documented as merged on import. Save dispatch is
   `Editor::save_path`; browser favourites persist in Config.
+- Scripting engine decisions live in `docs/SCRIPTING.md` (Lua/mlua chosen;
+  P5-49/50/51 blocked on offline dependency). Do not substitute another engine
+  without updating that document.
 - Headless CLI lives in `src/cli.rs` (`-b`), parsed before any eframe setup;
   keep new batch flags there and cover them in `tests/cli.rs`. Splits reuse
   `export_sequence`/`export_slices`/`export_named_slices`.

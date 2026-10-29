@@ -203,9 +203,10 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 
 | Capability | Status | Task |
 |---|---|---|
-| Lua scripting API | Missing | P5-48, P5-49, P5-50 |
-| Script from CLI / `:script` | Missing | P5-49 |
-| `.aseprite-extension` packages | Missing | P5-51 |
+| Scripting engine decision | Covered (Lua/mlua; `docs/SCRIPTING.md`) | P5-48 |
+| Lua scripting API | Blocked (mlua unavailable offline) | P5-49, P5-50 |
+| Script from CLI / `:script` | Blocked (needs P5-49) | P5-49 |
+| `.aseprite-extension` packages | Blocked (needs scripting engine) | P5-51 |
 | JSON `Op` replay (vixel-specific automation) | Covered | — |
 
 ## Customization

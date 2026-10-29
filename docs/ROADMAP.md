@@ -585,14 +585,19 @@ met; blocked tasks are marked with the reason.
   Splits use the configured filters/scale and filename templates; slices/grid
   export the first selected frame. 2 integration tests (224 total): layer/tag
   splits + palette and grid/slices/tileset.
-- [ ] **P5-48 — Scripting engine decision** (S) — deps: none.
-  `docs/SCRIPTING.md` comparing Lua/mlua, Rhai, QuickJS/WASM, Python and JSON
-  `Op`; default **Lua/mlua** (Aseprite script compatibility); check offline
-  dependency availability.
-- [ ] **P5-49 — Scripting MVP** (L) — deps: P5-48.
+- [x] **P5-48 — Scripting engine decision** (S) — deps: none.
+  Landed 2026-10-28. `docs/SCRIPTING.md` compares Lua/mlua, Rhai,
+  QuickJS/WASM, Python and JSON `Op`; decision is **Lua via mlua 0.10**
+  (`lua54`, vendored) because Aseprite scripts must run unchanged. Sandbox,
+  memory/instruction limits, API surface and residual risks are documented.
+  Offline check found no mlua/rhai/quickjs/pyo3 sources or cache entries, so the
+  dependency cannot be added here. No tests (decision/documentation).
+- [ ] **P5-49 — Scripting MVP** (L) — deps: P5-48. **Blocked**: `mlua` is not
+  available offline (no registry source/cache entry, no Cargo.lock entry).
   Sandboxed engine, core API, `:script`/`--script`.
-- [ ] **P5-50 — Scripting API coverage** (L) — deps: P5-49.
-  Aseprite API compatibility matrix; run representative scripts.
+- [ ] **P5-50 — Scripting API coverage** (L) — deps: P5-49. **Blocked** by
+  P5-49/dependency availability. Aseprite API compatibility matrix; run
+  representative scripts.
 - [ ] **P5-51 — Extensions** (L) — deps: P5-49, P5-50, P5-53.
   `.aseprite-extension` zip/manifest, install/remove, scripts/themes.
 
