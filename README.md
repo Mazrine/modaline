@@ -1,149 +1,124 @@
 # Modaline
 
-**A keyboard-first pixel art editor.** Modal like vim, native in Rust, with
-layers, animation and Aseprite-compatible files. The mouse and a drawing tablet
-work everywhere, but the keyboard is the fast path.
+A pixel art editor for people who would rather keep their hands on the keyboard.
 
-[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
-[![Rust: edition 2024](https://img.shields.io/badge/rust-edition%202024-orange.svg)](Cargo.toml)
-[![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey.svg)](#requirements)
+Modaline is a native Rust app with layers, frames, onion skin, palettes, Lua
+scripting and `.ase` files. It borrows vim's idea of modes: move around in
+normal mode, paint in draw mode, select something and then decide what to do
+with it. The mouse and a drawing tablet work everywhere, but you never have to
+reach for them.
 
-![The editor with the demo project](assets/screenshots/editor.png)
+![Modaline with the demo scene open](assets/screenshots/editor.png)
 
-*The demo project (`examples/demo.vpx`): timeline grid, layers, animation tag,
-pixel-perfect zoom and a contextual hint on the status line.*
+*The demo project open: layer×frame timeline at the bottom, tools on single
+keys, and a hint on the status line for whatever mode you are in.*
 
-## Why modal?
+## How it works
 
-Pixel editors usually make you travel to a toolbar for every action. Modaline
-treats the canvas like text: a small set of modes, one key per operation, and
-the same keys everywhere.
+Most pixel editors put every tool in a toolbar. Modaline puts one action on
+each key and leaves the long tail in the `:` command line. If you already use
+vim, the muscle memory mostly carries over. If you do not, press `?` and read
+the status line: it tells you what the current mode accepts.
 
-| Mode | What it is for | Enter |
+| Mode | What it is for | How to enter |
 |---|---|---|
-| **Normal** | navigate, pick tools, run commands | start here |
-| **Draw** | paint while moving the cursor | `i` |
-| **Visual** | grow a selection before acting on it | `v` |
-| **Paste** | position a floating clipboard | `p` |
-| **Command** | everything not worth a key | `:` |
-| **Help** | the full key list | `?` |
+| Normal | move, pick tools, run commands | start here |
+| Draw | paint while the cursor moves | `i` |
+| Visual | grow a selection, then act on it | `v` |
+| Paste | place a floating clipboard | `p` |
+| Command | anything without a dedicated key | `:` |
+| Help | the key list | `?` |
 
-Select first, then act: `v` + `hjkl`, then `y` copy, `x` cut, `p` paste,
-`m` cut-and-float. The status line always tells you what the current state
-accepts, so you do not have to memorise the whole map on day one.
+Selections are the clearest example. Press `v`, move with `hjkl`, then `y` to
+copy, `x` to cut, `p` to paste, `m` to cut and float. The status line lists
+those choices while the selection is active, so you learn them by using them.
 
-![Selection with contextual hints](assets/screenshots/selection.png)
+![A selection with the next actions in the status line](assets/screenshots/selection.png)
 
-*Selection-first editing: the marquee, the mode, and the next actions
-(`y` copy · `x` cut · `p` paste · `Esc` clear) in the status line.*
+*Selection mode, with copy/cut/paste/clear spelled out at the top.*
 
-**Ten keys to start:** `hjkl` move · `i` draw · `b` pencil · `f` bucket ·
-`v` select · `y`/`x`/`p` copy/cut/paste · `u` undo · `:` command · `?` help.
+The same idea applies to panels. You can click a layer row or a slider, but
+there is also a command for it: `:layeropacity`, `:celopacity`,
+`:frameduration`, `:visible`, `:blend`, `:onion`, `:play`. Panning is
+`Ctrl-hjkl`, brush size is `{` and `}`, and the pan keys can be rebound.
 
-The complete map is in [`docs/COMMANDS.md`](docs/COMMANDS.md), and `:tips`
-opens a short cheat sheet with the keyboard, mouse and pen workflows.
+`:tips` opens a shorter reference that covers the keyboard, mouse and pen
+workflows, plus the vim-versus-Helix question.
 
-![Tips window](assets/screenshots/tips.png)
+![The tips window](assets/screenshots/tips.png)
 
-*`:tips` — the built-in cheat sheet. `Esc` closes windows; nothing needs the
-mouse.*
+## What it does
 
-## Features
+**Drawing.** Pencil, eraser, bucket, picker, line, rectangle, ellipse, linear
+and radial gradients, spray, shade, blur, contour, and an 8×8 bitmap text tool.
+Brushes go from 1 to 64 pixels, with square/circle/custom masks, spacing,
+pressure and pixel-perfect freehand. Symmetry can mirror horizontally,
+vertically or radially.
 
-**Canvas & rendering**
-- True 24-bit colour, real alpha, checkerboard transparency, nearest-neighbour
-  zoom, pixel grid and a design grid with snapping.
-- Onion skinning (previous/next frame), tiled 3×3 seamless preview with edge
-  wrapping, wide-pixel aspect preview, independent preview window/OS viewport.
-- CPU compositing (blend modes, groups, masks, cel z-order) drawn through egui;
-  a `wgpu` build exists behind a feature flag with no render-code changes.
+**Selections and transforms.** Marquee, magic wand with tolerance and
+contiguous/global modes, lasso, polygon. Combine with replace/add/subtract/
+intersect; expand, contract, border, feather, invert. Rotate, scale, skew and
+move with handles or from the command line, with an optional RotSprite mode.
 
-**Tools**
-- Pencil, eraser, bucket, eyedropper, line, rectangle, ellipse, gradient
-  (linear/radial, multi-stop, dithered), spray, shade, blur, contour and an
-  8×8 bitmap text tool.
-- Brush sizes 1–64, square/circle/custom masks, spacing, pressure, pixel-perfect
-  freehand, per-tool inks and alpha lock.
-- Horizontal, vertical and N-fold radial symmetry (including bucket and paste).
-- Selection masks with marquee, magic wand (tolerance, contiguous/global,
-  all layers), lasso and polygon; expand/contract/border/feather/invert and
-  add/subtract/intersect.
-- Free rotate/scale/skew with interactive handles, custom pivot and a RotSprite
-  mode; flip/rotate 90° respects the selection.
-- Sixteen filters: invert, brightness, contrast, hue, saturation, desaturate,
-  curves, levels, balance, posterize, outline, blur, sharpen, median, convolve
-  and emboss — all clipped to the selection and one undo step.
+**Layers and animation.** Groups, blend modes, opacity, visibility, movement
+lock, reference and background layers, alpha masks, linked cels, a layer×frame
+timeline with thumbnails, per-frame durations, and tags with direction and
+repeat. Onion skin and playback are one click or one command away.
 
-**Layers & animation**
-- Layer groups, blend modes, opacity, visibility, movement lock, reference and
-  background layers, alpha masks and linked cels.
-- Frame timeline with a layer×frame grid, thumbnails, drag reorder, per-frame
-  duration, tags with direction and repeat, onion skin and playback.
-- Multi-cel edits, whole-cel clipboard and per-cel export.
+**Colour and files.** Sweetie 16 default palette, presets, `.gpl`/`.hex`/`.pal`
+import/export, palette lock, indexed mode with ordered or Floyd-Steinberg
+dithering, sRGB/linear profiles. Reads and writes `.ase`/`.aseprite` (RGBA,
+grayscale, indexed, linked and tilemap cels, groups, user data, slices,
+profiles), `.vpx` projects, PNG/JPEG/BMP/TGA/WebP. PCX and FLC/FLI import.
+Sheet, GIF, PNG sequence, atlas metadata and slice exports.
 
-**Colour & files**
-- Sweetie 16 default palette, presets, `.gpl`/`.hex`/`.pal` import/export,
-  palette names, sorting and palette lock; indexed mode with dithering.
-- sRGB/linear working spaces and embedded `.ase` profiles.
-- Read/write `.ase`/`.aseprite` (RGBA, grayscale, indexed, linked and tilemap
-  cels, user data, slices, groups, profiles), `.vpx` JSON projects, PNG, JPEG,
-  BMP, TGA, WebP; import PCX and FLC/FLI animations.
-- Sheet, GIF, PNG sequence, atlas metadata and slices; atlas/sheet/sequence
-  import.
-
-**Made for the keyboard**
-- Panel controls have `:` equivalents where a keyboard path matters, so the
-  mouse is never required.
-- `Ctrl-hjkl` pans, `{`/`}` change brush size, `[`/`]` change frames,
-  `<`/`>` change layers; all pan and action keys are rebindable.
-- Command-specific messages and contextual hints in English **and** Portuguese,
-  switchable at runtime with `:lang`.
-- `:bind` for custom chords, four workspace layouts, JSON themes and fonts.
-- Sandboxed Lua 5.4 scripting with an Aseprite-style `app` API, plus
-  `.aseprite-extension` packages.
-- Headless `-b` CLI for batch export.
-
-## Pen and tablet
-
-Wacom Intuos Pro and **OpenTabletDriver** tablets are supported on Linux: tip
-pressure is read from evdev while position and clicks continue through the OS
-pointer, so every action works with the pen. `:pen` shows the device and
-pressure; `:pen off` disables it; the setting persists.
-
-```sh
-:pen          # device + live pressure
-:pen off      # ignore the tablet
-```
-
-Setup (udev/input group, NixOS, OTD) and troubleshooting are in
-[`docs/PEN.md`](docs/PEN.md).
+**Automation.** Sandboxed Lua 5.4 with an Aseprite-style `app` API,
+`.aseprite-extension` packages, JSON op replay, rebindable keys, JSON themes
+and workspace layouts, and a runtime language switch (English, Portuguese).
 
 ## Animation
 
-![Three-frame demo animation](assets/demo.gif)
+![Three-frame sunset animation](assets/demo.gif)
 
-*A three-frame demo exported by Modaline itself. The project is
-`examples/demo.vpx`; `examples/build_demo.lua` generates it with the scripting
-API, and the GIF comes from the headless CLI.*
+*A three-frame loop exported from Modaline itself. The project is
+`examples/demo.vpx`; `examples/build_demo.lua` builds it with the scripting
+API.*
 
-## Quick start
+## Pen and tablet
 
-**Nix (build + run, no local setup):**
+On Linux, Wacom tablets and OpenTabletDriver virtual tablets add tip pressure
+through evdev. Position and clicks still come from the OS pointer, so the pen
+works anywhere the mouse does.
+
+```text
+:pen          " device name and current pressure
+:pen off      " ignore the tablet
+```
+
+The side panel shows whether a tablet was found and lets you disable it. Setup,
+permissions and troubleshooting are in [`docs/PEN.md`](docs/PEN.md).
+
+## Install
+
+With Nix, no local Rust toolchain needed:
 
 ```sh
 nix run github:Mazrine/modaline
-nix run github:Mazrine/modaline -- art.ase
+nix run github:Mazrine/modaline -- sprite.ase
 ```
 
 The first run compiles the crate and its dependencies; later runs reuse the
 store. For development, use the devShell:
 
 ```sh
+git clone https://github.com/Mazrine/modaline
+cd modaline
 nix develop
 cargo run --release
 ```
 
-**Plain Rust** (needs the usual winit/X11/Wayland build libraries):
+Without Nix, build with Cargo (Rust 1.85+; winit's X11/Wayland build libraries
+are required):
 
 ```sh
 cargo build --release
@@ -151,46 +126,36 @@ cargo build --release
 ```
 
 On NixOS without the devShell, `steam-run ./target/release/modaline` is the
-fallback. Open a file directly with `modaline art.ase`, `modaline art.vpx` or
+fallback. Open a file by passing it: `modaline art.ase`, `modaline art.vpx`,
 `modaline art.png`.
 
-**First five minutes:** `?` (help) · `:tips` (workflow cheat sheet) ·
-`:prefs` (settings) · `:layout animation` (hide the side panel) · `:lang pt-BR`
-(Portuguese UI).
-
-## Requirements
-
-- Linux with X11 or Wayland (developed and tested here).
-- Rust 1.85+ (edition 2024), or the Nix flake.
-- A pen needs permission to read `/dev/input/event*` (see `docs/PEN.md`).
-
-## Keyboard quick reference
+## Keys
 
 | Keys | Action |
 |---|---|
-| `hjkl` / arrows | move the cursor |
+| `hjkl` / arrows | move |
 | `H` `J` `K` `L` | move 8 px |
-| `0` `$` `gg` `G` | left / right / top / bottom |
-| `i` | draw mode: paint while moving |
+| `0` `$` `gg` `G` | edges |
+| `i` | draw mode |
 | `b` / `e` / `f` / `c` | pencil / eraser / bucket / picker |
-| `d` / `R` / `o` | line / rect / ellipse (`Enter` commits, `Esc` cancels) |
-| `v` / `V` | marquee selection / select all |
-| `w` / `L` / `P` | magic wand / lasso / polygon |
+| `d` / `R` / `o` | line / rect / ellipse |
+| `v` / `V` | select / select all |
+| `w` / `L` / `P` | wand / lasso / polygon |
 | `y` / `Y` / `x` / `m` / `p` | copy / copy merged / cut / move / paste |
 | `u` / `Ctrl-r` | undo / redo |
-| `Ctrl-hjkl` | pan the canvas |
-| `{` / `}` | smaller / bigger brush |
-| `[` / `]` | previous / next frame |
-| `<` / `>` | previous / next layer |
-| `+` / `-` | zoom in / out |
+| `Ctrl-hjkl` | pan |
+| `{` / `}` | brush size |
+| `[` / `]` | frame |
+| `<` / `>` | layer |
+| `+` / `-` | zoom |
 | `:` / `?` | command line / help |
-| `Ctrl-s` / `Ctrl-q` | save / quit |
 
-Full keymap, modes and every `:` command: [`docs/COMMANDS.md`](docs/COMMANDS.md).
+The full keymap, mouse behavior and every command are in
+[`docs/COMMANDS.md`](docs/COMMANDS.md).
 
 ## Examples
 
-**Batch export** — no window:
+Batch export, no window:
 
 ```sh
 modaline -b demo.vpx --sheet out.png --data out.json --gif out.gif
@@ -199,7 +164,7 @@ modaline -b demo.vpx --color-mode indexed --dither bayer4 --save-as out.ase
 modaline -b demo.vpx --list-tags --list-layers
 ```
 
-**Scripting** — draw into a cel and add a frame:
+Drawing from Lua:
 
 ```lua
 local s = app.activeSprite
@@ -213,42 +178,40 @@ s:newFrame()
 s:setFrameDuration(2, 120)
 ```
 
-The full API and sandbox rules are in [`docs/SCRIPTING.md`](docs/SCRIPTING.md);
-`examples/build_demo.lua` builds the scene above.
+The rest of the API, including the `app.fs` sandbox, is in
+[`docs/SCRIPTING.md`](docs/SCRIPTING.md).
 
-## Project
+## Status
 
-The model is a GUI-free Rust library: sprites, cels, layers, frames,
-compositing, undo, selections, `.ase`/`.vpx` I/O. The binary is a thin shell
-over it (`input`, `gui`, `app`). Another tool can read or write a project
-without opening a window.
+Pre-1.0. I use it for real sprites, but keep backups.
 
-```sh
-cargo test                    # 292 tests
-cargo clippy --all-targets    # clean
-nix develop -c cargo run --release
-```
+Known gaps are written down instead of hidden: pen tilt, rotation and
+ExpressKeys are not decoded yet; the Helix keymap preset is designed but not
+implemented; and the UX audit lists the rough edges I still want to fix
+(collapsible side sections, a fuzzy command palette, a few keyboard-only
+corners). Linux is the tested platform.
 
-- [`docs/COMMANDS.md`](docs/COMMANDS.md) — full keymap and commands
-- [`docs/SCRIPTING.md`](docs/SCRIPTING.md) — Lua API and sandbox
-- [`docs/PEN.md`](docs/PEN.md) — Wacom / OpenTabletDriver
-- [`docs/KEYMAPS.md`](docs/KEYMAPS.md) — vim now, Helix preset plan
-- [`docs/UX_AUDIT.md`](docs/UX_AUDIT.md) — what works and what is next
-- [`docs/ASEPRITE_PARITY.md`](docs/ASEPRITE_PARITY.md) — capability matrix
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — P7 input/UX backlog
+The model is a GUI-free Rust library, so another tool can read, composite or
+write a project without opening the window. `cargo test` covers it (292 tests),
+and `cargo clippy --all-targets` is clean.
 
-Status: pre-1.0. The feature surface is stable enough to use daily; the open
-work is pen tilt/ExpressKeys, a Helix keymap preset and the UX follow-ups in
-the audit.
+## Docs
+
+- [`docs/COMMANDS.md`](docs/COMMANDS.md): keys, mouse and commands
+- [`docs/SCRIPTING.md`](docs/SCRIPTING.md): Lua API and sandbox
+- [`docs/PEN.md`](docs/PEN.md): Wacom / OpenTabletDriver
+- [`docs/KEYMAPS.md`](docs/KEYMAPS.md): current keys and the Helix plan
+- [`docs/UX_AUDIT.md`](docs/UX_AUDIT.md): what works and what does not
+- [`docs/ASEPRITE_PARITY.md`](docs/ASEPRITE_PARITY.md): capability matrix
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): P7 backlog
 
 ## License
 
-Modaline is free software under the **GNU General Public License v3.0 or
-later** (`GPL-3.0-or-later`). See [`LICENSE`](LICENSE). No warranty; use at your
-own risk.
+GPL-3.0-or-later. See [`LICENSE`](LICENSE). No warranty.
 
-- Test fixtures in `tests/fixtures/ase/` are MIT-licensed third-party data:
-  [`tests/fixtures/README.md`](tests/fixtures/README.md).
-- Palette, font and dependency notices: [`THIRD_PARTY.md`](THIRD_PARTY.md).
-- Aseprite is a trademark of Igara Studio S.A. Modaline is an independent
-  project, not affiliated with or endorsed by Aseprite.
+The `.ase` fixtures in `tests/fixtures/ase/` are MIT-licensed third-party test
+data; see [`tests/fixtures/README.md`](tests/fixtures/README.md). Palette, font
+and dependency notices are in [`THIRD_PARTY.md`](THIRD_PARTY.md).
+
+Aseprite is a trademark of Igara Studio S.A. Modaline is independent and not
+affiliated with or endorsed by Aseprite.

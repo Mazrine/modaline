@@ -38,7 +38,7 @@ Read, in order:
 4. **Selection/file batch** — magic wand, generalized mask-based selection,
    `.ase`/`.aseprite` import/export (raw + zlib cels, RGBA + indexed), extension-
    aware `:w`/`:export`/`:open`.
-5. **Docs** — `README.md`, `AGENTS.md`, `CLAUDE.md`, `docs/CURRENT_STATE.md`,
+5. **Docs** — `README.md`, `AGENTS.md`, `docs/CURRENT_STATE.md`,
    `docs/ROADMAP.md`.
 6. **Draw/select batch** — symmetry painting (`s`) + lasso (`L`) / polygonal
    (`P`) selection. 3 new tests. Docs updated.
