@@ -255,6 +255,7 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             (Tool::Lasso, "Lasso"),
             (Tool::Polygon, "Poly"),
             (Tool::Text, "Text"),
+            (Tool::Tile, "Tile"),
         ] {
             if ui.selectable_label(editor.tool == tool, name).clicked() {
                 editor.set_tool(tool);
@@ -697,6 +698,33 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             ui.add(egui::DragValue::new(&mut editor.tile_y).range(1..=8));
             ui.checkbox(&mut editor.tile_preview, "preview");
             ui.add(egui::Slider::new(&mut editor.tile_opacity, 0..=255).prefix("alpha "));
+        });
+    }
+    if editor
+        .sprite
+        .layers
+        .get(editor.active_layer)
+        .is_some_and(|l| l.tilemap)
+    {
+        ui.horizontal(|ui| {
+            ui.label("tiles");
+            if ui
+                .selectable_label(editor.tool == Tool::Tile, "tile tool")
+                .clicked()
+            {
+                editor.set_tool(Tool::Tile);
+            }
+            ui.checkbox(&mut editor.tile_pixel_mode, "pixel edit")
+                .on_hover_text("paint pixels on the tilemap instead of placing tiles");
+            ui.add(
+                egui::DragValue::new(&mut editor.tile_brush)
+                    .range(0..=1024)
+                    .prefix("#"),
+            );
+            ui.checkbox(&mut editor.tile_flip_x, "x");
+            ui.checkbox(&mut editor.tile_flip_y, "y");
+            ui.checkbox(&mut editor.tile_flip_diagonal, "diag");
+            ui.label("right-click picks");
         });
     }
     ui.horizontal(|ui| {
@@ -2212,6 +2240,7 @@ const HELP: &[&str] = &[
     "  z / a / q          gradient / spray / shade",
     "  n / C              blur / contour outline",
     "  T                  text tool (click to place; edit in the panel)",
+    "  K                  tile tool (paint tiles; right-click picks)",
     "  v                  visual select (V = all)   then:",
     "    y                yank (copy)      Y   copy merged",
     "    x                cut              m   move (cut + float)   p   paste",
@@ -2219,6 +2248,7 @@ const HELP: &[&str] = &[
     "  L / P              lasso / polygon selection (mouse)",
     "  s                  cycle symmetry (none / H / V / both)",
     "  :tile [on|off]|x|y <1-8>|repeats <x> <y>|opacity <0-255>|preview on|off",
+    "  :tileid <n>   :tileflip x|y|diag|none   :tilemode manual|pixel   :tilepick|erase",
     "  t                  toggle filled shapes (rect / ellipse)",
     "  , / .              prev / next color",
     "  < / >              prev / next layer",

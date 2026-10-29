@@ -431,8 +431,15 @@ met; blocked tasks are marked with the reason.
   now fills both. Composite keeps using the cached pixels. Refs persist in
   `.vpx`. 2 new tests (192 total): retained refs/layer flag from `.ase`, and
   re-rasterization after edits (plus `.vpx` refs).
-- [ ] **P5-31 — Tilemap editing** (L) — deps: P5-30.
-  Draw tiles, picker, empty tile, manual mode, pixel-edit mode, tile undo, UI.
+- [x] **P5-31 — Tilemap editing** (L) — deps: P5-30.
+  Landed 2026-10-28. `Tool::Tile` (`K`) places the brush tile at the cursor
+  (with X/Y/diagonal flips), right-click picks a tile into the brush, and tile
+  0 / `:tileerase` places the empty tile. Every edit updates the retained refs,
+  re-rasterises the cel and is one undo step. "pixel edit" routes the tile tool
+  through the pencil so pixels can be edited directly (documented as a cache
+  edit). Commands: `:tileid`, `:tileflip x|y|diag|none`, `:tilemode manual|pixel`,
+  `:tilepick`, `:tileerase`. 2 new tests (194 total): paint/pick/erase/undo and
+  pixel mode. Panel is UI-only and not screenshotted (manual check).
 - [ ] **P5-32 — Write tileset/tilemap chunks** (M) — deps: P5-30.
   0x2023 + cel type 3; `open→save→open` tilemap fixture.
 - [ ] **P5-33 — Tileset depth** (M) — deps: P5-29, P5-32.

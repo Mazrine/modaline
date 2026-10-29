@@ -33,6 +33,7 @@ pub enum Tool {
     Lasso,
     Polygon,
     Text,
+    Tile,
 }
 
 /// How a brush colour combines with the destination pixel.
@@ -88,11 +89,12 @@ impl Tool {
             Tool::Lasso => 11,
             Tool::Polygon => 12,
             Tool::Text => 13,
+            Tool::Tile => 14,
         }
     }
 }
 
-const TOOL_COUNT: usize = 14;
+const TOOL_COUNT: usize = 15;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Symmetry {
@@ -353,6 +355,12 @@ pub struct Editor {
     /// Contour ring width and whether it grows outside (true) or inside.
     pub contour_width: u32,
     pub contour_inside: bool,
+    /// Tilemap editing: brush tile ID/flips and manual-vs-pixel mode.
+    pub tile_brush: u32,
+    pub tile_flip_x: bool,
+    pub tile_flip_y: bool,
+    pub tile_flip_diagonal: bool,
+    pub tile_pixel_mode: bool,
     pub wand_tolerance: u8,
     pub wand_all_layers: bool,
     /// Wand and bucket restrict themselves to the seed's contiguous region.
@@ -472,6 +480,11 @@ impl Editor {
             blur_radius: 1,
             contour_width: 1,
             contour_inside: false,
+            tile_brush: 1,
+            tile_flip_x: false,
+            tile_flip_y: false,
+            tile_flip_diagonal: false,
+            tile_pixel_mode: false,
             wand_tolerance: 0,
             wand_all_layers: false,
             contiguous: true,
@@ -707,6 +720,8 @@ impl Editor {
             Tool::Spray => self.spray_at(x, y),
             Tool::Blur => self.blur_at(x, y),
             Tool::Text => self.place_text_at(x, y),
+            Tool::Tile if self.tile_pixel_mode => self.paint_freehand(x, y, self.fg),
+            Tool::Tile => self.paint_tile_at(x, y),
             _ => self.paint_symmetric(x, y, self.fg),
         }
     }
@@ -716,6 +731,8 @@ impl Editor {
         match self.tool {
             Tool::Shade => self.shade_at(x, y, false),
             Tool::Pencil => self.paint_freehand(x, y, self.bg),
+            Tool::Tile if self.tile_pixel_mode => self.paint_freehand(x, y, self.bg),
+            Tool::Tile => self.pick_tile_at(x, y),
             _ => self.paint_symmetric(x, y, self.bg),
         }
     }
@@ -1355,6 +1372,103 @@ impl Editor {
             self.touch();
             self.msg = "text edit cancelled".into();
         }
+    }
+
+    fn tilemap_target(&self) -> Option<(usize, u32, u32, u32)> {
+        let layer = self.sprite.layers.get(self.active_layer)?;
+        if !layer.tilemap {
+            return None;
+        }
+        let ts = self
+            .sprite
+            .tilesets
+            .iter()
+            .find(|t| t.id == layer.tileset)?;
+        if ts.external.is_some() || ts.image.is_empty() {
+            return None;
+        }
+        Some((self.active_layer, ts.tile_w, ts.tile_h, ts.num_tiles))
+    }
+
+    /// Place the tile brush (with flips) at the cursor; one undo step.
+    pub fn paint_tile_at(&mut self, x: u32, y: u32) {
+        let (l, f) = (self.active_layer, self.active_frame);
+        let Some((_, tw, th, _)) = self.tilemap_target() else {
+            self.msg = "tile: active layer is not an embedded tilemap".into();
+            return;
+        };
+        let idx = {
+            let cel = &self.sprite.cels[l][f];
+            let Some(tm) = &cel.tilemap else {
+                self.msg = "tile: this cel has no tile references".into();
+                return;
+            };
+            let tx = (x as i32 - cel.x).div_euclid(tw as i32);
+            let ty = (y as i32 - cel.y).div_euclid(th as i32);
+            if tx < 0 || ty < 0 || tx as u32 >= tm.tiles_w || ty as u32 >= tm.tiles_h.max(1) {
+                self.msg = "tile: outside the tilemap bounds".into();
+                return;
+            }
+            (ty as u32 * tm.tiles_w + tx as u32) as usize
+        };
+        let before = self.sprite.clone();
+        if let Some(cel) = self
+            .sprite
+            .cels
+            .get_mut(l)
+            .and_then(|frames| frames.get_mut(f))
+            && let Some(tm) = &mut cel.tilemap
+            && let Some(slot) = tm.tiles.get_mut(idx)
+        {
+            *slot = crate::sprite::TileRef {
+                id: self.tile_brush,
+                flip_x: self.tile_flip_x,
+                flip_y: self.tile_flip_y,
+                flip_diagonal: self.tile_flip_diagonal,
+            };
+        }
+        self.sprite.rasterize_tilemap(l, f);
+        self.snapshot(before);
+        self.msg = if self.tile_brush == 0 {
+            "tile: empty".into()
+        } else {
+            format!("tile: {} placed", self.tile_brush)
+        };
+    }
+
+    /// Pick the tile (and flips) under the cursor into the brush.
+    pub fn pick_tile_at(&mut self, x: u32, y: u32) {
+        let (l, f) = (self.active_layer, self.active_frame);
+        let Some((_, tw, th, _)) = self.tilemap_target() else {
+            self.msg = "tile: active layer is not an embedded tilemap".into();
+            return;
+        };
+        let cel = &self.sprite.cels[l][f];
+        let Some(tm) = &cel.tilemap else {
+            self.msg = "tile: this cel has no tile references".into();
+            return;
+        };
+        let tx = (x as i32 - cel.x).div_euclid(tw as i32);
+        let ty = (y as i32 - cel.y).div_euclid(th as i32);
+        if tx < 0 || ty < 0 || tx as u32 >= tm.tiles_w || ty as u32 >= tm.tiles_h.max(1) {
+            self.msg = "tile: outside the tilemap bounds".into();
+            return;
+        }
+        let idx = (ty as u32 * tm.tiles_w + tx as u32) as usize;
+        if let Some(tile) = tm.tiles.get(idx) {
+            self.tile_brush = tile.id;
+            self.tile_flip_x = tile.flip_x;
+            self.tile_flip_y = tile.flip_y;
+            self.tile_flip_diagonal = tile.flip_diagonal;
+            self.msg = format!("tile: picked {}", tile.id);
+        }
+    }
+
+    pub fn erase_tile_at(&mut self, x: u32, y: u32) {
+        let brush = self.tile_brush;
+        self.tile_brush = 0;
+        self.paint_tile_at(x, y);
+        self.tile_brush = brush;
     }
 
     /// Clicking with the Text tool places (or moves) the text object.
@@ -6169,6 +6283,93 @@ mod tests {
         assert_eq!(e.active_frame, 0);
         assert!(e.advance_frame());
         assert_eq!(e.active_frame, 1, "bounces off the start");
+    }
+
+    fn tilemap_editor() -> Editor {
+        use crate::sprite::{TileRef, TilemapCel, Tileset};
+        let mut e = Editor::new(4, 4);
+        e.sprite.layers[0].tilemap = true;
+        e.sprite.layers[0].tileset = 5;
+        e.sprite.tilesets.push(Tileset {
+            id: 5,
+            tile_w: 2,
+            tile_h: 2,
+            base_index: 1,
+            num_tiles: 2,
+            image: vec![
+                Rgba::rgb(255, 0, 0),
+                Rgba::rgb(255, 0, 0),
+                Rgba::rgb(255, 0, 0),
+                Rgba::rgb(255, 0, 0),
+                Rgba::rgb(0, 255, 0),
+                Rgba::rgb(0, 255, 0),
+                Rgba::rgb(0, 255, 0),
+                Rgba::rgb(0, 255, 0),
+            ],
+            ..Default::default()
+        });
+        e.sprite.cels[0][0].tilemap = Some(TilemapCel::new(
+            2,
+            vec![
+                TileRef {
+                    id: 1,
+                    ..Default::default()
+                },
+                TileRef {
+                    id: 1,
+                    ..Default::default()
+                },
+            ],
+        ));
+        e.sprite.rasterize_tilemap(0, 0);
+        e
+    }
+
+    #[test]
+    fn tile_painting_picks_erases_and_undoes() {
+        use crate::sprite::TileRef;
+        let mut e = tilemap_editor();
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+
+        e.tile_brush = 2;
+        e.tile_flip_x = true;
+        e.paint_tile_at(2, 0);
+        assert_eq!(e.sprite.get(0, 0, 2, 0), Rgba::rgb(0, 255, 0));
+        let tm = e.sprite.cels[0][0].tilemap.as_ref().unwrap();
+        assert_eq!(tm.tiles[1].id, 2);
+        assert!(tm.tiles[1].flip_x);
+        assert_eq!(e.undo.len(), 1, "one tile edit = one undo step");
+        e.undo();
+        assert_eq!(e.sprite.get(0, 0, 2, 0), Rgba::rgb(255, 0, 0));
+        assert_eq!(
+            e.sprite.cels[0][0].tilemap.as_ref().unwrap().tiles[1],
+            TileRef {
+                id: 1,
+                ..Default::default()
+            }
+        );
+
+        e.tile_brush = 1;
+        e.paint_tile_at(2, 0);
+        e.cursor = (2, 0);
+        e.tile_flip_x = false;
+        e.pick_tile_at(2, 0);
+        assert_eq!(e.tile_brush, 1);
+
+        e.erase_tile_at(0, 0);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn tile_pixel_mode_paints_pixels_without_changing_refs() {
+        let mut e = tilemap_editor();
+        let before = e.sprite.cels[0][0].tilemap.clone();
+        e.set_tool(Tool::Tile);
+        e.tile_pixel_mode = true;
+        e.fg = Rgba::rgb(9, 8, 7);
+        e.paint_with_tool(0, 0);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(9, 8, 7));
+        assert_eq!(e.sprite.cels[0][0].tilemap, before);
     }
 
     #[test]

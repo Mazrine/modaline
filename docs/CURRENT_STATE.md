@@ -152,7 +152,9 @@ L-shaped corners for the 1 px pencil/eraser.
   `.vpx` preserves them and `.ase` import honours base-index and
   diagonal→X→Y flip order. Tilemap layers keep their per-cel tile refs/flips
   (`TilemapCel`) beside the rendered pixel cache; `Sprite::rasterize_tilemap`
-  rebuilds pixels after edits.
+  rebuilds pixels after edits. The **tile tool** (`K`) places/picks tiles with
+  flips, places the empty tile, and has a pixel-edit mode; each edit is one undo
+  step (`:tileid`, `:tileflip`, `:tilemode`, `:tilepick`, `:tileerase`).
 - **slices**: named 9-patch/pivot slice objects with per-frame keys, read and
   written from `.ase` 0x2022 (colour from user data) and listed in the side
   panel. `:slices` lists them; `:slices <dir> named` exports one PNG per slice

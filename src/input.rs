@@ -384,6 +384,7 @@ fn handle_char(editor: &mut Editor, ch: char) {
         'q' => editor.set_tool(Tool::Shade),
         'n' => editor.set_tool(Tool::Blur),
         'T' => editor.set_tool(Tool::Text),
+        'K' => editor.set_tool(Tool::Tile),
         'C' => {
             let (x, y) = editor.cursor;
             editor.contour_at(x, y);
@@ -712,6 +713,53 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 },
                 _ => editor.msg = "usage: :symcenter cursor|reset|<x> <y>".into(),
             }
+        }
+        "tileid" => match arg.and_then(|v| v.parse::<u32>().ok()) {
+            Some(id) => {
+                editor.tile_brush = id;
+                editor.msg = format!("tile brush: #{id}");
+            }
+            None => editor.msg = "usage: :tileid <0-1024>".into(),
+        },
+        "tileflip" => match arg {
+            Some("none" | "off" | "clear") => {
+                editor.tile_flip_x = false;
+                editor.tile_flip_y = false;
+                editor.tile_flip_diagonal = false;
+                editor.msg = "tile flips: none".into();
+            }
+            Some("x") => {
+                editor.tile_flip_x = !editor.tile_flip_x;
+                editor.msg = format!("tile flip x: {}", editor.tile_flip_x);
+            }
+            Some("y") => {
+                editor.tile_flip_y = !editor.tile_flip_y;
+                editor.msg = format!("tile flip y: {}", editor.tile_flip_y);
+            }
+            Some("diag" | "d" | "diagonal") => {
+                editor.tile_flip_diagonal = !editor.tile_flip_diagonal;
+                editor.msg = format!("tile flip diag: {}", editor.tile_flip_diagonal);
+            }
+            _ => editor.msg = "usage: :tileflip x|y|diag|none".into(),
+        },
+        "tilemode" => match arg {
+            Some("manual" | "tile") => {
+                editor.tile_pixel_mode = false;
+                editor.msg = "tile mode: manual".into();
+            }
+            Some("pixel" | "pixels") => {
+                editor.tile_pixel_mode = true;
+                editor.msg = "tile mode: pixel".into();
+            }
+            _ => editor.msg = "usage: :tilemode manual|pixel".into(),
+        },
+        "tilepick" => {
+            let (x, y) = editor.cursor;
+            editor.pick_tile_at(x, y);
+        }
+        "tileerase" | "tileclear" => {
+            let (x, y) = editor.cursor;
+            editor.erase_tile_at(x, y);
         }
         "textfont" | "font" => match arg {
             Some("vixel" | "bitmap" | "8x8") => {

@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **192 tests green** (181 lib + 11 bin)
+- `cargo test` → **194 tests green** (183 lib + 11 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-30 tilemap model** (see batch 67).
+- Last completed batch: **P5-31 tilemap editing** (see batch 68).
 
 ## How to resume
 
@@ -376,6 +376,10 @@ Read, in order:
     and `Sprite::rasterize_tilemap` rebuild pixels/bounds; `.ase` retains refs,
     `.vpx` round-trips them. 2 new tests (192 total): retained refs/flag and
     re-rasterization.
+68. **P5-31 — tilemap editing** — `Tool::Tile` paint/pick/empty with flips,
+  per-edit rasterize + one undo, pixel-edit mode, `:tileid|flip|mode|pick|erase`
+  and a tilemap panel. 2 new tests (194 total): paint/pick/erase/undo and pixel
+  mode.
 
 ## Next step (exact)
 
@@ -384,8 +388,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-31** — tilemap editing (first open task), then continue down the P5
-  roadmap in dependency order.
+- **P5-32** — write tileset/tilemap chunks (first open task), then continue
+  down the P5 roadmap in dependency order.
 
 ## Known limitations (do not forget)
 
