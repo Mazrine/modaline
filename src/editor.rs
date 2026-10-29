@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use crate::color::Rgba;
 use crate::sprite::{
-    AseProfile, DitherMode, FillOptions, Sprite, color_close, ellipse_points, flood_fill_tol,
-    line_points, rect_filled_points, rect_points,
+    AseProfile, Cel, DitherMode, FillOptions, Sprite, TextObject, color_close, ellipse_points,
+    flood_fill_tol, line_points, rect_filled_points, rect_points,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -834,6 +834,119 @@ impl Editor {
                     self.paint_symmetric(px as u32, py as u32, color);
                 }
             }
+        }
+    }
+
+    /// Create or edit the active cel's text object and re-rasterise it.
+    pub fn set_text_object(&mut self, text: &str) {
+        let (l, f) = (self.active_layer, self.active_frame);
+        if !self.sprite.layer_editable(l) {
+            self.msg = "layer is locked or hidden".into();
+            return;
+        }
+        let (cx, cy) = self.cursor;
+        let existing = self.sprite.cels[l][f]
+            .user_data
+            .as_ref()
+            .and_then(|d| d.text_object());
+        let mut object = existing.unwrap_or(TextObject {
+            text: String::new(),
+            font: "vixel".into(),
+            size: self.text_scale.clamp(1, 8) * 8,
+            align: 0,
+            antialias: false,
+            x: cx as i32,
+            y: cy as i32,
+        });
+        object.text = text.to_string();
+        let color = self.sprite.cels[l][f]
+            .user_data
+            .as_ref()
+            .and_then(|d| d.color)
+            .unwrap_or(self.fg);
+        let before = self.sprite.clone();
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        {
+            let cel = &mut self.sprite.cels[l][f];
+            let (z, op) = (cel.z_index, cel.opacity);
+            *cel = Cel::blank(w, h);
+            cel.z_index = z;
+            cel.opacity = op;
+        }
+        let ud = self.sprite.cels[l][f]
+            .user_data
+            .get_or_insert_with(Default::default);
+        if !ud.set_text_object(&object) {
+            self.msg = "text object: cannot update properties".into();
+            return;
+        }
+        ud.color = Some(color);
+        self.rasterize_text_object(&object, color);
+        self.snapshot(before);
+        self.msg = format!("text object: {:?} ({} px)", text, object.size);
+    }
+
+    fn rasterize_text_object(&mut self, object: &TextObject, color: Rgba) {
+        let scale = (object.size as usize / 8).clamp(1, 8);
+        let (l, f) = (self.active_layer, self.active_frame);
+        let lines: Vec<&str> = object.text.split('\n').collect();
+        let widest = lines
+            .iter()
+            .map(|line| line.chars().count())
+            .max()
+            .unwrap_or(0)
+            * 9
+            * scale;
+        for (li, line) in lines.iter().enumerate() {
+            let width = line.chars().count() * 9 * scale;
+            let offset = match object.align {
+                1 => (widest - width) / 2,
+                2 => widest - width,
+                _ => 0,
+            };
+            let mut pen = object.x + offset as i32;
+            let baseline = object.y + li as i32 * 9 * scale as i32;
+            for ch in line.chars() {
+                use font8x8::UnicodeFonts;
+                if let Some(bits) = font8x8::BASIC_FONTS.get(ch) {
+                    for (col, rows) in bits.iter().enumerate() {
+                        for row in 0..8 {
+                            if rows & (1 << row) == 0 {
+                                continue;
+                            }
+                            for sy in 0..scale {
+                                for sx in 0..scale {
+                                    let x = pen + col as i32 * scale as i32 + sx as i32;
+                                    let y = baseline + row * scale as i32 + sy as i32;
+                                    if x >= 0
+                                        && y >= 0
+                                        && (x as u32) < self.sprite.width
+                                        && (y as u32) < self.sprite.height
+                                    {
+                                        self.sprite.set(l, f, x as u32, y as u32, color);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                pen += 9 * scale as i32;
+            }
+        }
+    }
+
+    pub fn text_object_summary(&self) -> String {
+        let (l, f) = (self.active_layer, self.active_frame);
+        match self.sprite.cels[l][f]
+            .user_data
+            .as_ref()
+            .and_then(|d| d.text_object())
+        {
+            Some(o) => format!(
+                "text object: {:?}  {} px  at {},{}  align {}  antialias {}",
+                o.text, o.size, o.x, o.y, o.align, o.antialias
+            ),
+            None => "no text object on this cel".into(),
         }
     }
 
@@ -4156,6 +4269,39 @@ mod tests {
         e.del_tag(Some("walk"));
         assert_eq!(e.play_range(), (0, 2));
         assert!(e.active_tag.is_none());
+    }
+
+    #[test]
+    fn text_objects_rasterize_and_update() {
+        let mut e = Editor::new(32, 16);
+        e.set_text_object("A");
+        let object = e.sprite.cels[0][0]
+            .user_data
+            .as_ref()
+            .unwrap()
+            .text_object()
+            .unwrap();
+        assert_eq!(object.text, "A");
+        assert!(
+            e.sprite.cels[0][0].pixels.contains(&e.fg),
+            "glyph pixels are painted"
+        );
+        e.set_text_object("AB");
+        let updated = e.sprite.cels[0][0]
+            .user_data
+            .as_ref()
+            .unwrap()
+            .text_object()
+            .unwrap();
+        assert_eq!(updated.text, "AB");
+        e.undo();
+        let restored = e.sprite.cels[0][0]
+            .user_data
+            .as_ref()
+            .unwrap()
+            .text_object()
+            .unwrap();
+        assert_eq!(restored.text, "A");
     }
 
     #[test]

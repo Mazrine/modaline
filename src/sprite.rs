@@ -367,6 +367,86 @@ fn is_zero_u32(v: &u32) -> bool {
     *v == 0
 }
 
+/// An editable text object, stored in a cel's user-data properties and
+/// rasterised with the bitmap font.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TextObject {
+    pub text: String,
+    pub font: String,
+    /// Requested pixel size (the bitmap font uses multiples of 8).
+    pub size: u32,
+    /// 0 = left, 1 = centre, 2 = right.
+    pub align: u8,
+    pub antialias: bool,
+    pub x: i32,
+    pub y: i32,
+}
+
+impl UserData {
+    pub fn text_object(&self) -> Option<TextObject> {
+        let maps = crate::properties::parse(&self.properties)?;
+        let map = maps.iter().find(|m| m.key == 0).or_else(|| maps.first())?;
+        let get = |name: &str| map.props.iter().find(|(n, _)| n == name).map(|(_, v)| v);
+        let text = get("text")?.as_string()?.to_string();
+        Some(TextObject {
+            text,
+            font: get("font")
+                .and_then(|v| v.as_string())
+                .unwrap_or("vixel")
+                .to_string(),
+            size: get("size").and_then(|v| v.as_i32()).unwrap_or(8).max(1) as u32,
+            align: get("align")
+                .and_then(|v| v.as_i32())
+                .unwrap_or(0)
+                .clamp(0, 2) as u8,
+            antialias: get("antialias").and_then(|v| v.as_bool()).unwrap_or(false),
+            x: get("x").and_then(|v| v.as_i32()).unwrap_or(0),
+            y: get("y").and_then(|v| v.as_i32()).unwrap_or(0),
+        })
+    }
+
+    /// Store a text object in map key 0, preserving any other properties.
+    pub fn set_text_object(&mut self, object: &TextObject) -> bool {
+        let mut maps = if self.properties.is_empty() {
+            Vec::new()
+        } else {
+            match crate::properties::parse(&self.properties) {
+                Some(m) => m,
+                None => return false,
+            }
+        };
+        let index = match maps.iter().position(|m| m.key == 0) {
+            Some(i) => i,
+            None => {
+                maps.push(crate::properties::PropertyMap {
+                    key: 0,
+                    props: Vec::new(),
+                });
+                maps.len() - 1
+            }
+        };
+        let props = &mut maps[index].props;
+        let mut put = |name: &str, value: crate::properties::PropertyValue| {
+            if let Some(slot) = props.iter_mut().find(|(n, _)| n == name) {
+                slot.1 = value;
+            } else {
+                props.push((name.to_string(), value));
+            }
+        };
+        use crate::properties::PropertyValue as V;
+        put("text", V::String(object.text.clone()));
+        put("font", V::String(object.font.clone()));
+        put("size", V::Int32(object.size as i32));
+        put("align", V::Int32(i32::from(object.align)));
+        put("antialias", V::Bool(object.antialias));
+        put("x", V::Int32(object.x));
+        put("y", V::Int32(object.y));
+        self.properties = crate::properties::write(&maps);
+        self.flags |= 4;
+        true
+    }
+}
+
 /// One slice key: valid from `frame` to the end of the animation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct SliceKey {

@@ -328,9 +328,16 @@ met; blocked tasks are marked with the reason.
   panel lists them. 3 new tests (157 total): synthetic chunk bytes + round
   trip, `test_grayscale.ase` slice round trip, and named PNG+JSON export. UI
   list not screenshotted (manual check: open a file with slices).
-- [ ] **P5-16 — Text object model** (L) — deps: P5-14.
-  Text objects stored in user data and rasterized; `.ase` text-property round
-  trip.
+- [x] **P5-16 — Text object model** (L) — deps: P5-14.
+  Landed 2026-10-28. A typed property-map codec covers every Aseprite value
+  type. `TextObject { text, font, size, align, antialias, x, y }` is stored in
+  the cel's user-data map key 0 (colour in the user-data colour field).
+  `:textobj <text>` creates/edits and rasterises the bitmap font as one undo
+  snapshot; empty cels with user data now write a cel chunk so the object
+  survives. `.ase` text properties round-trip. 3 new tests (160 total):
+  property codec, `.ase` text object, and editor rasterise/update/undo.
+  Aseprite main still rasterises text (text layers are on its roadmap), so the
+  property layout is vixel's forward-compatible representation.
 - [ ] **P5-17 — External files + deprecated chunks** (S) — deps: P5-07.
   Pass through 0x2008; fix external-tileset skip/flag; document deprecated
   chunks left unsupported.

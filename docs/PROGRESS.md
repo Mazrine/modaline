@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **157 tests green** (148 lib + 9 bin)
+- `cargo test` → **160 tests green** (151 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-15 slices 0x2022** (see batch 52).
+- Last completed batch: **P5-16 text object model** (see batch 53).
 
 ## How to resume
 
@@ -307,6 +307,14 @@ Read, in order:
     named` exports per-slice PNGs + `<stem>.slices.json`, and the side panel
     lists them. 3 new tests (157 total): synthetic chunk bytes/round trip,
     fixture slice round trip, named PNG+JSON export.
+53. **P5-16 — text object model** — typed property-map codec for every
+    Aseprite value type; `TextObject { text, font, size, align, antialias, x,
+    y }` stored in cel user-data map key 0 (colour in the user-data colour),
+    `:textobj` creates/edits and rasterises the bitmap font as one undo step.
+    Empty cels with user data now write a cel chunk so text objects survive.
+    3 new tests (160 total): property codec, `.ase` text object, editor
+    rasterise/update/undo. Aseprite main still rasterises text; this is the
+    forward-compatible user-data layout.
 
 ## Next step (exact)
 
@@ -315,8 +323,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-16** — text object model (first open task), then continue down the P5
-  roadmap in dependency order.
+- **P5-17** — external files + deprecated chunks (first open task), then
+  continue down the P5 roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

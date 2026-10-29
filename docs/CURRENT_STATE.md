@@ -120,7 +120,9 @@ L-shaped corners for the 1 px pencil/eraser.
 - **crop / trim**: `:crop [x y w h]` (no args = the selection) and `:trim`
   (non-transparent content) resize every cel and layer mask, one undo step.
 - **text**: an 8x8 bitmap font at scale 1-8, stamped at the cursor as one undo
-  step (`:text <string>`).
+  step (`:text <string>`). Editable **text objects** store text, font, size,
+  alignment, antialias flag and position in the cel's user-data properties and
+  re-rasterise on edit (`:textobj <string>`); `.ase` text properties round-trip.
 - **slices**: named 9-patch/pivot slice objects with per-frame keys, read and
   written from `.ase` 0x2022 (colour from user data) and listed in the side
   panel. `:slices` lists them; `:slices <dir> named` exports one PNG per slice
@@ -253,7 +255,7 @@ middle-drag = pan.
 `importsheet <sheet.png> [cols rows]` · `open <file>` · `recent [n]` ·
 `filter <name> [amount]` · `rotate <deg>` · `scale <sx> [sy]` · `skew <deg>` ·
 `sel expand|contract|border|feather <n>` / `sel invert|none|all` ·
-`text <string>` · `grid <px>` · `snap [on|off]` · `brush <1-64>` ·
+`text <string>` · `textobj <string>` · `grid <px>` · `snap [on|off]` · `brush <1-64>` ·
 `perfect on|off` · `sym radial [axes]` ·
 `symcenter cursor|reset|<x> <y>` · `fg|bg #rrggbb` · `pal move <from> <to>` ·
 `pal preset <name>` · `pal insert <i> [#hex]` · `pal delete <i>` ·

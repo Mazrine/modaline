@@ -11,4 +11,5 @@ pub mod editor;
 pub mod io;
 pub mod ops;
 pub mod palette;
+pub mod properties;
 pub mod sprite;

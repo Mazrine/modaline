@@ -125,6 +125,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:filter <name> [amount]` | invert, brightness, contrast, hue, saturation, outline, blur, sharpen |
 | `:rotate <deg>` / `:scale <sx> [sy]` / `:skew <deg>` | free-transform the selection (or the cel) |
 | `:text <string>` | stamp 8x8 bitmap text at the cursor |
+| `:textobj <string>` | create/edit an editable text object (stored in cel user data) |
 | `:grid <px>` / `:snap [on\|off]` | design grid and snapping |
 | `:brush <1-64>` | pencil/eraser brush width (also a panel slider) |
 | `:perfect on\|off` | pixel-perfect freehand: drop L-shaped corner pixels |

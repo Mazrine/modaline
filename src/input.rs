@@ -614,6 +614,10 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 _ => editor.msg = "usage: :symcenter cursor|reset|<x> <y>".into(),
             }
         }
+        "textobj" | "textobject" => match arg.filter(|t| !t.is_empty()) {
+            Some(text) => editor.set_text_object(text),
+            None => editor.msg = editor.text_object_summary(),
+        },
         "text" | "t" => {
             let Some(text) = arg.filter(|t| !t.is_empty()) else {
                 editor.msg = "usage: :text <string> (stamps at the cursor)".into();

@@ -109,6 +109,10 @@ thin shells:
   tag (empty placeholder included) so later tags stay attached correctly.
 - Slice chunks carry their own user data immediately after 0x2022; slice keys
   are valid from `frame` onward, so exports use the last key <= the frame.
+- Text objects live in the cel's user-data property map key 0 (`text`, `font`,
+  `size`, `align`, `antialias`, `x`, `y`); use `properties::parse/write` so
+  unknown sibling properties survive edits. A cel with user data but no pixels
+  still needs its cel chunk written.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not

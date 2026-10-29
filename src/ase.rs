@@ -472,8 +472,10 @@ fn write_cel_chunk(
 ) -> bool {
     let cel = &s.cels[li][frame];
     let link = cel.link.filter(|&t| t < s.frames.len() && t != frame);
-    if link.is_none() && cel.pixels.iter().all(|p| p.3 == 0) {
-        return false; // empty cels are implicit in .ase
+    // Empty cels are implicit, but a cel with user data (a text object can
+    // live on an otherwise transparent cel) needs its chunk to carry it.
+    if link.is_none() && cel.user_data.is_none() && cel.pixels.iter().all(|p| p.3 == 0) {
+        return false;
     }
     let mut b = Vec::new();
     b.extend_from_slice(&(li as u16).to_le_bytes());
@@ -2319,6 +2321,31 @@ mod tests {
         assert_eq!(back.transparent_index, ti);
         assert_eq!(back.get(2, 0, 10, 8), color);
         assert_eq!(back.get(2, 0, 11, 8), Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn text_object_user_data_round_trips() {
+        use crate::sprite::TextObject;
+        let mut s = Sprite::new(8, 8);
+        let object = TextObject {
+            text: "Hi".into(),
+            font: "vixel".into(),
+            size: 16,
+            align: 1,
+            antialias: false,
+            x: 2,
+            y: 3,
+        };
+        let ud = s.cels[0][0].user_data.get_or_insert_default();
+        assert!(ud.set_text_object(&object));
+        ud.color = Some(Rgba(1, 2, 3, 4));
+        let path = tmp("vixel_ase_text_object.ase");
+        save(&s, &path).unwrap();
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        let ud = back.cels[0][0].user_data.as_ref().expect("user data");
+        assert_eq!(ud.text_object(), Some(object));
+        assert_eq!(ud.color, Some(Rgba(1, 2, 3, 4)));
     }
 
     #[test]
