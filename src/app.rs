@@ -31,6 +31,7 @@ impl Doc {
         editor.play_loop = config.play_loop;
         editor.play_pingpong = config.play_pingpong;
         editor.renderer = config.renderer.clone();
+        editor.undo_limit = config.undo_limit.max(1);
         editor.recent = config.recent.iter().map(PathBuf::from).collect();
         let mut view = View::new();
         view.zoom = config.zoom.clamp(1, 64);
@@ -214,6 +215,7 @@ impl VixelApp {
         self.config.layout = doc.view.layout.clone();
         self.config.keymap = doc.view.keymap.clone();
         self.config.language = doc.view.language.clone();
+        self.config.undo_limit = doc.editor.undo_limit;
         self.config.renderer = doc.editor.renderer.clone();
         self.config.recent = doc
             .editor

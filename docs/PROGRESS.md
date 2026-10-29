@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **245 tests green** (212 lib + 28 bin + 5 CLI; 1 ignored benchmark)
+- `cargo test` → **247 tests green** (214 lib + 28 bin + 5 CLI; 1 ignored benchmark)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-58 render cache** (see batch 92).
+- Last completed batch: **P5-59 undo/filter** (see batch 93).
 
 ## How to resume
 
@@ -468,6 +468,10 @@ Read, in order:
   pixel dirty rectangles patch via `set_partial`, structural edits force full.
   Composite still full-frame when dirty. 3 tests (245 total) + debug benchmark;
   Xvfb paint/undo smoke.
+93. **P5-59 — undo memory + filter threading** — undo count limit (default 100,
+  prefs/config) + 256 MB byte budget trimming oldest; pointwise filters run on
+  scoped workers (≥64 rows), neighborhood filters synchronous. 2 tests (247
+  total). Remaining gap: async/off-UI-thread filtering (documented Partial).
 
 ## Next step (exact)
 
@@ -476,8 +480,10 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-59** — undo memory + filter threading (deps P5-38 met), then the parity
-  programme is complete.
+- **P5-59 is the last unblocked task.** P5-49/P5-50/P5-51 remain Blocked on an
+  offline `mlua` dependency; no other P5 tasks are open. The programme is
+  complete except for those blocked scripting tasks and the documented Partial
+  rows (localization strings, async filtering, CPU dirty compositing).
 
 ## Known limitations (do not forget)
 

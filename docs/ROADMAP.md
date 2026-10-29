@@ -670,9 +670,17 @@ met; blocked tasks are marked with the reason.
   ignored benchmark on a debug build measured 164.8 ms for a 256×256×8-layer
   composite vs 24 ns for a cache decision (`cargo test benchmark_canvas
   -- --ignored --nocapture`). Xvfb paint/undo smoke showed changes rendering.
-- [ ] **P5-59 — Undo memory + filter threading** (M) — deps: P5-38.
-  Compact structural undo, bounded history, filters off the UI thread where
-  safe.
+- [x] **P5-59 — Undo memory + filter threading** (M) — deps: P5-38.
+  Landed 2026-10-28. Undo/redo history is capped by `undo_limit` (default 100,
+  configurable in preferences/config) and a 256 MB approximate byte budget;
+  oldest steps are dropped, with `UndoStep::bytes` charging snapshots per
+  layer/frame. `apply_filter_parallel` runs pointwise filters (invert,
+  brightness, contrast, hue, saturation, curves, levels, balance, desaturate,
+  posterize) on scoped worker threads for images ≥64 rows; neighborhood
+  filters (blur/sharpen/outline/median/convolve/emboss) stay synchronous, and
+  the editor still waits for the result (no async preview). 2 tests (247 total)
+  cover bounded history and parallel/sequential equivalence for every pointwise
+  filter. Honest remaining gap: true off-UI-thread/async filtering.
 - [ ] **P5-60 — Sprite background colour property** (S) — deps: P5-14.
   Aseprite's sprite-properties background colour (user data); show it in the
   properties panel and round-trip `.ase`/`.vpx`.

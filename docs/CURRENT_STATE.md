@@ -136,6 +136,9 @@ L-shaped corners for the 1 px pencil/eraser.
   transparency checkerboard, cursor + selection + floating-paste previews.
   **Wide pixels** render at the sprite's `pixel_aspect` (checkbox "wide px");
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
+- **undo memory / filters**: undo history is capped by count (preferences/config,
+  default 100) and a 256 MB byte budget; pointwise filters run on scoped worker
+  threads for large images, neighborhood filters stay synchronous.
 - **render cache**: the canvas texture is rebuilt only when revision, frame or
   size changes; onion textures are cached by revision/frame/count. Pixel edits
   accumulate a dirty rectangle and patch the texture with `set_partial`;

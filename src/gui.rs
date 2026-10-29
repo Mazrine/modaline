@@ -635,6 +635,23 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
                                 ui.checkbox(&mut editor.snap, "snap");
                                 ui.checkbox(&mut view.show_aspect, "wide px");
                             });
+                            ui.horizontal(|ui| {
+                                ui.label("undo steps");
+                                let mut limit = editor.undo_limit;
+                                if ui
+                                    .add(egui::DragValue::new(&mut limit).range(10..=1000))
+                                    .changed()
+                                {
+                                    editor.undo_limit = limit;
+                                    while editor.undo.len() > limit {
+                                        editor.undo.remove(0);
+                                    }
+                                }
+                                ui.label(format!(
+                                    "{:.1} MB",
+                                    editor.history_bytes() as f32 / 1.0e6
+                                ));
+                            });
                         });
                     egui::CollapsingHeader::new("grid and canvas")
                         .default_open(true)

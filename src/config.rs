@@ -34,6 +34,8 @@ pub struct Config {
     pub keymap: crate::keymap::Keymap,
     /// Language code or path to a language `.json`.
     pub language: String,
+    /// Maximum undo steps kept per document.
+    pub undo_limit: usize,
     /// The renderer asked for at startup: "glow" (default) or "wgpu". The
     /// request is honoured only by a build with the `wgpu` feature; otherwise
     /// vixel says so and falls back to glow.
@@ -115,6 +117,7 @@ impl Default for Config {
             layout: crate::layout::Layout::default(),
             keymap: crate::keymap::Keymap::default(),
             language: "en".into(),
+            undo_limit: 100,
             renderer: "glow".into(),
             recent: Vec::new(),
             favourites: Vec::new(),

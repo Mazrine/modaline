@@ -72,6 +72,7 @@ Rules that cost me a run each:
 | language | `:lang pt-BR`, screenshot; `:lang check`; `:lang save <file>`; `:lang en` | tab says `sem título`, side says `claro`/`pincel`/`texto`/`simetria`, timeline says `reproduzir`/`+quadro`; check says complete; JSON re-reads |
 | preferences | `:prefs`, screenshot | one window shows editor, grid/canvas, export, appearance (theme/lang), keys and workspace sections; close dismisses it |
 | render cache | paint (`space`), screenshot; `u`, screenshot; idle for 5 s | the painted pixel appears, undo removes it, no flicker/stale texture while idle; `cargo test benchmark_canvas -- --ignored --nocapture` prints full vs cached cost |
+| undo/filter | `:prefs` (undo steps + MB), `:filter invert`, `u` | the preference shows the cap; the filter applies as one step and undo restores; pointwise parallel output is unit-tested against sequential |
 
 ## Checking a screenshot
 

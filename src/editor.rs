@@ -260,6 +260,10 @@ pub struct LayerProps {
     pub collapsed: bool,
 }
 
+/// Approximate cap for the whole undo/redo history; pixel-cell steps are small,
+/// structural snapshots are bounded by this even when the count limit is high.
+const MAX_UNDO_BYTES: usize = 256 * 1024 * 1024;
+
 /// One undoable change.
 pub enum UndoStep {
     /// Per-pixel writes, each `(layer, frame, x, y, before, after)`.
@@ -299,6 +303,20 @@ pub enum UndoStep {
 }
 
 impl UndoStep {
+    /// Approximate heap cost, used to bound structural snapshots.
+    pub fn bytes(&self) -> usize {
+        match self {
+            UndoStep::Cells { cells } => {
+                cells.len() * std::mem::size_of::<(usize, usize, u32, u32, Rgba, Rgba)>()
+            }
+            UndoStep::Snapshot { before, after } | UndoStep::Structure { before, after, .. } => {
+                snapshot_bytes(before) + snapshot_bytes(after)
+            }
+            UndoStep::LayerProps { .. } => 64,
+            UndoStep::CelZ { .. } => 32,
+        }
+    }
+
     pub fn label(&self) -> String {
         match self {
             UndoStep::Cells { cells } => {
@@ -430,6 +448,8 @@ pub struct Editor {
     pub play_passes: u32,
     pub undo: Vec<UndoStep>,
     pub redo: Vec<UndoStep>,
+    /// Maximum undo steps kept (oldest are discarded first).
+    pub undo_limit: usize,
     pub stroke: Option<UndoStep>,
     pub pending: Option<Pending>,
     pub select_anchor: Option<(u32, u32)>,
@@ -468,6 +488,14 @@ pub struct Editor {
     /// The renderer the user asked for. Applied at startup, so changing it here
     /// only takes effect on the next launch.
     pub renderer: String,
+}
+
+fn snapshot_bytes(s: &Sprite) -> usize {
+    // Cels are sparse, but snapshots are structural and often dense after a
+    // transform; charging a full RGBA frame per layer/frame is conservative.
+    let frames = s.frames.len().max(1);
+    let layers = s.layers.len().max(1);
+    s.width as usize * s.height as usize * 4 * frames * layers + 1024
 }
 
 impl Editor {
@@ -553,6 +581,7 @@ impl Editor {
             play_passes: 0,
             undo: Vec::new(),
             redo: Vec::new(),
+            undo_limit: 100,
             stroke: None,
             pending: None,
             select_anchor: None,
@@ -623,6 +652,40 @@ impl Editor {
         self.revision = self.revision.wrapping_add(1);
     }
 
+    /// Push an undo step, trimming the oldest history to the configured count
+    /// and byte budget. Structural snapshots are the expensive entries, so the
+    /// byte cap is what keeps a long session bounded.
+    fn push_undo(&mut self, step: UndoStep) {
+        self.undo.push(step);
+        self.trim_history();
+    }
+
+    fn push_redo(&mut self, step: UndoStep) {
+        self.redo.push(step);
+        while self.redo.len() > self.undo_limit.max(1) {
+            self.redo.remove(0);
+        }
+    }
+
+    fn trim_history(&mut self) {
+        let limit = self.undo_limit.max(1);
+        while self.undo.len() > limit {
+            self.undo.remove(0);
+        }
+        let mut bytes: usize = self.undo.iter().map(UndoStep::bytes).sum();
+        while bytes > MAX_UNDO_BYTES && self.undo.len() > 1 {
+            bytes -= self.undo.remove(0).bytes();
+        }
+    }
+
+    pub fn history_bytes(&self) -> usize {
+        self.undo
+            .iter()
+            .chain(self.redo.iter())
+            .map(UndoStep::bytes)
+            .sum()
+    }
+
     /// Record one pixel write's bounds for a partial canvas upload. Structural
     /// edits go through `touch`, which forces a full rebuild.
     fn mark_dirty_pixel(&mut self, frame: usize, x: u32, y: u32) {
@@ -662,7 +725,7 @@ impl Editor {
         if let Some(UndoStep::Cells { cells }) = &mut self.stroke {
             cells.push((layer, frame, x, y, old, new));
         } else {
-            self.undo.push(UndoStep::Cells {
+            self.push_undo(UndoStep::Cells {
                 cells: vec![(layer, frame, x, y, old, new)],
             });
             self.redo.clear();
@@ -687,7 +750,7 @@ impl Editor {
                 | UndoStep::CelZ { .. } => false,
             };
             if !empty {
-                self.undo.push(s);
+                self.push_undo(s);
                 self.redo.clear();
             }
         }
@@ -2207,7 +2270,7 @@ impl Editor {
                     self.sprite.cels[*layer][*frame].z_index = *before;
                 }
             }
-            self.redo.push(step);
+            self.push_redo(step);
             self.dirty = true;
             self.touch();
         }
@@ -2243,7 +2306,7 @@ impl Editor {
                     self.sprite.cels[*layer][*frame].z_index = *after;
                 }
             }
-            self.undo.push(step);
+            self.push_undo(step);
             self.dirty = true;
             self.touch();
         }
@@ -2998,7 +3061,7 @@ impl Editor {
         let before = self.sprite.clone();
         self.sprite.convert_profile(to);
         let after = self.sprite.clone();
-        self.undo.push(UndoStep::Snapshot {
+        self.push_undo(UndoStep::Snapshot {
             before: Box::new(before),
             after: Box::new(after),
         });
@@ -3034,7 +3097,7 @@ impl Editor {
                 let before = self.sprite.clone();
                 self.sprite.to_grayscale();
                 let after = self.sprite.clone();
-                self.undo.push(UndoStep::Snapshot {
+                self.push_undo(UndoStep::Snapshot {
                     before: Box::new(before),
                     after: Box::new(after),
                 });
@@ -3052,7 +3115,7 @@ impl Editor {
                 }
                 self.sprite.dither_to_palette(self.dither);
                 let after = self.sprite.clone();
-                self.undo.push(UndoStep::Snapshot {
+                self.push_undo(UndoStep::Snapshot {
                     before: Box::new(before),
                     after: Box::new(after),
                 });
@@ -3081,7 +3144,7 @@ impl Editor {
             }
             self.sprite.dither_to_palette(mode);
             let after = self.sprite.clone();
-            self.undo.push(UndoStep::Snapshot {
+            self.push_undo(UndoStep::Snapshot {
                 before: Box::new(before),
                 after: Box::new(after),
             });
@@ -3275,7 +3338,7 @@ impl Editor {
         let src: Vec<Rgba> = (0..w * h)
             .map(|i| self.sprite.get(l, frame, i % w, i / w))
             .collect();
-        let dst = apply_filter(&src, w, h, f, self.fg);
+        let dst = apply_filter_parallel(&src, w, h, f, self.fg);
         let sel = self.current_selection();
         self.begin_stroke();
         let mut changed = 0;
@@ -4154,7 +4217,7 @@ impl Editor {
         if after == before {
             return;
         }
-        self.undo.push(UndoStep::LayerProps {
+        self.push_undo(UndoStep::LayerProps {
             layer,
             before,
             after,
@@ -4263,7 +4326,7 @@ impl Editor {
             return;
         }
         self.sprite.cels[l][f].z_index = z;
-        self.undo.push(UndoStep::CelZ {
+        self.push_undo(UndoStep::CelZ {
             layer: l,
             frame: f,
             before,
@@ -4296,7 +4359,7 @@ impl Editor {
     fn record_structure(&mut self, before: Sprite, before_at: EditPoint) {
         let after = self.sprite.clone();
         let after_at = self.edit_point();
-        self.undo.push(UndoStep::Structure {
+        self.push_undo(UndoStep::Structure {
             before: Box::new(before),
             after: Box::new(after),
             before_at,
@@ -4309,7 +4372,7 @@ impl Editor {
 
     /// Mask ops are whole-sprite snapshots so they undo as one step.
     fn snapshot(&mut self, before: Sprite) {
-        self.undo.push(UndoStep::Snapshot {
+        self.push_undo(UndoStep::Snapshot {
             before: Box::new(before),
             after: Box::new(self.sprite.clone()),
         });
@@ -4498,7 +4561,7 @@ impl Editor {
             Xform::Rot90 => self.sprite.rotate_cw(),
         }
         let after = self.sprite.clone();
-        self.undo.push(UndoStep::Snapshot {
+        self.push_undo(UndoStep::Snapshot {
             before: Box::new(before),
             after: Box::new(after),
         });
@@ -5058,6 +5121,56 @@ impl Filter {
             _ => return None,
         })
     }
+}
+
+/// Pointwise filters read only their own pixel, so rows can be split across
+/// workers. Neighborhood filters (blur/sharpen/outline/median/convolve/emboss)
+/// stay synchronous because banding would change their result.
+fn pointwise(f: Filter) -> bool {
+    matches!(
+        f,
+        Filter::Invert
+            | Filter::Brightness(_)
+            | Filter::Contrast(_)
+            | Filter::Hue(_)
+            | Filter::Saturation(_)
+            | Filter::Curves { .. }
+            | Filter::Levels { .. }
+            | Filter::Balance { .. }
+            | Filter::Desaturate
+            | Filter::Posterize(_)
+    )
+}
+
+/// Apply a pointwise filter on scoped worker threads for large images. The
+/// caller still waits for the result (the editor is not thread-shared), but the
+/// pixel work no longer runs on one thread.
+pub fn apply_filter_parallel(src: &[Rgba], w: u32, h: u32, f: Filter, fg: Rgba) -> Vec<Rgba> {
+    let workers = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .min(8);
+    if !pointwise(f) || workers <= 1 || h < 64 || w == 0 {
+        return apply_filter(src, w, h, f, fg);
+    }
+    let rows = (h as usize).div_ceil(workers);
+    std::thread::scope(|scope| {
+        let mut handles = Vec::new();
+        let mut y = 0usize;
+        while y < h as usize {
+            let end = (y + rows).min(h as usize);
+            let band = &src[y * w as usize..end * w as usize];
+            let band_h = (end - y) as u32;
+            handles.push(scope.spawn(move || (y, end, apply_filter(band, w, band_h, f, fg))));
+            y = end;
+        }
+        let mut out = vec![Rgba::TRANSPARENT; src.len()];
+        for handle in handles {
+            let (start, end, band) = handle.join().expect("filter worker");
+            out[start * w as usize..end * w as usize].copy_from_slice(&band);
+        }
+        out
+    })
 }
 
 fn apply_filter(src: &[Rgba], w: u32, h: u32, f: Filter, fg: Rgba) -> Vec<Rgba> {
@@ -7823,5 +7936,69 @@ mod tests {
         e.commit_paste();
         assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(5, 6, 7));
         assert_eq!(e.sprite.get(0, 0, 7, 0), Rgba::rgb(5, 6, 7));
+    }
+
+    #[test]
+    fn undo_history_is_bounded_and_reports_its_cost() {
+        let mut e = Editor::new(8, 8);
+        e.undo_limit = 3;
+        for i in 0..8u32 {
+            e.paint_pixel(i, 0, Rgba::rgb(i as u8, 2, 3));
+        }
+        assert_eq!(e.undo.len(), 3, "oldest steps are discarded");
+        assert!(e.history_bytes() > 0);
+        e.undo();
+        e.redo();
+        assert!(e.undo.len() <= 3 && e.redo.len() <= 3);
+    }
+
+    #[test]
+    fn parallel_pointwise_filters_match_sequential() {
+        let (w, h) = (37, 64);
+        let src: Vec<Rgba> = (0..w * h)
+            .map(|i| {
+                let x = (i % w) as u8;
+                let y = (i / w) as u8;
+                Rgba(
+                    20 + x,
+                    30 + y,
+                    (x ^ y) * 3,
+                    if (x + y).is_multiple_of(7) { 0 } else { 220 },
+                )
+            })
+            .collect();
+        for f in [
+            Filter::Invert,
+            Filter::Brightness(12),
+            Filter::Contrast(1.3),
+            Filter::Hue(20.0),
+            Filter::Saturation(0.7),
+            Filter::Curves {
+                shadows: 20,
+                midtones: 130,
+                highlights: 230,
+            },
+            Filter::Levels {
+                in_black: 5,
+                in_white: 240,
+                gamma: 1.1,
+                out_black: 0,
+                out_white: 255,
+            },
+            Filter::Balance {
+                r: 10,
+                g: -5,
+                b: 20,
+            },
+            Filter::Desaturate,
+            Filter::Posterize(3),
+        ] {
+            assert_eq!(
+                apply_filter_parallel(&src, w, h, f, Rgba::rgb(1, 2, 3)),
+                apply_filter(&src, w, h, f, Rgba::rgb(1, 2, 3)),
+                "parallel result differs for {}",
+                f.name()
+            );
+        }
     }
 }
