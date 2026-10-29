@@ -254,6 +254,7 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             (Tool::Blur, "Blur"),
             (Tool::Lasso, "Lasso"),
             (Tool::Polygon, "Poly"),
+            (Tool::Text, "Text"),
         ] {
             if ui.selectable_label(editor.tool == tool, name).clicked() {
                 editor.set_tool(tool);
@@ -700,12 +701,54 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     }
     ui.horizontal(|ui| {
         ui.label("text");
-        ui.add(egui::TextEdit::singleline(&mut editor.text).desired_width(120.0));
+        let edit = ui.add(
+            egui::TextEdit::multiline(&mut editor.text)
+                .desired_rows(2)
+                .desired_width(160.0),
+        );
+        let mut changed = edit.changed();
         ui.add(
             egui::DragValue::new(&mut editor.text_scale)
                 .range(1..=8)
                 .prefix("x"),
-        );
+        )
+        .changed()
+        .then(|| changed = true);
+        egui::ComboBox::from_id_salt("text_font")
+            .selected_text(&editor.text_font)
+            .show_ui(ui, |ui| {
+                if ui
+                    .selectable_label(editor.text_font == "vixel", "vixel")
+                    .clicked()
+                {
+                    editor.text_font = "vixel".into();
+                    changed = true;
+                }
+            });
+        let align_name = match editor.text_align {
+            1 => "center",
+            2 => "right",
+            _ => "left",
+        };
+        egui::ComboBox::from_id_salt("text_align")
+            .selected_text(align_name)
+            .show_ui(ui, |ui| {
+                for (i, name) in ["left", "center", "right"].iter().enumerate() {
+                    if ui
+                        .selectable_label(editor.text_align as usize == i, *name)
+                        .clicked()
+                    {
+                        editor.text_align = i as u8;
+                        changed = true;
+                    }
+                }
+            });
+        if changed && editor.tool == Tool::Text {
+            editor.preview_text_object();
+        }
+        if ui.button("text tool").clicked() {
+            editor.set_tool(Tool::Text);
+        }
         if ui
             .button("stamp")
             .on_hover_text("stamp at the cursor (:text)")
@@ -714,6 +757,13 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             let (x, y) = editor.cursor;
             let text = editor.text.clone();
             editor.stamp_text(&text, x, y);
+        }
+        if ui
+            .button("commit")
+            .on_hover_text("finish the live text edit (one undo step)")
+            .clicked()
+        {
+            editor.commit_text_edit();
         }
     });
     ui.horizontal(|ui| {
@@ -2161,6 +2211,7 @@ const HELP: &[&str] = &[
     "  d / R / o          line / rect / ellipse (Enter commits, Esc cancels)",
     "  z / a / q          gradient / spray / shade",
     "  n / C              blur / contour outline",
+    "  T                  text tool (click to place; edit in the panel)",
     "  v                  visual select (V = all)   then:",
     "    y                yank (copy)      Y   copy merged",
     "    x                cut              m   move (cut + float)   p   paste",
@@ -2216,6 +2267,7 @@ const HELP: &[&str] = &[
     "  :renderer glow|wgpu    (wgpu also needs a build with --features wgpu)",
     "  :slices [<dir> [cols rows|named]]   (list, grid export, or named slices)",
     "  :grad linear|radial   :contour   :textobj <text>   (editable text object)",
+    "  :textfont vixel   :textsize <8-64>   :textalign left|center|right",
     "  :export out.png|.ase|stem [scale 1-16]   :import in.png   :open proj.vpx|.ase|.png",
     "  :importsheet sheet.png [cols rows]   (frames from a sheet + its .json)",
     "  :recent [n]   (last 10 files; drop a file on the window to open it)",

@@ -141,7 +141,10 @@ L-shaped corners for the 1 px pencil/eraser.
 - **crop / trim**: `:crop [x y w h]` (no args = the selection) and `:trim`
   (non-transparent content) resize every cel and layer mask, one undo step.
 - **text**: an 8x8 bitmap font at scale 1-8, stamped at the cursor as one undo
-  step (`:text <string>`). Editable **text objects** store text, font, size,
+  step (`:text <string>`). The **Text tool** (`T`) places text objects on click;
+  the panel edits multi-line text with live preview and commits one undo step
+  (`commit`), with font (bitmap "vixel"), size 8-64 and left/centre/right
+  alignment. Editable **text objects** store text, font, size,
   alignment, antialias flag and position in the cel's user-data properties and
   re-rasterise on edit (`:textobj <string>`); `.ase` text properties round-trip.
 - **slices**: named 9-patch/pivot slice objects with per-frame keys, read and

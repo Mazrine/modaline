@@ -383,6 +383,7 @@ fn handle_char(editor: &mut Editor, ch: char) {
         'a' => editor.set_tool(Tool::Spray),
         'q' => editor.set_tool(Tool::Shade),
         'n' => editor.set_tool(Tool::Blur),
+        'T' => editor.set_tool(Tool::Text),
         'C' => {
             let (x, y) = editor.cursor;
             editor.contour_at(x, y);
@@ -712,6 +713,38 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 _ => editor.msg = "usage: :symcenter cursor|reset|<x> <y>".into(),
             }
         }
+        "textfont" | "font" => match arg {
+            Some("vixel" | "bitmap" | "8x8") => {
+                editor.text_font = "vixel".into();
+                editor.msg = "text font: vixel (bitmap 8x8)".into();
+            }
+            Some(other) => {
+                editor.msg = format!("text font: {other} unsupported (bitmap 'vixel' only)");
+            }
+            None => editor.msg = "usage: :textfont vixel".into(),
+        },
+        "textsize" => match arg.and_then(|v| v.parse::<u32>().ok()) {
+            Some(n) => {
+                editor.text_scale = (n / 8).clamp(1, 8);
+                editor.msg = format!("text size: {} px", editor.text_scale * 8);
+            }
+            None => editor.msg = "usage: :textsize <8-64>".into(),
+        },
+        "textalign" | "textalignment" => match arg {
+            Some("left" | "l") => {
+                editor.text_align = 0;
+                editor.msg = "text align: left".into();
+            }
+            Some("center" | "centre" | "c") => {
+                editor.text_align = 1;
+                editor.msg = "text align: center".into();
+            }
+            Some("right" | "r") => {
+                editor.text_align = 2;
+                editor.msg = "text align: right".into();
+            }
+            _ => editor.msg = "usage: :textalign left|center|right".into(),
+        },
         "textobj" | "textobject" => match arg.filter(|t| !t.is_empty()) {
             Some(text) => editor.set_text_object(text),
             None => editor.msg = editor.text_object_summary(),

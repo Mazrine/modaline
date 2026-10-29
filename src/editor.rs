@@ -32,6 +32,7 @@ pub enum Tool {
     Blur,
     Lasso,
     Polygon,
+    Text,
 }
 
 /// How a brush colour combines with the destination pixel.
@@ -86,11 +87,12 @@ impl Tool {
             Tool::Blur => 10,
             Tool::Lasso => 11,
             Tool::Polygon => 12,
+            Tool::Text => 13,
         }
     }
 }
 
-const TOOL_COUNT: usize = 13;
+const TOOL_COUNT: usize = 14;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Symmetry {
@@ -371,6 +373,11 @@ pub struct Editor {
     /// typed, so the panel keeps it between stamps.
     pub text_scale: u32,
     pub text: String,
+    /// Font selector (bitmap only) and 0=left, 1=centre, 2=right.
+    pub text_font: String,
+    pub text_align: u8,
+    /// Snapshot taken before the first live text preview; committed as one undo.
+    text_edit_before: Option<Box<Sprite>>,
     /// Playback: wrap at the end of the range, bounce instead of wrapping, and
     /// the current direction for the bounce.
     pub play_loop: bool,
@@ -477,6 +484,9 @@ impl Editor {
             snap: false,
             text_scale: 1,
             text: String::new(),
+            text_font: "vixel".into(),
+            text_align: 0,
+            text_edit_before: None,
             play_loop: true,
             play_pingpong: false,
             play_dir: 1,
@@ -696,6 +706,7 @@ impl Editor {
             Tool::Shade => self.shade_at(x, y, true),
             Tool::Spray => self.spray_at(x, y),
             Tool::Blur => self.blur_at(x, y),
+            Tool::Text => self.place_text_at(x, y),
             _ => self.paint_symmetric(x, y, self.fg),
         }
     }
@@ -1298,34 +1309,108 @@ impl Editor {
         self.stamp_brush_symmetric(&brush, x, y, color);
     }
 
-    /// Create or edit the active cel's text object and re-rasterise it.
+    /// Create or edit the active cel's text object and re-rasterise it as one
+    /// undo step.
     pub fn set_text_object(&mut self, text: &str) {
-        let (l, f) = (self.active_layer, self.active_frame);
+        if let Some(before) = self.text_edit_before.take() {
+            self.sprite = *before;
+        }
+        self.text = text.to_string();
+        self.text_edit_before = Some(Box::new(self.sprite.clone()));
+        self.preview_text_object();
+        self.commit_text_edit();
+        if let Some((object, _)) = self.text_object_for(None) {
+            self.msg = format!("text object: {:?} ({} px)", object.text, object.size);
+        }
+    }
+
+    /// Update the text object from the panel fields without pushing undo yet.
+    pub fn preview_text_object(&mut self) {
+        let l = self.active_layer;
         if !self.sprite.layer_editable(l) {
             self.msg = "layer is locked or hidden".into();
             return;
         }
-        let (cx, cy) = self.cursor;
+        let Some((object, color)) = self.text_object_for(None) else {
+            return;
+        };
+        if self.text_edit_before.is_none() {
+            self.text_edit_before = Some(Box::new(self.sprite.clone()));
+        }
+        self.rebuild_text_cel(&object, color);
+        self.msg = format!("text: {} px, align {}", object.size, object.align);
+    }
+
+    /// Commit a live preview as exactly one undo step.
+    pub fn commit_text_edit(&mut self) {
+        if let Some(before) = self.text_edit_before.take() {
+            self.snapshot(*before);
+        }
+    }
+
+    /// Drop a live preview and restore the pre-edit cel.
+    pub fn cancel_text_edit(&mut self) {
+        if let Some(before) = self.text_edit_before.take() {
+            self.sprite = *before;
+            self.touch();
+            self.msg = "text edit cancelled".into();
+        }
+    }
+
+    /// Clicking with the Text tool places (or moves) the text object.
+    pub fn place_text_at(&mut self, x: u32, y: u32) {
+        self.cursor = (x, y);
+        if self.text.trim().is_empty() {
+            self.msg = "text: type something in the panel first".into();
+            return;
+        }
+        self.commit_text_edit();
+        let Some((object, color)) = self.text_object_for(Some((x as i32, y as i32))) else {
+            return;
+        };
+        self.text_edit_before = Some(Box::new(self.sprite.clone()));
+        self.rebuild_text_cel(&object, color);
+        self.commit_text_edit();
+        self.msg = format!("text placed at {},{} ({} px)", x, y, object.size);
+    }
+
+    fn text_object_for(&self, at: Option<(i32, i32)>) -> Option<(TextObject, Rgba)> {
+        let (l, f) = (self.active_layer, self.active_frame);
         let existing = self.sprite.cels[l][f]
             .user_data
             .as_ref()
             .and_then(|d| d.text_object());
-        let mut object = existing.unwrap_or(TextObject {
-            text: String::new(),
-            font: "vixel".into(),
-            size: self.text_scale.clamp(1, 8) * 8,
-            align: 0,
-            antialias: false,
-            x: cx as i32,
-            y: cy as i32,
-        });
-        object.text = text.to_string();
+        if existing.is_none() && self.text.is_empty() {
+            return None;
+        }
+        let (cx, cy) = at.unwrap_or((self.cursor.0 as i32, self.cursor.1 as i32));
         let color = self.sprite.cels[l][f]
             .user_data
             .as_ref()
             .and_then(|d| d.color)
             .unwrap_or(self.fg);
-        let before = self.sprite.clone();
+        let mut object = existing.unwrap_or(TextObject {
+            text: String::new(),
+            font: "vixel".into(),
+            size: self.text_scale.clamp(1, 8) * 8,
+            align: self.text_align.min(2),
+            antialias: false,
+            x: cx,
+            y: cy,
+        });
+        object.text = self.text.clone();
+        object.font = self.text_font.clone();
+        object.size = self.text_scale.clamp(1, 8) * 8;
+        object.align = self.text_align.min(2);
+        if let Some((x, y)) = at {
+            object.x = x;
+            object.y = y;
+        }
+        Some((object, color))
+    }
+
+    fn rebuild_text_cel(&mut self, object: &TextObject, color: Rgba) {
+        let (l, f) = (self.active_layer, self.active_frame);
         let (w, h) = (self.sprite.width, self.sprite.height);
         {
             let cel = &mut self.sprite.cels[l][f];
@@ -1337,14 +1422,12 @@ impl Editor {
         let ud = self.sprite.cels[l][f]
             .user_data
             .get_or_insert_with(Default::default);
-        if !ud.set_text_object(&object) {
+        if !ud.set_text_object(object) {
             self.msg = "text object: cannot update properties".into();
             return;
         }
         ud.color = Some(color);
-        self.rasterize_text_object(&object, color);
-        self.snapshot(before);
-        self.msg = format!("text object: {:?} ({} px)", text, object.size);
+        self.rasterize_text_object(object, color);
     }
 
     fn rasterize_text_object(&mut self, object: &TextObject, color: Rgba) {
@@ -3200,6 +3283,9 @@ impl Editor {
     }
 
     pub fn set_tool(&mut self, tool: Tool) {
+        if self.tool == Tool::Text && tool != Tool::Text {
+            self.commit_text_edit();
+        }
         self.tool = tool;
         self.lasso_points.clear();
         self.pending = None;
@@ -5711,6 +5797,51 @@ mod tests {
         e.set_alpha_lock(false);
         e.paint_pixel(1, 0, e.fg);
         assert_eq!(e.sprite.get(0, 0, 1, 0), Rgba(255, 0, 0, 255));
+    }
+
+    #[test]
+    fn text_tool_live_preview_is_one_undo_step() {
+        let mut e = Editor::new(32, 16);
+        e.set_tool(Tool::Text);
+        e.text = "A".into();
+        e.cursor = (1, 1);
+        e.preview_text_object();
+        e.text = "AB".into();
+        e.preview_text_object();
+        assert!(e.undo.is_empty(), "previews do not push undo yet");
+        assert!(e.sprite.cels[0][0].pixels.contains(&e.fg), "glyph painted");
+        e.commit_text_edit();
+        assert_eq!(e.undo.len(), 1, "commit is exactly one step");
+        e.undo();
+        assert!(
+            e.sprite.cels[0][0]
+                .pixels
+                .iter()
+                .all(|p| p.is_transparent()),
+            "undo clears the preview"
+        );
+    }
+
+    #[test]
+    fn text_tool_places_at_cursor_with_size_and_alignment() {
+        let mut e = Editor::new(40, 24);
+        e.set_tool(Tool::Text);
+        e.text = "X".into();
+        e.text_scale = 2;
+        e.text_align = 2;
+        e.place_text_at(5, 3);
+        let object = e.sprite.cels[0][0]
+            .user_data
+            .as_ref()
+            .unwrap()
+            .text_object()
+            .unwrap();
+        assert_eq!((object.x, object.y), (5, 3));
+        assert_eq!(object.size, 16);
+        assert_eq!(object.align, 2);
+        assert_eq!(object.font, "vixel");
+        assert_eq!(e.undo.len(), 1);
+        assert!(!e.sprite.get(0, 0, 5, 3).is_transparent());
     }
 
     #[test]

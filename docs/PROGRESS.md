@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **187 tests green** (176 lib + 11 bin)
+- `cargo test` → **189 tests green** (178 lib + 11 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-27 tiled options** (see batch 64).
+- Last completed batch: **P5-28 text tool** (see batch 65).
 
 ## How to resume
 
@@ -364,6 +364,9 @@ Read, in order:
 64. **P5-27 — tiled options** — configurable X/Y repeats, neighbour opacity and
     preview toggle; hit extent follows the grid, seam wrapping unchanged. 1 new
     test (187 total): offset counts and clamping.
+65. **P5-28 — text tool** — `Tool::Text` placement, multi-line live preview with
+    one-undo commit, bitmap font/size/alignment/colour, `:textfont|size|align`.
+    2 new tests (189 total): preview undo grouping and placement/settings.
 
 ## Next step (exact)
 
@@ -372,8 +375,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-28** — text tool (first open task), then continue down the P5 roadmap in
-  dependency order.
+- **P5-29** — tileset model + retained import (first open task), then continue
+  down the P5 roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

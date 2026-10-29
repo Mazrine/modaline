@@ -403,9 +403,15 @@ met; blocked tasks are marked with the reason.
 
 ### Epic 5 — Text UI
 
-- [ ] **P5-28 — Text tool** (L) — deps: P5-16.
-  `Mode`/`Tool::Text`, placement, live preview, fonts (bitmap + TTF if
-  accepted), size, alignment, colour, edit/re-rasterize, one undo step.
+- [x] **P5-28 — Text tool** (L) — deps: P5-16.
+  Landed 2026-10-28. `Tool::Text` (`T`): click places a text object at the
+  cursor; the panel edits multi-line text with live preview, and previews commit
+  as exactly one undo step (`commit`). Font is the 8x8 bitmap ("vixel" only —
+  TTF is not accepted), size 8-64, alignment left/centre/right, colour from fg
+  or the cel's stored text colour. Commands: `:textfont`, `:textsize`,
+  `:textalign`; `:textobj` still edits/queries. 2 new tests (189 total): live
+  preview = one undo, and placement/size/alignment. UI preview not
+  screenshotted (manual check: `T`, type in the panel, click the canvas).
 
 ### Epic 6 — Tilesets and tilemaps
 

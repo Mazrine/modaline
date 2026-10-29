@@ -137,6 +137,8 @@ thin shells:
   overlay coordinates by `zoom` directly, or wide-pixel sprites drift.
 - Tile preview extents use `Editor::tile_offsets()`/`tile_x`/`tile_y`; the
   canvas extent and hit area must match or seam clicks land outside.
+- Text editing snapshots once in `text_edit_before`; `preview_text_object`
+  re-rasterises without undo, and only `commit_text_edit` pushes the step.
 - Selection masks are sprite-sized grids (`selection_grid`/`grid_to_selection`);
   fill/stroke and mask transforms go through the paint/put helpers so clipping
   and undo stay correct. `transform_selection_mask` is mask-only; the pixel

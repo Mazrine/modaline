@@ -131,6 +131,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:rotsprite on\|off` / `:pivot <x> <y>\|clear` | supersampled rotation and a custom transform pivot |
 | `:text <string>` | stamp 8x8 bitmap text at the cursor |
 | `:textobj <string>` | create/edit an editable text object (stored in cel user data) |
+| `:textfont vixel` / `:textsize <8-64>` / `:textalign left\|center\|right` | text tool font, size and alignment |
 | `:grid <px>` / `:snap [on\|off]` | design grid and snapping |
 | `:brush <1-64>` / `:brush square\|circle <n>` / `:brush spacing <pct>` | brush size, built-in shape, stamp spacing |
 | `:brush load\|save\|use\|list [name]` | custom PNG brush and the `vixel/brushes` library |
@@ -249,7 +250,7 @@ picker, pencil/eraser/bucket/picker/line/rect/ellipse with **filled shapes**,
 polygon selection**
 with **add/subtract/intersect**, **expand/contract/border/feather/invert** and
 copy/cut/paste/move, **sixteen filters** (curves, levels, balance, median, convolve, emboss…), **free rotate/scale/skew + RotSprite + interactive handles/pivot**, **8x8 bitmap
-text**, **brush size 1-64 + custom masks/spacing + pressure**, **pixel-perfect freehand**, **crop/trim**,
+text** (text tool with live preview/size/alignment), **brush size 1-64 + custom masks/spacing + pressure**, **pixel-perfect freehand**, **crop/trim**,
 **per-tool inks + alpha lock**, **design grid + snap**,
 **multi-stop gradients** (presets, alpha, Bayer dither), **wide-pixel preview**, **symmetry painting**
 (mirror or radial,
