@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **169 tests green** (160 lib + 9 bin)
+- `cargo test` → **170 tests green** (161 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-19 custom brushes** (see batch 56).
+- Last completed batch: **P5-20 pressure/tablet** (see batch 57).
 
 ## How to resume
 
@@ -332,6 +332,11 @@ Read, in order:
     (`:brush load|save|use|list`); freehand, shapes and symmetry stamp the
     mask; cursor previews its coverage. 4 new tests (169 total): builtins, PNG
     round trip, custom-mask limits, circle/shape/spacing.
+57. **P5-20 — pressure/tablet** — touch/pen `force` is captured and touch paint
+    is mapped to sprite pixels; pressure scales brush coverage. The manual
+    slider and `:pressure <0-100>|auto` cover mice (no force on X11) and override
+    the device until `auto`. 1 new test (170 total): pressure scaling and
+    manual/device precedence.
 
 ## Next step (exact)
 
@@ -340,8 +345,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-20** — pressure/tablet (first open task), then continue down the P5
-  roadmap in dependency order.
+- **P5-21** — tool depth/consistency (first open task), then continue down the
+  P5 roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

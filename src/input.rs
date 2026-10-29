@@ -27,7 +27,52 @@ pub fn handle_input(editor: &mut Editor, view: &mut View, ui: &egui::Ui) {
             Event::Copy => clipboard_copy(editor, ui.ctx()),
             Event::Cut => clipboard_cut(editor, ui.ctx()),
             Event::PasteImage(img) => clipboard_paste_image(editor, img),
+            Event::Touch {
+                phase, pos, force, ..
+            } => handle_touch(editor, view, *phase, *pos, *force),
             _ => {}
+        }
+    }
+}
+
+/// Paint from a tablet/touch event, taking its pressure when the backend
+/// reports one. Mice never carry force, so the manual pressure control covers
+/// those devices.
+fn handle_touch(
+    editor: &mut Editor,
+    view: &View,
+    phase: egui::TouchPhase,
+    pos: egui::Pos2,
+    force: Option<f32>,
+) {
+    match phase {
+        egui::TouchPhase::Start | egui::TouchPhase::Move => {
+            if force.is_some() {
+                editor.set_device_pressure(force);
+            }
+            let z = view.zoom as f32;
+            if z <= 0.0 {
+                return;
+            }
+            let local = (pos - view.pan) / z;
+            let x = local.x.floor();
+            let y = local.y.floor();
+            if x < 0.0
+                || y < 0.0
+                || x as u32 >= editor.sprite.width
+                || y as u32 >= editor.sprite.height
+            {
+                return;
+            }
+            if phase == egui::TouchPhase::Start || editor.stroke.is_none() {
+                editor.begin_stroke();
+            }
+            editor.cursor = (x as u32, y as u32);
+            editor.paint_with_tool(x as u32, y as u32);
+        }
+        egui::TouchPhase::End | egui::TouchPhase::Cancel => {
+            editor.end_stroke();
+            editor.set_device_pressure(None);
         }
     }
 }
@@ -637,6 +682,20 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "pixel-perfect: off".into();
             }
             _ => editor.msg = "usage: :perfect on|off".into(),
+        },
+        "pressure" => match arg {
+            Some("auto") => editor.pressure_auto(),
+            Some(v) => match v.parse::<f32>() {
+                Ok(p) => editor.set_pressure(p / 100.0),
+                Err(_) => editor.msg = "usage: :pressure <0-100>|auto".into(),
+            },
+            None => {
+                editor.msg = format!(
+                    "pressure: {:.0}% ({})",
+                    editor.pressure() * 100.0,
+                    editor.pressure_source()
+                );
+            }
         },
         "brush" => {
             let rest = arg.unwrap_or("").trim();

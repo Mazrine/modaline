@@ -513,6 +513,20 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         ui.add(egui::Slider::new(&mut editor.brush_spacing, 1..=200).suffix("%"));
     });
     ui.horizontal(|ui| {
+        ui.label("pressure");
+        let mut pct = (editor.pressure() * 100.0).round() as u32;
+        if ui
+            .add(egui::Slider::new(&mut pct, 0..=100).suffix("%"))
+            .changed()
+        {
+            editor.set_pressure(pct as f32 / 100.0);
+        }
+        if ui.small_button("auto").clicked() {
+            editor.pressure_auto();
+        }
+        ui.label(editor.pressure_source());
+    });
+    ui.horizontal(|ui| {
         ui.label("ink");
         egui::ComboBox::from_id_salt("ink")
             .selected_text(editor.ink().name())
@@ -1810,6 +1824,7 @@ const HELP: &[&str] = &[
     "  :filter invert|brightness|contrast|hue|saturation|outline|blur|sharpen [amount]",
     "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   (free transform)",
     "  :brush <1-64>|square|circle <n>|spacing <pct>|load <png>|save|use|list",
+    "  :pressure <0-100>|auto   (manual override; auto follows pen force)",
     "  :perfect on|off   :grid <px>   :snap on|off   (brush, grid)",
     "  :crop [x y w h]   :trim   (crop to a rect/selection, or to content)",
     "  :ink simple|lockalpha|replace|shading|erase   :alphalock on|off",

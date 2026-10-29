@@ -302,6 +302,10 @@ pub struct Editor {
     pub custom_brush: Option<Brush>,
     /// Stamp spacing as a percentage of the brush's largest dimension.
     pub brush_spacing: u32,
+    /// Last pressure reported by a touch/pen event.
+    pub device_pressure: Option<f32>,
+    /// Explicit pressure override (the UI slider or `:pressure`).
+    pub manual_pressure: Option<f32>,
     /// Drop L-shaped corner pixels while freehand drawing.
     pub pixel_perfect: bool,
     /// Last points of the current freehand stroke, for the corner filter.
@@ -405,6 +409,8 @@ impl Editor {
             brush_kind: BrushKind::Square,
             custom_brush: None,
             brush_spacing: 100,
+            device_pressure: None,
+            manual_pressure: None,
             pixel_perfect: false,
             pp: Vec::new(),
             fg,
@@ -927,11 +933,12 @@ impl Editor {
             return;
         }
         let start = self.pp.last().copied().unwrap_or((x, y));
+        let brush = self.current_brush();
         for (px, py) in line_points(start.0 as i32, start.1 as i32, x as i32, y as i32) {
             if self.pp.last() == Some(&(px, py)) {
                 continue;
             }
-            self.paint_symmetric(px, py, color);
+            self.stamp_brush_symmetric(&brush, px, py, color);
             self.pp.push((px, py));
             let n = self.pp.len();
             if n >= 3 {
@@ -987,6 +994,38 @@ impl Editor {
         self.msg = format!("brush spacing: {}%", self.brush_spacing);
     }
 
+    /// Effective pressure: manual override, else device force, else full.
+    pub fn pressure(&self) -> f32 {
+        self.manual_pressure
+            .or(self.device_pressure)
+            .unwrap_or(1.0)
+            .clamp(0.0, 1.0)
+    }
+
+    pub fn pressure_source(&self) -> &'static str {
+        if self.manual_pressure.is_some() {
+            "manual"
+        } else if self.device_pressure.is_some() {
+            "device"
+        } else {
+            "default"
+        }
+    }
+
+    pub fn set_pressure(&mut self, pressure: f32) {
+        self.manual_pressure = Some(pressure.clamp(0.0, 1.0));
+        self.msg = format!("pressure: {:.0}% (manual)", self.pressure() * 100.0);
+    }
+
+    pub fn pressure_auto(&mut self) {
+        self.manual_pressure = None;
+        self.msg = format!("pressure: auto ({})", self.pressure_source());
+    }
+
+    pub fn set_device_pressure(&mut self, pressure: Option<f32>) {
+        self.device_pressure = pressure.map(|p| p.clamp(0.0, 1.0));
+    }
+
     pub fn load_brush(&mut self, path: &std::path::Path) -> anyhow::Result<()> {
         let brush = brush::load(path)?;
         self.custom_brush = Some(brush.clone());
@@ -1019,9 +1058,14 @@ impl Editor {
         let ox = -(brush.w as i32 / 2);
         let oy = -(brush.h as i32 / 2);
         let erase = self.ink() == Ink::Erase;
+        let pressure = self.pressure();
         for by in 0..brush.h {
             for bx in 0..brush.w {
                 let coverage = brush.coverage(bx as i32, by as i32);
+                if coverage == 0 {
+                    continue;
+                }
+                let coverage = (f32::from(coverage) * pressure).round() as u8;
                 if coverage == 0 {
                     continue;
                 }
@@ -5281,6 +5325,47 @@ mod tests {
         assert_eq!((e.sprite.width, e.sprite.height), (3, 3));
         assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::rgb(9, 9, 9), "2,3 -> 1,1");
         assert_eq!(e.sprite.layers[0].mask.as_ref().unwrap().pixels.len(), 9);
+    }
+
+    #[test]
+    fn pressure_scales_stamps_and_manual_overrides_device() {
+        let mut e = Editor::new(6, 1);
+        e.fg = Rgba(255, 0, 0, 255);
+        e.set_pressure(0.5);
+        assert_eq!(e.pressure_source(), "manual");
+        e.begin_stroke();
+        e.paint_with_tool(0, 0);
+        e.end_stroke();
+        let a = e.sprite.get(0, 0, 0, 0).3;
+        assert!((120..=136).contains(&a), "half pressure alpha: {a}");
+
+        e.set_pressure(0.0);
+        e.begin_stroke();
+        e.paint_with_tool(1, 0);
+        e.end_stroke();
+        assert_eq!(e.sprite.get(0, 0, 1, 0), Rgba::TRANSPARENT);
+
+        e.pressure_auto();
+        assert_eq!(e.pressure(), 1.0);
+        e.begin_stroke();
+        e.paint_with_tool(2, 0);
+        e.end_stroke();
+        assert_eq!(e.sprite.get(0, 0, 2, 0).3, 255);
+
+        e.set_device_pressure(Some(0.25));
+        assert_eq!(e.pressure_source(), "device");
+        e.begin_stroke();
+        e.paint_with_tool(3, 0);
+        e.end_stroke();
+        let a = e.sprite.get(0, 0, 3, 0).3;
+        assert!((60..=68).contains(&a), "device pressure alpha: {a}");
+
+        e.set_pressure(1.0);
+        assert_eq!(e.pressure_source(), "manual");
+        e.begin_stroke();
+        e.paint_with_tool(4, 0);
+        e.end_stroke();
+        assert_eq!(e.sprite.get(0, 0, 4, 0).3, 255);
     }
 
     #[test]

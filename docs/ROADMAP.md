@@ -253,10 +253,14 @@ met; blocked tasks are marked with the reason.
   coverage. 4 new tests (169 total): built-in coverage, PNG round trip, custom
   mask limits, and circle/shape/spacing. UI preview not screenshotted (manual
   check: load a brush and hover the canvas).
-- [ ] **P5-20 — Pressure/tablet** (M) — deps: P5-19.
-  Spike `egui::Event::Touch.force`/eframe mapping; thread `pressure` through
-  `paint_at`/`paint_with_tool`; if the backend cannot deliver it, ship a manual
-  pressure control and document the limit.
+- [x] **P5-20 — Pressure/tablet** (M) — deps: P5-19.
+  Landed 2026-10-28. `egui::Event::Touch.force` is captured and touch/pen events
+  paint at the mapped sprite pixel; pressure scales brush-mask coverage (so it
+  affects freehand, pixel-perfect and shapes). Mice carry no force on X11, so a
+  manual slider plus `:pressure <0-100>|auto` is the fallback and takes over
+  device force until `auto`. 1 new test (170 total): pressure scaling and the
+  manual/device override order. Tablet hardware unavailable: manual fallback
+  smoke-checked in the UI only.
 - [ ] **P5-21 — Tool depth and consistency** (M) — deps: P5-19.
   Brush 1-64 everywhere, shape thickness, spray rate/radius, shade
   strength/ramp, blur radius unified with `box_blur`, contour width/position.
