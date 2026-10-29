@@ -1776,8 +1776,8 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                     } else {
                         ase::save(&editor.sprite, &path).map(|_| "exported".to_string())
                     }
-                } else if io::is_png(&path) {
-                    io::export_png_scaled(&editor.sprite, editor.active_frame, &path, scale)
+                } else if io::is_image(&path) {
+                    io::export_image_scaled(&editor.sprite, editor.active_frame, &path, scale)
                         .map(|_| "exported".to_string())
                 } else {
                     io::export_animation_scaled(&editor.sprite, &path, None, scale).map(|paths| {
@@ -1822,7 +1822,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 if !replace_ok(editor, name == "import!", "import") {
                     return;
                 }
-                match io::import_png(PathBuf::from(p).as_path()) {
+                match io::import_image(PathBuf::from(p).as_path()) {
                     Ok(s) => {
                         editor.replace_sprite(s);
                         editor.msg = "imported".into();

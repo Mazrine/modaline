@@ -94,13 +94,23 @@ pub fn is_png(path: &Path) -> bool {
         .is_some_and(|e| e.eq_ignore_ascii_case("png"))
 }
 
+/// Static image formats vixel can read and write.
+pub fn is_image(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+        matches!(
+            e.to_ascii_lowercase().as_str(),
+            "png" | "jpg" | "jpeg" | "bmp" | "tga" | "webp"
+        )
+    })
+}
+
 /// Load whatever file vixel can open, dispatched on the extension. The one
 /// place that dispatch lives, so `:open` and the command line cannot drift.
 pub fn load_any(path: &Path) -> Result<Sprite> {
     if is_ase(path) {
         crate::ase::load(path)
-    } else if is_png(path) {
-        import_png(path)
+    } else if is_image(path) {
+        import_image(path)
     } else {
         load_project(path)
     }
@@ -1191,8 +1201,39 @@ fn with_suffix(stem: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(format!("{}{suffix}", stem.display()))
 }
 
-/// Import a PNG as a fresh single-layer, single-frame sprite.
-pub fn import_png(path: &Path) -> Result<Sprite> {
+/// Export one frame to PNG/JPG/BMP/TGA/WebP, dispatching on the extension.
+pub fn export_image_scaled(sprite: &Sprite, frame: usize, path: &Path, scale: u32) -> Result<()> {
+    let img = scaled(frame_image(sprite, frame), scale);
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match ext.as_str() {
+        "jpg" | "jpeg" => {
+            let file = std::fs::File::create(path)
+                .with_context(|| format!("create {}", path.display()))?;
+            let mut rgb = image::RgbImage::new(img.width(), img.height());
+            for (x, y, p) in img.enumerate_pixels() {
+                let a = u32::from(p.0[3]);
+                let ch = |v: u8| ((u32::from(v) * a + 255 * (255 - a)) / 255) as u8;
+                rgb.put_pixel(x, y, image::Rgb([ch(p.0[0]), ch(p.0[1]), ch(p.0[2])]));
+            }
+            image::codecs::jpeg::JpegEncoder::new_with_quality(std::io::BufWriter::new(file), 92)
+                .encode_image(&rgb)
+                .with_context(|| format!("save {}", path.display()))?;
+        }
+        "png" | "bmp" | "tga" | "webp" => {
+            img.save(path)
+                .with_context(|| format!("save {}", path.display()))?;
+        }
+        _ => bail!("unsupported image extension: {ext}"),
+    }
+    Ok(())
+}
+
+/// Import any supported image as a fresh single-layer, single-frame sprite.
+pub fn import_image(path: &Path) -> Result<Sprite> {
     let img = image::open(path)
         .with_context(|| format!("open {}", path.display()))?
         .to_rgba8();
@@ -1459,6 +1500,30 @@ mod tests {
         let sheet = export_sheet_layout(&s, &path, &cfg).unwrap();
         assert_eq!((sheet.columns, sheet.rows), (2, 2));
         assert_eq!(image::open(&path).unwrap().to_rgba8().dimensions(), (4, 4));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn extra_image_formats_export_and_reload() {
+        let mut s = Sprite::new(2, 2);
+        s.set(0, 0, 0, 0, Rgba::rgb(200, 10, 20));
+        s.set(0, 0, 1, 1, Rgba(0, 80, 255, 255));
+        let dir = std::env::temp_dir().join(format!("vixel-formats-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for ext in ["bmp", "tga", "webp", "jpg"] {
+            let path = dir.join(format!("frame.{ext}"));
+            export_image_scaled(&s, 0, &path, 2).unwrap();
+            assert!(path.exists(), "{ext}");
+            let img = image::open(&path).unwrap();
+            assert_eq!(img.width(), 4, "{ext} scale");
+            assert!(is_image(&path));
+            assert!(!is_png(&path));
+        }
+        let bmp = dir.join("frame.bmp");
+        let back = load_any(&bmp).unwrap();
+        assert_eq!(back.get(0, 0, 0, 0), Rgba::rgb(200, 10, 20));
+        assert_eq!(back.get(0, 0, 2, 2), Rgba::rgb(0, 80, 255));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1758,7 +1823,7 @@ mod tests {
         s.set(0, 0, 0, 0, Rgba(255, 0, 0, 128));
         let path = std::env::temp_dir().join("vixel_png_roundtrip_test.png");
         export_png(&s, 0, &path).unwrap();
-        let loaded = import_png(&path).unwrap();
+        let loaded = import_image(&path).unwrap();
         let _ = std::fs::remove_file(&path);
         assert_eq!((loaded.width, loaded.height), (2, 2));
         assert_eq!(loaded.get(0, 0, 1, 1), Rgba(12, 34, 56, 255));

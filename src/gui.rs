@@ -2988,7 +2988,7 @@ const HELP: &[&str] = &[
     "  :slices [<dir> [cols rows|named]]   (list, grid export, or named slices)",
     "  :grad linear|radial   :contour   :textobj <text>   (editable text object)",
     "  :textfont vixel   :textsize <8-64>   :textalign left|center|right",
-    "  :export out.png|.ase|stem [scale 1-16]   :import in.png   :open proj.vpx|.ase|.png",
+    "  :export out.png|.jpg|.bmp|.tga|.webp|.ase|stem [scale 1-16]   :import in.png",
     "  :importsheet sheet.png [cols rows]   (frames from a sheet + its .json)",
     "  :recent [n]   (last 10 files; drop a file on the window to open it)",
 ];

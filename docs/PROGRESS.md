@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **213 tests green** (200 lib + 13 bin)
+- `cargo test` → **214 tests green** (201 lib + 13 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-42 atlas + GIF options** (see batch 79).
+- Last completed batch: **P5-43 extra image formats** (see batch 80).
 
 ## How to resume
 
@@ -419,6 +419,9 @@ Read, in order:
 79. **P5-42 — atlas + GIF options** — JSON-hash/array metadata with tags/layers/
   slices and templated filenames; GIF repeat count, palette cube and dither.
   2 new tests (213 total): atlas metadata and GIF quantization/output.
+80. **P5-43 — extra image formats** — JPEG/BMP/TGA/WebP export and import
+  through extension dispatch; JPEG alpha flattened, FLC/FLI/PCX documented as
+  unsupported. 1 new test (214 total): export/scale/classify/reload.
 
 ## Next step (exact)
 
@@ -427,8 +430,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-43** — extra image formats (first open task), then continue down the P5
-  roadmap in dependency order.
+- **P5-44** — import parity (first open task), then continue down the P5 roadmap
+  in dependency order.
 
 ## Known limitations (do not forget)
 

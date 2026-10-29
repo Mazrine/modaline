@@ -543,8 +543,13 @@ met; blocked tasks are marked with the reason.
   `--gif-loop n`, `--gif-colors n`, `--gif-dither`; dialog controls too.
   2 new tests (213 total): hash/array metadata with tags/layers/slices and GIF
   quantization/alpha/loop output.
-- [ ] **P5-43 — Extra image formats** (M) — deps: P5-40.
-  JPG/BMP/TGA/WebP; evaluate FLC/FLI/PCX and document any deliberate gap.
+- [x] **P5-43 — Extra image formats** (M) — deps: P5-40.
+  Landed 2026-10-28. Enabled image-crate JPEG/BMP/TGA/WebP codecs; `:export
+  file.ext` dispatches by extension and `:open`/`load_any` imports all of
+  them. JPEG flattens transparency onto white at quality 92; other formats keep
+  RGBA. GIF/PNG unchanged. FLC/FLI/PCX are a deliberate gap (no codec in
+  `image`); documented in the matrix. 1 new test (214 total): all four formats
+  export, scale, classify and BMP reloads exactly.
 - [ ] **P5-44 — Import parity** (L) — deps: P5-39.
   Aseprite JSON/XML atlas, image sequence, sheet layouts, layers/tags.
 - [ ] **P5-45 — In-app file browser** (M) — deps: none.

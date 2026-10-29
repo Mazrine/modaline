@@ -163,8 +163,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Sheet PNG + meta import/export | Covered (vixel format) | — |
 | Image sequence export | Covered | P5-40 |
 | Filename templates (`{frame}`, `{layer}`, `{tag}`, `{title}`, `{duration}`) | Covered | P5-40 |
-| JPG / BMP / TGA / WebP | Missing | P5-43 |
-| PCX / FLC / FLI | Missing | P5-43 (evaluate) |
+| JPG / BMP / TGA / WebP | Covered (static read/write) | P5-43 |
+| PCX / FLC / FLI | Not supported (documented gap: no image-crate codec) | P5-43 |
 | Crash recovery | Covered | — |
 | Reopen closed files | Partial (recent list) | P5-52 |
 | File browser dialog | Missing | P5-45 |

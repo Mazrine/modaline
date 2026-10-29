@@ -267,7 +267,7 @@ text** (text tool with live preview/size/alignment), **brush size 1-64 + custom 
 including bucket fill and paste), flip H/V + rotate 90° (**selection-aware**),
 stroke-grouped undo/redo with a clickable **history window** (**structural layer/frame/tag edits and panel
 properties undo too**),
-**`.ase`/`.aseprite` + PNG + `.vpx` import/export**, **sheet + GIF + meta JSON
+**`.ase`/`.aseprite` + PNG/JPEG/BMP/TGA/WebP + `.vpx` import/export**, **sheet + GIF + meta JSON
 export**, **sprite properties** (colour mode, pixel ratio, grid size + origin) and
 **layer flags** (movement lock, collapsed groups, UUIDs),
 **sRGB/linear colour profiles**, **custom palettes** (`.gpl`/`.hex`/`.pal`),
