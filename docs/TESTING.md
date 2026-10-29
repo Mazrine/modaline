@@ -74,6 +74,7 @@ Rules that cost me a run each:
 | render cache | paint (`space`), screenshot; `u`, screenshot; idle for 5 s | the painted pixel appears, undo removes it, no flicker/stale texture while idle; `cargo test benchmark_canvas -- --ignored --nocapture` prints full vs cached cost |
 | undo/filter | `:prefs` (undo steps + MB), `:filter invert`, `u` | the preference shows the cap; the filter applies as one step and undo restores; pointwise parallel output is unit-tested against sequential |
 | background colour | `:bgcolor #ff8800`, screenshot; `:bgcolor` | side swatch turns orange, status reads `background: #ff8800`; clear/undo removes it |
+| extensions | build a zip with `package.json` + `main.lua`; `:ext install`, `:ext list`, `:ext run <id>` | status shows the installed version/author, list shows the package, running paints the scripted pixel |
 
 ## Checking a screenshot
 

@@ -556,6 +556,130 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
         editor.msg = "preferences".into();
         return;
     }
+    if let Some(rest) = cmd.strip_prefix("ext")
+        && (rest.is_empty() || rest.starts_with(char::is_whitespace))
+    {
+        let rest = rest.trim();
+        let root = match crate::extension::default_root() {
+            Ok(root) => root,
+            Err(e) => {
+                editor.msg = format!("extensions: {e}");
+                return;
+            }
+        };
+        let mut it = rest.split_whitespace();
+        let sub = it.next().unwrap_or("");
+        match sub {
+            "" | "list" => match crate::extension::list(&root) {
+                Ok(list) if list.is_empty() => editor.msg = "extensions: none installed".into(),
+                Ok(list) => {
+                    editor.msg = list
+                        .iter()
+                        .map(|e| {
+                            let author = e.author();
+                            format!(
+                                "{} {}{} ({})",
+                                e.id(),
+                                e.manifest.version,
+                                if author.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!(" by {author}")
+                                },
+                                e.label()
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                }
+                Err(e) => editor.msg = format!("extensions: {e}"),
+            },
+            "install" => match it.next() {
+                Some(path) => match crate::extension::install_default(std::path::Path::new(path)) {
+                    Ok(ext) => {
+                        editor.msg = format!(
+                            "installed {} {} ({} scripts, {} themes)",
+                            ext.id(),
+                            ext.manifest.version,
+                            ext.scripts.len(),
+                            ext.themes.len()
+                        )
+                    }
+                    Err(e) => editor.msg = format!("extension install: {e}"),
+                },
+                None => editor.msg = "usage: :ext install <file.aseprite-extension>".into(),
+            },
+            "remove" => match it.next() {
+                Some(id) => match crate::extension::remove(&root, id) {
+                    Ok(()) => editor.msg = format!("removed extension {id}"),
+                    Err(e) => editor.msg = format!("extension remove: {e}"),
+                },
+                None => editor.msg = "usage: :ext remove <id>".into(),
+            },
+            "run" => match it
+                .next()
+                .and_then(|id| crate::extension::get(&root, id).ok())
+            {
+                Some(ext) => match ext.run_scripts(editor) {
+                    Ok(out) if out.is_empty() => {
+                        editor.msg = format!("{}: scripts finished", ext.id())
+                    }
+                    Ok(out) => {
+                        editor.msg = out.lines().last().unwrap_or("scripts finished").to_string()
+                    }
+                    Err(e) => editor.msg = format!("{}: {e}", ext.id()),
+                },
+                None => editor.msg = "usage: :ext run <id>".into(),
+            },
+            "themes" => match it
+                .next()
+                .and_then(|id| crate::extension::get(&root, id).ok())
+            {
+                Some(ext) if ext.themes.is_empty() => {
+                    editor.msg = format!("{}: no themes", ext.id())
+                }
+                Some(ext) => {
+                    editor.msg = ext
+                        .themes
+                        .iter()
+                        .enumerate()
+                        .map(|(i, p)| {
+                            format!(
+                                "{}= {}",
+                                i + 1,
+                                p.file_name().unwrap_or_default().to_string_lossy()
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                }
+                None => editor.msg = "usage: :ext themes <id>".into(),
+            },
+            "theme" => {
+                let id = it.next();
+                let index = it.next().and_then(|n| n.parse::<usize>().ok()).unwrap_or(1);
+                match id.and_then(|id| crate::extension::get(&root, id).ok()) {
+                    Some(ext) => match ext.themes.get(index.saturating_sub(1)) {
+                        Some(path) => match crate::theme::resolve(&path.to_string_lossy()) {
+                            Ok(theme) => {
+                                crate::theme::apply(ctx, &theme);
+                                view.theme = path.to_string_lossy().to_string();
+                                editor.msg = format!("theme: {}", theme.name);
+                            }
+                            Err(e) => editor.msg = format!("extension theme: {e}"),
+                        },
+                        None => editor.msg = format!("{}: no theme {index}", ext.id()),
+                    },
+                    None => editor.msg = "usage: :ext theme <id> [n]".into(),
+                }
+            }
+            other => {
+                editor.msg =
+                    format!("usage: :ext list|install|remove|run|themes|theme (got {other})")
+            }
+        }
+        return;
+    }
     if let Some(rest) = cmd.strip_prefix("lang")
         && (rest.is_empty() || rest.starts_with(char::is_whitespace))
     {

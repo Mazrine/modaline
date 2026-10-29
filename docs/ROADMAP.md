@@ -610,8 +610,14 @@ met; blocked tasks are marked with the reason.
   `docs/SCRIPTING.md`; representative scripts run in unit tests and the CLI.
   Remaining gaps are documented (Image/Cel/Selection objects, Dialog/events/
   fs, newLayer/newFrame return indices). 2 new tests (258 total).
-- [ ] **P5-51 — Extensions** (L) — deps: P5-49, P5-50, P5-53.
-  `.aseprite-extension` zip/manifest, install/remove, scripts/themes.
+- [x] **P5-51 — Extensions** (L) — deps: P5-49, P5-50, P5-53.
+  Landed 2026-10-29. `src/extension.rs` installs `.aseprite-extension` zips
+  (`package.json` name/displayName/version/author/contributes.scripts/themes)
+  under the config directory with path-traversal, file-count and 50 MB size
+  limits; list/remove/get. `:ext install|list|remove|run|themes|theme`; scripts
+  run through the sandboxed Lua engine and extension themes can be applied as
+  vixel JSON themes. 3 tests (261 total). Xvfb smoke installed `demo`, listed it
+  and ran its script (pixel painted).
 
 ### Epic 10 — App shell and UX
 

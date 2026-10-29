@@ -46,6 +46,7 @@ thin shells:
 | `keymap.rs` | action layer, chord parsing, conflicts, wheel actions, default suppression |
 | `i18n.rs` (lib) | JSON language catalogs, English fallback, translator and missing-key checks |
 | `script.rs` (lib) | sandboxed Lua (mlua) + Aseprite-style `app` API; scripts commit one snapshot undo |
+| `extension.rs` | `.aseprite-extension` zip install/list/remove, contributed scripts/themes |
 | `layout.rs` (lib) | JSON workspace layouts, built-ins and size clamping |
 | `lib.rs` | The **model** half as a library (`ase`, `color`, `editor`, `io`, `ops`, `palette`, `sprite`) with no GUI dependency, so another tool can read/composite/write a `.vpx` without launching the editor |
 | `main.rs` | `run_native` + shell module wiring; takes an optional file path argument |

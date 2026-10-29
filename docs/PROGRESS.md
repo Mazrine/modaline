@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **258 tests green** (224 lib + 28 bin + 6 CLI; 1 ignored benchmark)
+- `cargo test` → **261 tests green** (224 lib + 31 bin + 6 CLI; 1 ignored benchmark)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-50 scripting API** (see batch 96).
+- Last completed batch: **P5-51 extensions** (see batch 97).
 
 ## How to resume
 
@@ -481,6 +481,9 @@ Read, in order:
 96. **P5-50 — scripting API coverage** — pixelColor/Color, transaction,
   command Undo/Redo/NewLayer/NewFrame, flatten/crop/newTag/durations; full
   compatibility matrix in `docs/SCRIPTING.md`. 2 tests (258 total).
+97. **P5-51 — extensions** — zip/manifest install/list/remove with traversal and
+  size limits; `:ext` commands; sandboxed contributed scripts; theme listing/
+  application. 3 tests (261 total); Xvfb installed, listed and ran `demo`.
 
 ## Next step (exact)
 
@@ -489,10 +492,10 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-51** — extensions (first open task; scripting dependencies now met),
-  then the unblocked programme is complete. Remaining documented Partial rows:
-  scripting object coverage, localization strings, async filtering and CPU dirty
-  compositing.
+- **All P5 backlog tasks are checked.** No unblocked tasks remain. The loop stops
+  here. Documented Partial rows remain in `docs/ASEPRITE_PARITY.md`: scripting
+  object coverage (Image/Cel/Dialog/fs), localization strings, async filtering
+  and CPU dirty compositing.
 
 ## Known limitations (do not forget)
 

@@ -69,18 +69,24 @@ integration test.
 | `Image`/`Cel`/`Selection`/`Slice`/`Tileset` objects | — | Missing |
 | Dialog, events, `app.fs`, plugin commands | — | Missing (sandbox/product choice) |
 
-## Availability check (2026-10-28)
+## Extensions (P5-51)
+
+`.aseprite-extension` zips are installed with `:ext install <file>`; the manifest
+supports `name`, `displayName`, `version`, `author` (string or `{name}`),
+`description` and `contributes.scripts`/`contributes.themes`. Installs reject
+absolute/`..` paths, more than 500 files, files over 10 MiB, or more than 50 MiB
+total. `:ext run <id>` executes contributed scripts in the sandbox; `:ext theme
+<id> [n]` applies a vixel JSON theme from the package.
+
+## Availability check (2026-10-28; resolved 2026-10-29)
 
 `mlua`, `rhai`, `rlua`, `quickjs`, `pyo3` and RustPython are absent from both
 `~/.cargo/registry/src` and `~/.cargo/registry/cache`; there is no `mlua` entry
 in `Cargo.lock`. `cargo` therefore cannot add the chosen dependency in this
 offline environment.
 
-**Consequence:** P5-49 (scripting MVP) and P5-50 (API coverage) are **Blocked**
-until the crate can be fetched (network/cache available) or a vendored copy is
-added. This is a dependency availability block, not a design change: the engine
-decision stands, and no alternative engine was selected merely because it could
-build offline.
+**Resolved:** the registry became reachable on 2026-10-29; `mlua 0.12` (Lua 5.4,
+vendored) was added, and P5-49/P5-50 landed. `zip 9` was added for P5-51.
 
 ## Residual risks
 

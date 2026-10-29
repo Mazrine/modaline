@@ -1,6 +1,7 @@
 mod app;
 mod cli;
 mod config;
+mod extension;
 mod gui;
 mod input;
 mod keymap;

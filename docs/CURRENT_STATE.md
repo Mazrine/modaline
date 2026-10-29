@@ -166,6 +166,9 @@ L-shaped corners for the 1 px pencil/eraser.
   view, textures, playback). Ctrl/Cmd-Tab cycles, Ctrl/Cmd-T opens, Ctrl/Cmd-W
   closes; drops open a tab; dirty tabs refuse close. Open paths and the active
   tab persist in `config.json` and restore on launch.
+- **extensions**: `.aseprite-extension` zips install under the config directory
+  with traversal/size limits; `:ext install|list|remove|run|themes|theme`.
+  Contributed scripts run in the Lua sandbox; JSON themes can be applied.
 - **scripting**: Lua 5.4 via `mlua` (vendored) with a sandbox (no io/os/package/
   debug, 64 MiB, 50M instructions). Core `app`/sprite/layer/pixel API; scripts
   are one undo step. `:script <file.lua>`, `:lua <code>`, CLI `--script`; JSON
