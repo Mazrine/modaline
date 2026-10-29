@@ -493,6 +493,11 @@ Read, in order:
   the canvas as one undo step; Esc cancels, tool switch commits, locked/hidden/
   reference layers refuse. 2 tests (263 total). Xvfb smoke: preview
   followed the drag, commit moved the block, `u` restored it, Esc cancelled.
+100. **P6-01 — reopen closed documents** — bounded deduplicated stack of clean,
+  named closed tabs (persisted in `config.closed`); `:closed` lists and
+  `:reopen` restores the newest in a new tab. Dirty forced closes are never
+  recorded. 2 tests (265 total). Xvfb smoke: `Ctrl-W` then `:closed`/`:reopen`
+  restored `b.png` as the active tab.
 
 ## Next step (exact)
 
@@ -501,10 +506,11 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P6)
 
-P5 is complete; **P6 is open (1/7)** in `docs/ROADMAP.md`:
+P5 is complete; **P6 is open (2/7)** in `docs/ROADMAP.md`:
 
 - ~~**P6-00** — move layer/cel content tool~~ (done 2026-10-29).
-- **P6-01** — reopen closed documents (first open task).
+- ~~**P6-01** — reopen closed documents~~ (done 2026-10-29).
+- **P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects (first open task).
 - **P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects.
 - **P6-03** — localization string extraction.
 - **P6-04** — incremental dirty compositing.

@@ -47,6 +47,8 @@ pub struct Config {
     /// Open document paths restored on launch.
     pub session: Vec<String>,
     pub session_active: usize,
+    /// Cleanly closed documents, oldest first (`:reopen`).
+    pub closed: Vec<String>,
     /// Free-form entries a future build can read; round-tripped, never guessed.
     pub extra: BTreeMap<String, String>,
 }
@@ -123,6 +125,7 @@ impl Default for Config {
             favourites: Vec::new(),
             session: Vec::new(),
             session_active: 0,
+            closed: Vec::new(),
             extra: BTreeMap::new(),
         }
     }

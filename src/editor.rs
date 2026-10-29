@@ -98,6 +98,8 @@ impl Tool {
 }
 
 const TOOL_COUNT: usize = 16;
+/// How many closed documents `:reopen` can walk back through.
+const CLOSED_LIMIT: usize = 10;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum TileMode {
@@ -498,6 +500,10 @@ pub struct Editor {
     pub path: Option<PathBuf>,
     /// Recently opened or saved files, newest first (max 10).
     pub recent: Vec<PathBuf>,
+    /// Cleanly closed documents, oldest first (max `CLOSED_LIMIT`); `:reopen`.
+    pub closed: Vec<PathBuf>,
+    /// Path `:reopen` wants the app to open in a new tab.
+    pub reopen_request: Option<PathBuf>,
     /// Set when the opened file is a another tool fix bundle: the part the strokes
     /// are for, from the sidecar. Also marks the file as one whose `ref` layer
     /// must survive a save.
@@ -624,6 +630,8 @@ impl Editor {
             g_prefix: false,
             path: None,
             recent: Vec::new(),
+            closed: Vec::new(),
+            reopen_request: None,
             bundle_stage: None,
             palette_lock: false,
             dither: DitherMode::None,
@@ -4883,6 +4891,27 @@ impl Editor {
         self.recent.retain(|p| p != &path);
         self.recent.insert(0, path);
         self.recent.truncate(10);
+    }
+
+    /// Record a cleanly closed document, newest last, deduplicated and bounded
+    /// so a long session cannot grow the stack forever.
+    pub fn push_closed(&mut self, path: PathBuf) {
+        self.closed.retain(|p| p != &path);
+        self.closed.push(path);
+        while self.closed.len() > CLOSED_LIMIT {
+            self.closed.remove(0);
+        }
+    }
+
+    /// Ask the app to reopen the most recently closed document in a new tab.
+    pub fn request_reopen(&mut self) {
+        match self.closed.last() {
+            Some(path) => {
+                self.msg = format!("reopen: {}", path.display());
+                self.reopen_request = Some(path.clone());
+            }
+            None => self.msg = "no closed documents".into(),
+        }
     }
 
     /// Swap in an already-built sprite and reset transient editor state.

@@ -2377,6 +2377,20 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             }
         }
         "help" => editor.mode = Mode::Help,
+        "closed" => {
+            editor.msg = if editor.closed.is_empty() {
+                "no closed documents".into()
+            } else {
+                let list: Vec<String> = editor
+                    .closed
+                    .iter()
+                    .rev()
+                    .map(|p| p.display().to_string())
+                    .collect();
+                format!("closed ({}): {}", list.len(), list.join(", "))
+            };
+        }
+        "reopen" => editor.request_reopen(),
         "" => {}
         _ => editor.msg = format!("unknown command: {name}"),
     }

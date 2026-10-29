@@ -33,6 +33,7 @@ impl Doc {
         editor.renderer = config.renderer.clone();
         editor.undo_limit = config.undo_limit.max(1);
         editor.recent = config.recent.iter().map(PathBuf::from).collect();
+        editor.closed = config.closed.iter().map(PathBuf::from).collect();
         let mut view = View::new();
         view.zoom = config.zoom.clamp(1, 64);
         view.show_grid = config.show_grid;
@@ -140,15 +141,48 @@ impl VixelApp {
     }
 
     fn new_doc(&mut self) {
+        self.add_doc(None);
+    }
+
+    /// Push a new tab carrying the global keymap/language and the current
+    /// closed-document stack.
+    fn add_doc(&mut self, path: Option<PathBuf>) {
         let keymap = self.docs[self.active].view.keymap.clone();
         let language = self.docs[self.active].view.language.clone();
         let i18n = self.docs[self.active].view.i18n.clone();
-        let mut doc = Doc::new(&self.config, None);
+        let closed = self.docs[self.active].editor.closed.clone();
+        let mut doc = Doc::new(&self.config, path);
+        doc.view.keymap = keymap;
+        doc.view.language = language;
+        doc.view.i18n = i18n;
+        doc.editor.closed = closed;
+        self.docs.push(doc);
+        self.active = self.docs.len() - 1;
+    }
+
+    /// Reopen the newest cleanly closed document in a new tab. Failure keeps
+    /// the stack untouched and reports on the current tab.
+    fn reopen_closed(&mut self) -> bool {
+        let Some(path) = self.docs[self.active].editor.closed.last().cloned() else {
+            self.docs[self.active].editor.msg = "no closed documents".into();
+            return false;
+        };
+        let mut doc = Doc::new(&self.config, Some(path.clone()));
+        if doc.editor.msg.starts_with("open failed") || doc.editor.path.is_none() {
+            self.docs[self.active].editor.msg = doc.editor.msg;
+            return false;
+        }
+        doc.editor.closed = self.docs[self.active].editor.closed.clone();
+        doc.editor.closed.retain(|p| p != &path);
+        let keymap = self.docs[self.active].view.keymap.clone();
+        let language = self.docs[self.active].view.language.clone();
+        let i18n = self.docs[self.active].view.i18n.clone();
         doc.view.keymap = keymap;
         doc.view.language = language;
         doc.view.i18n = i18n;
         self.docs.push(doc);
         self.active = self.docs.len() - 1;
+        true
     }
 
     /// Switch tabs, carrying the global keymap and language with the selection.
@@ -174,7 +208,18 @@ impl VixelApp {
             self.docs[index].editor.msg = "unsaved changes (use :w or close with force)".into();
             return;
         }
+        // Only clean, named documents go on the reopen stack: forced closes
+        // must not silently offer back content the user chose to discard.
+        if !self.docs[index].editor.dirty
+            && let Some(path) = self.docs[index].editor.path.clone()
+        {
+            self.docs[index].editor.push_closed(path);
+        }
+        let closed = self.docs[index].editor.closed.clone();
         self.docs.remove(index);
+        for doc in &mut self.docs {
+            doc.editor.closed = closed.clone();
+        }
         if self.active >= self.docs.len() {
             self.active = self.docs.len() - 1;
             self.docs[self.active].view.layout_pending = true;
@@ -231,6 +276,12 @@ impl VixelApp {
             .collect();
         self.config.session = self.session_paths();
         self.config.session_active = self.active;
+        self.config.closed = doc
+            .editor
+            .closed
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
         let _ = self.config.save();
     }
 
@@ -403,6 +454,7 @@ impl eframe::App for VixelApp {
         }
 
         input::handle_input(&mut doc.editor, &mut doc.view, ui);
+        let reopen = doc.editor.reopen_request.take();
 
         // Snapshot the active dirty sprite periodically. A successful save or a
         // forced quit drops the snapshot.
@@ -454,6 +506,9 @@ impl eframe::App for VixelApp {
                 self.save_config();
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
             }
+        }
+        if reopen.is_some() {
+            self.reopen_closed();
         }
     }
 
@@ -516,6 +571,52 @@ mod tests {
         app.save_config();
         assert_eq!(app.config.session_active, 2);
         assert_eq!(app.config.session, app.session_paths());
+    }
+
+    #[test]
+    fn closed_documents_stack_is_ordered_deduped_and_bounded() {
+        let mut app = app_with(1);
+        let editor = &mut app.docs[0].editor;
+        for i in 0..12 {
+            editor.push_closed(PathBuf::from(format!("/tmp/d{i}.vpx")));
+        }
+        assert_eq!(editor.closed.len(), 10, "bounded");
+        assert_eq!(editor.closed.last().unwrap(), &PathBuf::from("/tmp/d11.vpx"));
+        editor.push_closed(PathBuf::from("/tmp/d5.vpx"));
+        assert_eq!(editor.closed.last().unwrap(), &PathBuf::from("/tmp/d5.vpx"));
+        assert_eq!(
+            editor
+                .closed
+                .iter()
+                .filter(|p| p.ends_with("d5.vpx"))
+                .count(),
+            1,
+            "deduplicated"
+        );
+    }
+
+    #[test]
+    fn closing_clean_documents_feeds_reopen_and_dirty_closes_do_not() {
+        let dir = std::env::temp_dir().join(format!("vixel-reopen-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("reopen.vpx");
+        crate::io::save_project(&crate::sprite::Sprite::new(2, 2), &path).unwrap();
+        let mut app = app_with(2);
+        app.docs[0].editor.path = Some(path.clone());
+        app.close_doc(0, false);
+        assert_eq!(app.docs.len(), 1);
+        assert_eq!(app.docs[0].editor.closed, vec![path.clone()]);
+
+        assert!(app.reopen_closed());
+        assert_eq!(app.docs.len(), 2);
+        assert_eq!(app.docs[1].editor.path.as_ref(), Some(&path));
+        assert!(app.docs[1].editor.closed.is_empty(), "reopen pops the path");
+
+        // A forced close of dirty work must not offer that file back.
+        app.docs[1].editor.dirty = true;
+        app.close_doc(1, true);
+        assert!(app.docs[0].editor.closed.is_empty());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

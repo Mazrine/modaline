@@ -727,10 +727,14 @@ Partial or Not supported, so "no unexplained gap" is true again.
   reference layers refuse to start. 2 tests (226 total): translate + alpha
   preservation + clipping + single undo, and locked/editable refusal + cancel.
   Xvfb smoke: `M`, drag, content moved; `Esc` put it back; `u` undid a commit.
-- [ ] **P6-01 — Reopen closed documents** (S) — deps: P5-52.
-  Keep a bounded stack of closed clean documents (path + active tab) and add
-  `:reopen`/`:closed` to restore the most recent; never retain dirty content
-  silently. Tests for stack order/dedup and GUI smoke.
+- [x] **P6-01 — Reopen closed documents** (S) — deps: P5-52.
+  Landed 2026-10-29. Closing a clean, named tab pushes its path on a bounded
+  (10, deduplicated) stack carried with the session (`config.closed`);
+  `:closed` lists it, `:reopen` opens the newest in a new tab and pops it.
+  Forced closes of dirty work never record a path, so discarded content is not
+  offered back. 2 tests (265 total): stack order/dedup/bound and
+  clean-vs-dirty close plus reopen. Xvfb smoke: opened `b.png` in a second tab,
+  `Ctrl-W`, `:closed` listed it, `:reopen` restored the tab as active.
 - [ ] **P6-02 — Lua object API coverage** (L) — deps: P5-49, P5-50.
   Add `Image` (pixel get/set, clear, bounds), `Cel` (layer/frame/image/bounds),
   `Selection` (bounds/add/subtract), `Dialog` (alert/confirm/text) and a

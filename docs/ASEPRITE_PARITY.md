@@ -166,7 +166,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | JPG / BMP / TGA / WebP | Covered (static read/write) | P5-43 |
 | PCX / FLC / FLI | Not supported (documented gap: no codec yet) | P6-06 |
 | Crash recovery | Covered | — |
-| Reopen closed files | Partial (recent list) | P6-01 |
+| Reopen closed files | Covered (`:reopen`/`:closed`, clean docs only) | P6-01 |
 | File browser dialog | Covered (in-app, no native dep) | P5-45 |
 | Drag-and-drop open | Covered | — |
 | Recent files | Covered | — |

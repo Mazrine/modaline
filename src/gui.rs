@@ -3636,6 +3636,7 @@ const HELP: &[&str] = &[
     "  :importsheet sheet.png [cols rows]   (frames from a sheet + its .json)",
     "  :importatlas sheet.png [meta.json|xml]   :importseq <dir>   (atlas/sequence)",
     "  :recent [n]   (last 10 files; drop a file on the window to open it)",
+    "  :closed   :reopen   (list/restore cleanly closed documents)",
 ];
 
 #[cfg(test)]
