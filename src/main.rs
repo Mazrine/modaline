@@ -3,6 +3,7 @@ mod cli;
 mod config;
 mod gui;
 mod input;
+mod theme;
 
 use std::path::PathBuf;
 

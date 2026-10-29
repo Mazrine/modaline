@@ -58,8 +58,11 @@ pub struct View {
     pub pixel_scale: (u16, u16),
     /// The window's inner size as of the last frame, persisted on exit.
     pub window: (f32, f32),
-    /// "dark" or "light"; applied to the whole context when it changes.
+    /// Built-in theme name or a theme `.json` path.
     pub theme: String,
+    /// UI font file (`.ttf`/`.otf`) or `default`, and its point size.
+    pub ui_font: String,
+    pub ui_font_size: f32,
     /// Mirrored from the editor each frame: 0 = no snapping.
     pub snap_grid: u32,
     pub onion: Onion,
@@ -129,6 +132,8 @@ impl View {
             pixel_scale: (1, 1),
             window: (1280.0, 800.0),
             theme: "dark".into(),
+            ui_font: "default".into(),
+            ui_font_size: 13.0,
             snap_grid: 0,
             onion: Onion::default(),
             drag_frame: None,
@@ -1411,18 +1416,16 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
 
 fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.horizontal(|ui| {
-        let light = view.theme == "light";
+        let light = !crate::theme::resolve(&view.theme).map_or(true, |t| t.dark);
         if ui
             .selectable_label(light, "light")
             .on_hover_text("theme (saved in the config)")
             .clicked()
         {
             view.theme = if light { "dark".into() } else { "light".into() };
-            ui.ctx().set_visuals(if light {
-                egui::Visuals::dark()
-            } else {
-                egui::Visuals::light()
-            });
+            if let Ok(theme) = crate::theme::resolve(&view.theme) {
+                crate::theme::apply(ui.ctx(), &theme);
+            }
         }
     });
     ui.horizontal(|ui| {
@@ -3193,6 +3196,8 @@ const HELP: &[&str] = &[
     "  :pal preset <name>|insert <i> [#hex]|delete <i>|sort [rgb|luma|hue]|name <i> <name>",
     "  :profile [srgb|linear|icc <file>|gamma <g>|clear]   (working space / .ase profile)",
     "  :renderer glow|wgpu    (wgpu also needs a build with --features wgpu)",
+    "  :theme [dark|light|midnight|paper|file.json]   :theme save <file>",
+    "  :uifont <font.ttf|default> [8-32]   (UI font and size, saved in config)",
     "  :slices [<dir> [cols rows|named]]   (list, grid export, or named slices)",
     "  :grad linear|radial   :contour   :textobj <text>   (editable text object)",
     "  :textfont vixel   :textsize <8-64>   :textalign left|center|right",

@@ -37,6 +37,8 @@ impl Doc {
         view.show_grid = config.show_grid;
         view.onion = config.onion.into();
         view.theme = config.theme.clone();
+        view.ui_font = config.ui_font.clone();
+        view.ui_font_size = config.ui_font_size;
         view.browser_favourites = config.favourites.iter().map(PathBuf::from).collect();
         if let Some(path) = path
             && let Err(e) = editor.open_path(&path)
@@ -74,6 +76,9 @@ pub struct VixelApp {
     config: Config,
     /// Next periodic autosave while the active sprite is dirty.
     next_autosave: Instant,
+    /// Theme/font currently applied, so switching tabs can restore per-doc UI.
+    theme_applied: String,
+    font_applied: (String, f32),
 }
 
 impl VixelApp {
@@ -82,11 +87,18 @@ impl VixelApp {
     /// argument must still give you an editor.
     pub fn new(cc: &eframe::CreationContext<'_>, path: Option<PathBuf>) -> Self {
         let config = Config::load();
-        cc.egui_ctx.set_visuals(if config.theme == "light" {
-            egui::Visuals::light()
-        } else {
-            egui::Visuals::dark()
-        });
+        match crate::theme::resolve(&config.theme) {
+            Ok(theme) => crate::theme::apply(&cc.egui_ctx, &theme),
+            Err(e) => {
+                crate::theme::apply(&cc.egui_ctx, &crate::theme::Theme::default());
+                eprintln!("theme: {e}");
+            }
+        }
+        if let Err(e) =
+            crate::theme::install_font(&cc.egui_ctx, &config.ui_font, config.ui_font_size)
+        {
+            eprintln!("font: {e}");
+        }
         let mut docs = Vec::new();
         if let Some(path) = path {
             docs.push(Doc::new(&config, Some(path)));
@@ -112,6 +124,8 @@ impl VixelApp {
             docs,
             active,
             title: "vixel".into(),
+            theme_applied: config.theme.clone(),
+            font_applied: (config.ui_font.clone(), config.ui_font_size),
             config,
             next_autosave: Instant::now() + AUTOSAVE,
         }
@@ -167,6 +181,8 @@ impl VixelApp {
         self.config.play_loop = doc.editor.play_loop;
         self.config.play_pingpong = doc.editor.play_pingpong;
         self.config.theme = doc.view.theme.clone();
+        self.config.ui_font = doc.view.ui_font.clone();
+        self.config.ui_font_size = doc.view.ui_font_size;
         self.config.renderer = doc.editor.renderer.clone();
         self.config.recent = doc
             .editor
@@ -281,6 +297,25 @@ impl eframe::App for VixelApp {
 
         egui::Panel::top("tabs").show(ui, |ui| self.tab_bar(ui));
 
+        // Each tab keeps its own theme/font; restore the active one on switch.
+        let (theme_spec, font_spec, font_size) = {
+            let view = &self.docs[self.active].view;
+            (view.theme.clone(), view.ui_font.clone(), view.ui_font_size)
+        };
+        if theme_spec != self.theme_applied {
+            match crate::theme::resolve(&theme_spec) {
+                Ok(theme) => crate::theme::apply(ui.ctx(), &theme),
+                Err(e) => self.docs[self.active].editor.msg = format!("theme: {e}"),
+            }
+            self.theme_applied = theme_spec;
+        }
+        if (font_spec.clone(), font_size) != self.font_applied {
+            if let Err(e) = crate::theme::install_font(ui.ctx(), &font_spec, font_size) {
+                self.docs[self.active].editor.msg = format!("font: {e}");
+            }
+            self.font_applied = (font_spec, font_size);
+        }
+
         // Dropping a file onto the window opens it in a new tab.
         let dropped = ui
             .ctx()
@@ -394,6 +429,8 @@ mod tests {
             docs: (0..count).map(|_| Doc::new(&config, None)).collect(),
             active: 0,
             title: "vixel".into(),
+            theme_applied: config.theme.clone(),
+            font_applied: (config.ui_font.clone(), config.ui_font_size),
             config,
             next_autosave: Instant::now(),
         }

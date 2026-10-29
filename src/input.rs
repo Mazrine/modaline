@@ -23,7 +23,7 @@ pub fn handle_input(editor: &mut Editor, view: &mut View, ui: &egui::Ui) {
                 pressed: true,
                 modifiers,
                 ..
-            } => handle_key(editor, view, *key, *modifiers),
+            } => handle_key(editor, view, *key, *modifiers, ui.ctx()),
             Event::Copy => clipboard_copy(editor, ui.ctx()),
             Event::Cut => clipboard_cut(editor, ui.ctx()),
             Event::PasteImage(img) => clipboard_paste_image(editor, img),
@@ -143,7 +143,13 @@ fn clipboard_to_image(cb: &Clipboard) -> Option<egui::ColorImage> {
     ))
 }
 
-fn handle_key(editor: &mut Editor, view: &mut View, key: Key, mods: Modifiers) {
+fn handle_key(
+    editor: &mut Editor,
+    view: &mut View,
+    key: Key,
+    mods: Modifiers,
+    ctx: &egui::Context,
+) {
     use Key::*;
 
     if mods.command {
@@ -173,7 +179,7 @@ fn handle_key(editor: &mut Editor, view: &mut View, key: Key, mods: Modifiers) {
 
     match editor.mode {
         Mode::Command => match key {
-            Enter => submit(editor),
+            Enter => submit(editor, view, ctx),
             Escape => {
                 editor.mode = Mode::Normal;
                 editor.cmdline.clear();
@@ -424,9 +430,64 @@ fn handle_char(editor: &mut Editor, ch: char) {
     }
 }
 
-fn submit(editor: &mut Editor) {
+fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
     let cmd = std::mem::take(&mut editor.cmdline);
     editor.mode = Mode::Normal;
+    // Theme/font are view state, so they are handled where the UI context and
+    // `View` are available; `exec_command` stays model-only.
+    if let Some(rest) = cmd.strip_prefix("theme")
+        && (rest.is_empty() || rest.starts_with(char::is_whitespace))
+    {
+        let rest = rest.trim();
+        if let Some(path) = rest.strip_prefix("save ") {
+            match crate::theme::resolve(&view.theme)
+                .and_then(|t| crate::theme::save(&t, std::path::Path::new(path.trim())))
+            {
+                Ok(()) => editor.msg = format!("theme saved: {}", path.trim()),
+                Err(e) => editor.msg = format!("theme save failed: {e}"),
+            }
+        } else if rest.is_empty() {
+            editor.msg = format!(
+                "theme: {} (built-ins: {}; use :theme <name|file.json>)",
+                view.theme,
+                crate::theme::names().join(", ")
+            );
+        } else {
+            match crate::theme::resolve(rest) {
+                Ok(theme) => {
+                    crate::theme::apply(ctx, &theme);
+                    view.theme = rest.to_string();
+                    editor.msg = format!("theme: {}", theme.name);
+                }
+                Err(e) => editor.msg = format!("theme: {e}"),
+            }
+        }
+        return;
+    }
+    if let Some(rest) = cmd.strip_prefix("uifont")
+        && (rest.is_empty() || rest.starts_with(char::is_whitespace))
+    {
+        let rest = rest.trim();
+        let mut it = rest.split_whitespace();
+        let path = it.next().unwrap_or("");
+        if path.is_empty() {
+            editor.msg = "usage: :uifont <file.ttf|default> [8-32]".into();
+            return;
+        }
+        let size = it
+            .next()
+            .and_then(|s| s.parse::<f32>().ok())
+            .unwrap_or(view.ui_font_size);
+        match crate::theme::install_font(ctx, path, size) {
+            Ok(()) => {
+                view.ui_font = path.to_string();
+                view.ui_font_size = size.clamp(8.0, 32.0);
+                editor.msg = format!("ui font: {path} @ {:.0}", view.ui_font_size);
+            }
+            Err(e) => editor.msg = format!("ui font failed: {e}"),
+        }
+        return;
+    }
     exec_command(editor, &cmd);
 }
 

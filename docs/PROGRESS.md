@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **228 tests green** (205 lib + 18 bin + 5 CLI)
+- `cargo test` → **230 tests green** (205 lib + 20 bin + 5 CLI)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-52 multi-document tabs** (see batch 86).
+- Last completed batch: **P5-53 themes and UI font** (see batch 87).
 
 ## How to resume
 
@@ -443,6 +443,11 @@ Read, in order:
   textures/playback, tab strip, Ctrl-Tab/Shift-Tab/T/W, dirty close guards,
   session restore (paths + active). 4 unit tests (228 total); Xvfb smoke showed
   two tabs and tab switching. Fixed per-event chord modifiers.
+87. **P5-53 — themes and UI font** — JSON theme format with `dark`, `light`,
+  `midnight`, `paper`; `:theme` apply/list/save, per-tab restore; `:uifont`
+  loads a TTF/OTF and size, persisted in config. 2 tests (230 total); Xvfb
+  smoke verified the midnight palette, Noto at 20 pt, and theme export.
+  Fixed a default/builtin recursion that overflowed the stack.
 
 ## Next step (exact)
 
@@ -451,8 +456,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-53** — themes and font customization (first open task), then continue
-  down the P5 roadmap.
+- **P5-54** — workspace layouts (deps P5-52 now met), then continue down the P5
+  roadmap.
 
 ## Known limitations (do not forget)
 

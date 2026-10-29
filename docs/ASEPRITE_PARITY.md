@@ -214,7 +214,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Capability | Status | Task |
 |---|---|---|
 | Preferences dialog | Partial (side panel + config) | P5-57 |
-| Themes + font customization | Partial (light/dark) | P5-53 |
+| Themes + font customization | Covered (4 built-ins, JSON themes, UI font/size) | P5-53 |
 | Keyboard shortcut customization | Missing | P5-55 |
 | Mouse-wheel customization | Missing | P5-55 |
 | Workspace layouts | Missing | P5-54 |

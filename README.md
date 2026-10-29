@@ -158,6 +158,8 @@ keyboard-first, but the mouse is fully wired.)
 | `:dither none\|bayer2\|bayer4\|bayer8\|floyd` | dithering for indexed conversion |
 | `:profile srgb\|linear` / `:profile icc <file>` / `:profile gamma <g>` / `:profile clear` | working space / embedded `.ase` colour profile |
 | `:renderer glow\|wgpu` | renderer (applied on next launch) |
+| `:theme [dark\|light\|midnight\|paper\|file.json]` / `:theme save <file>` | apply/list/save a JSON theme |
+| `:uifont <font.ttf\|default> [8-32]` | UI font and size (saved in the config) |
 | `:fg #rrggbb` / `:bg #rrggbb` | set fg / bg exactly |
 | `:pal load\|save <file>` / `:pal move <from> <to>` / `:pal from-sprite` / `:pal lock on\|off` | palette I/O, reorder, derive from the frame, lock |
 | `:pal preset <name>` / `:pal insert <i> [#hex]` / `:pal delete <i>` / `:pal sort [rgb\|luma\|hue]` / `:pal name <i> <name>` | presets, index edits, sort, names |

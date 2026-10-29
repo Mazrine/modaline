@@ -613,8 +613,14 @@ met; blocked tasks are marked with the reason.
   4 unit tests + Xvfb/twm smoke (2 tabs, Ctrl+T, Ctrl+Tab): 228 total.
   Fixed chord detection to read per-event modifiers (frame-end modifiers lost
   fast Ctrl+T).
-- [ ] **P5-53 — Themes** (M) — deps: none.
-  Theme file format + built-ins; font customization.
+- [x] **P5-53 — Themes** (M) — deps: none.
+  Landed 2026-10-28. `src/theme.rs` defines a serde JSON theme (bg, panel,
+  text, accent, grid, checker, dark flag) with four built-ins (`dark`,
+  `light`, `midnight`, `paper`); `:theme <name|file.json>` applies and
+  `:theme save <file>` exports. `:uifont <ttf|otf|default> [8-32]` installs a
+  UI font and size, persisted in `config.json`; themes/fonts are per-tab and
+  restored on switch. 2 theme tests + old-config defaults; 230 total. Xvfb
+  smoke: midnight theme rendered, Noto font at 20 pt, saved JSON re-read.
 - [ ] **P5-54 — Workspace layouts** (M) — deps: P5-52.
   Saved/shared panel layouts; reset.
 - [ ] **P5-55 — Keymap customization** (M) — deps: none.

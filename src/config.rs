@@ -23,8 +23,11 @@ pub struct Config {
     pub onion: OnionConfig,
     pub play_loop: bool,
     pub play_pingpong: bool,
-    /// "dark" or "light".
+    /// Built-in theme name or a path to a theme `.json`.
     pub theme: String,
+    /// UI font file (`.ttf`/`.otf`), or `default`.
+    pub ui_font: String,
+    pub ui_font_size: f32,
     /// The renderer asked for at startup: "glow" (default) or "wgpu". The
     /// request is honoured only by a build with the `wgpu` feature; otherwise
     /// vixel says so and falls back to glow.
@@ -101,6 +104,8 @@ impl Default for Config {
             play_loop: true,
             play_pingpong: false,
             theme: "dark".into(),
+            ui_font: "default".into(),
+            ui_font_size: 13.0,
             renderer: "glow".into(),
             recent: Vec::new(),
             favourites: Vec::new(),
@@ -165,6 +170,8 @@ mod tests {
         assert_eq!(c.theme, "light");
         assert_eq!(c.onion, OnionConfig::default());
         assert_eq!(c.grid, 8, "defaults fill the gaps");
+        assert_eq!(c.ui_font, "default");
+        assert_eq!(c.ui_font_size, 13.0);
 
         let newer = r#"{"zoom": 2, "future_knob": true}"#;
         let c: Config = serde_json::from_str(newer).expect("unknown keys are ignored");

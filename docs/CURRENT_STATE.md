@@ -136,6 +136,9 @@ L-shaped corners for the 1 px pencil/eraser.
   transparency checkerboard, cursor + selection + floating-paste previews.
   **Wide pixels** render at the sprite's `pixel_aspect` (checkbox "wide px");
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
+- **themes and UI font**: four built-ins (`dark`, `light`, `midnight`, `paper`)
+  and arbitrary JSON theme files (`:theme`, `:theme save`); `:uifont` loads a
+  TTF/OTF at 8–32 pt. Theme/font are per-tab and saved in the config.
 - **multi-document tabs**: a tab strip holds independent documents (editor,
   view, textures, playback). Ctrl/Cmd-Tab cycles, Ctrl/Cmd-T opens, Ctrl/Cmd-W
   closes; drops open a tab; dirty tabs refuse close. Open paths and the active
