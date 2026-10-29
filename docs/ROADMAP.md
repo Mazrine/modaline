@@ -261,9 +261,14 @@ met; blocked tasks are marked with the reason.
   device force until `auto`. 1 new test (170 total): pressure scaling and the
   manual/device override order. Tablet hardware unavailable: manual fallback
   smoke-checked in the UI only.
-- [ ] **P5-21 — Tool depth and consistency** (M) — deps: P5-19.
-  Brush 1-64 everywhere, shape thickness, spray rate/radius, shade
-  strength/ramp, blur radius unified with `box_blur`, contour width/position.
+- [x] **P5-21 — Tool depth and consistency** (M) — deps: P5-19.
+  Landed 2026-10-28. Shade, blur and spray now stamp the active brush mask
+  (size 1-64), honouring pressure. Spray has rate/radius, shade has strength,
+  the blur tool shares `box_blur`'s radius, and contour takes a width plus
+  inside/outside. Commands: `:spray <dots> [r]`, `:shade <pct>`, `:blur <r>`,
+  `:contour [1-64] [inside|outside]`; all four have a "tool depth" panel group.
+  4 new tests (174 total): spray scatter bounds, shade strength/brush coverage,
+  blur radius sampling, and contour width/side.
 - [ ] **P5-22 — Gradient depth** (M) — deps: P5-04.
   Multi-stop gradients, presets, alpha, dithering, selection-aware; UI.
 - [ ] **P5-23 — Filters breadth** (L) — deps: none.

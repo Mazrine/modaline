@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **170 tests green** (161 lib + 9 bin)
+- `cargo test` → **174 tests green** (165 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-20 pressure/tablet** (see batch 57).
+- Last completed batch: **P5-21 tool depth** (see batch 58).
 
 ## How to resume
 
@@ -337,6 +337,11 @@ Read, in order:
     slider and `:pressure <0-100>|auto` cover mice (no force on X11) and override
     the device until `auto`. 1 new test (170 total): pressure scaling and
     manual/device precedence.
+58. **P5-21 — tool depth/consistency** — shade/blur/spray stamp the active
+    brush mask; spray rate/radius, shade strength, blur radius through
+    `box_blur`, contour width + inside/outside. Commands and a "tool depth"
+    panel group. 4 new tests (174 total): spray bounds, shade strength/coverage,
+    blur sampling, contour width/side.
 
 ## Next step (exact)
 
@@ -345,8 +350,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-21** — tool depth/consistency (first open task), then continue down the
-  P5 roadmap in dependency order.
+- **P5-22** — gradient depth (first open task), then continue down the P5
+  roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

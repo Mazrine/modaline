@@ -122,7 +122,9 @@ thin shells:
 - Brush masks are `u8` coverage (0-255). Every stamp path calls
   `stamp_brush_symmetric`, which modulates the paint alpha by coverage and
   `Editor::pressure()`; keep freehand, shapes and the cursor preview on
-  `current_brush()`. Pressure precedence is manual → device → 1.0.
+  `current_brush()`. Pressure precedence is manual → device → 1.0. Shade,
+  blur and spray iterate that same mask, so brush size stays consistent across
+  tools; blur radius must keep using `box_blur`.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not

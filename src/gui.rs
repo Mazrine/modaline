@@ -526,6 +526,26 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
         ui.label(editor.pressure_source());
     });
+    ui.collapsing("tool depth", |ui| {
+        ui.horizontal(|ui| {
+            ui.label("spray");
+            ui.add(egui::Slider::new(&mut editor.spray_rate, 1..=64).prefix("dots "));
+            ui.add(egui::Slider::new(&mut editor.spray_radius, 1..=64).prefix("r "));
+        });
+        ui.horizontal(|ui| {
+            ui.label("shade");
+            ui.add(egui::Slider::new(&mut editor.shade_strength, 1..=100).suffix("%"));
+        });
+        ui.horizontal(|ui| {
+            ui.label("blur");
+            ui.add(egui::Slider::new(&mut editor.blur_radius, 1..=32).prefix("r "));
+        });
+        ui.horizontal(|ui| {
+            ui.label("contour");
+            ui.add(egui::Slider::new(&mut editor.contour_width, 1..=64).suffix(" px"));
+            ui.checkbox(&mut editor.contour_inside, "inside");
+        });
+    });
     ui.horizontal(|ui| {
         ui.label("ink");
         egui::ComboBox::from_id_salt("ink")
@@ -1824,7 +1844,8 @@ const HELP: &[&str] = &[
     "  :filter invert|brightness|contrast|hue|saturation|outline|blur|sharpen [amount]",
     "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   (free transform)",
     "  :brush <1-64>|square|circle <n>|spacing <pct>|load <png>|save|use|list",
-    "  :pressure <0-100>|auto   (manual override; auto follows pen force)",
+    "  :pressure <0-100>|auto   :spray <dots> [r]   :shade <pct>   :blur <r>",
+    "  :contour [1-64] [inside|outside]   (tool depth)",
     "  :perfect on|off   :grid <px>   :snap on|off   (brush, grid)",
     "  :crop [x y w h]   :trim   (crop to a rect/selection, or to content)",
     "  :ink simple|lockalpha|replace|shading|erase   :alphalock on|off",

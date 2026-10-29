@@ -36,7 +36,10 @@ Brushes come as **square**, **circle** or a **custom PNG mask** (`:brush
 load|save|use|list`), with percentage **spacing**; the mask previews under the
 cursor and is stamped by freehand, shapes and symmetry. **Pressure** comes from
 touch/pen `force` when the backend reports it, otherwise from the manual slider
-(`:pressure <0-100>|auto`); it scales mask coverage. Each tool remembers its own **ink** (`simple`, `lock-alpha`, `replace`,
+(`:pressure <0-100>|auto`); it scales mask coverage. **Shade**, **blur** and
+**spray** stamp the same brush mask; their depth is configurable — shade
+strength, blur radius (shared with `box_blur`), spray rate/radius, and contour
+width with inside/outside placement. Each tool remembers its own **ink** (`simple`, `lock-alpha`, `replace`,
 `shading`, `erase`; `:ink` or the panel selector), and **alpha lock**
 (`:alphalock`) restricts painting to pixels that are already opaque.
 **Pixel-perfect** freehand (`:perfect on|off`) joins pointer steps and drops

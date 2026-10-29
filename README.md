@@ -130,6 +130,8 @@ keyboard-first, but the mouse is fully wired.)
 | `:brush <1-64>` / `:brush square\|circle <n>` / `:brush spacing <pct>` | brush size, built-in shape, stamp spacing |
 | `:brush load\|save\|use\|list [name]` | custom PNG brush and the `vixel/brushes` library |
 | `:pressure <0-100>` / `:pressure auto` | manual pressure override; `auto` follows pen force |
+| `:spray <dots> [radius]` / `:shade <pct>` / `:blur <radius>` | airbrush, shade, and blur-tool depth |
+| `:contour [width] [inside\|outside]` | contour the cursor region with the chosen ring |
 | `:ink simple\|lockalpha\|replace\|shading\|erase` / `:alphalock on\|off` | per-tool ink and alpha-locked painting |
 | `:perfect on\|off` | pixel-perfect freehand: drop L-shaped corner pixels |
 | `:mode auto\|rgba\|grayscale\|indexed` / `:aspect <x> <y>` / `:sgrid [x y] <w> <h>` | sprite colour mode, pixel ratio, grid size + origin |

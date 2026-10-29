@@ -1021,9 +1021,61 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             None => editor.msg = format!("usage: :{name} #rrggbb"),
         },
         "contour" | "outline" => {
+            for tok in arg.unwrap_or("").split_whitespace() {
+                match tok {
+                    "inside" => editor.contour_inside = true,
+                    "outside" => editor.contour_inside = false,
+                    _ => match tok.parse::<u32>() {
+                        Ok(n) => editor.contour_width = n.clamp(1, 64),
+                        Err(_) => {
+                            editor.msg = "usage: :contour [1-64] [inside|outside]".into();
+                            return;
+                        }
+                    },
+                }
+            }
             let (x, y) = editor.cursor;
             editor.contour_at(x, y);
+            editor.msg = format!(
+                "contour: {} px {}",
+                editor.contour_width,
+                if editor.contour_inside {
+                    "inside"
+                } else {
+                    "outside"
+                }
+            );
         }
+        "spray" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                Some(rate) => {
+                    editor.spray_rate = rate.clamp(1, 64);
+                    if let Some(radius) = it.next().and_then(|v| v.parse::<u32>().ok()) {
+                        editor.spray_radius = radius.clamp(1, 64);
+                    }
+                    editor.msg = format!(
+                        "spray: {} dots, radius {}",
+                        editor.spray_rate, editor.spray_radius
+                    );
+                }
+                None => editor.msg = "usage: :spray <1-64> [radius 1-64]".into(),
+            }
+        }
+        "shade" => match arg.and_then(|v| v.parse::<u32>().ok()) {
+            Some(n) => {
+                editor.shade_strength = n.clamp(1, 100);
+                editor.msg = format!("shade strength: {}%", editor.shade_strength);
+            }
+            None => editor.msg = "usage: :shade <1-100>".into(),
+        },
+        "blur" => match arg.and_then(|v| v.parse::<u32>().ok()) {
+            Some(n) => {
+                editor.blur_radius = n.clamp(1, 32);
+                editor.msg = format!("blur radius: {} px", editor.blur_radius);
+            }
+            None => editor.msg = "usage: :blur <1-32>".into(),
+        },
         "ops" => {
             let Some(path) = arg.filter(|p| !p.is_empty()) else {
                 editor.msg = "usage: :ops <file.json>".into();

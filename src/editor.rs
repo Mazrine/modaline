@@ -333,6 +333,16 @@ pub struct Editor {
     pub filled_shapes: bool,
     pub gradient_radial: bool,
     pub spray_seed: u64,
+    /// Airbrush dots per dab and scatter radius, in pixels.
+    pub spray_rate: u32,
+    pub spray_radius: u32,
+    /// Shade strength as a percentage of the pixel's channel value.
+    pub shade_strength: u32,
+    /// Blur-tool radius, shared with `box_blur`.
+    pub blur_radius: u32,
+    /// Contour ring width and whether it grows outside (true) or inside.
+    pub contour_width: u32,
+    pub contour_inside: bool,
     pub wand_tolerance: u8,
     pub wand_all_layers: bool,
     /// Wand and bucket restrict themselves to the seed's contiguous region.
@@ -431,6 +441,12 @@ impl Editor {
             filled_shapes: false,
             gradient_radial: false,
             spray_seed: 0x9E37_79B9_7F4A_7C15,
+            spray_rate: 6,
+            spray_radius: 3,
+            shade_strength: 20,
+            blur_radius: 1,
+            contour_width: 1,
+            contour_inside: false,
             wand_tolerance: 0,
             wand_all_layers: false,
             contiguous: true,
@@ -673,30 +689,62 @@ impl Editor {
 
     /// Darken (or lighten) the existing pixel(s) under the cursor, keeping alpha.
     pub fn shade_at(&mut self, x: u32, y: u32, darken: bool) {
-        for (px, py) in self.symmetry_points(x, y) {
-            let (l, f) = (self.active_layer, self.active_frame);
-            let old = self.sprite.get(l, f, px, py);
-            if old.is_transparent() {
-                continue;
+        let brush = self.current_brush();
+        let pressure = self.pressure();
+        let strength = self.shade_strength.clamp(1, 100);
+        let (l, f) = (self.active_layer, self.active_frame);
+        let ox = -(brush.w as i32 / 2);
+        let oy = -(brush.h as i32 / 2);
+        for (sx, sy) in self.symmetry_points(x, y) {
+            for by in 0..brush.h {
+                for bx in 0..brush.w {
+                    let coverage = brush.coverage(bx as i32, by as i32);
+                    if coverage == 0 {
+                        continue;
+                    }
+                    let px = sx as i32 + ox + bx as i32;
+                    let py = sy as i32 + oy + by as i32;
+                    if px < 0 || py < 0 || px as u32 >= self.sprite.width {
+                        continue;
+                    }
+                    if py as u32 >= self.sprite.height {
+                        continue;
+                    }
+                    let old = self.sprite.get(l, f, px as u32, py as u32);
+                    if old.is_transparent() {
+                        continue;
+                    }
+                    let shaded = shade_color(old, darken, strength);
+                    let t = (f32::from(coverage) * pressure / 255.0).clamp(0.0, 1.0);
+                    self.put_pixel(px as u32, py as u32, lerp_rgba(old, shaded, t));
+                }
             }
-            self.put_pixel(px, py, shade_color(old, darken));
         }
     }
 
-    /// Scatter a few random dots around the cursor (airbrush).
+    /// Scatter `spray_rate` brush stamps inside the scatter radius (airbrush).
     pub fn spray_at(&mut self, x: u32, y: u32) {
-        let r = 3i32;
-        for _ in 0..6 {
-            let dx = self.next_rand() % (2 * r + 1) - r;
-            let dy = self.next_rand() % (2 * r + 1) - r;
-            let px = x as i32 + dx;
-            let py = y as i32 + dy;
-            if px >= 0
-                && py >= 0
-                && (px as u32) < self.sprite.width
-                && (py as u32) < self.sprite.height
-            {
-                self.paint_symmetric(px as u32, py as u32, self.fg);
+        let brush = self.current_brush();
+        let r = self.spray_radius.clamp(1, 64) as i32;
+        let rate = self.spray_rate.clamp(1, 64);
+        let points = self.symmetry_points(x, y);
+        for (sx, sy) in points {
+            for _ in 0..rate {
+                let dx = self.next_rand() % (2 * r + 1) - r;
+                let dy = self.next_rand() % (2 * r + 1) - r;
+                if dx * dx + dy * dy > r * r {
+                    continue;
+                }
+                let px = sx as i32 + dx;
+                let py = sy as i32 + dy;
+                if px >= 0
+                    && py >= 0
+                    && (px as u32) < self.sprite.width
+                    && (py as u32) < self.sprite.height
+                {
+                    let color = self.fg;
+                    self.stamp_brush_symmetric(&brush, px as u32, py as u32, color);
+                }
             }
         }
     }
@@ -711,35 +759,33 @@ impl Editor {
 
     /// 3x3 alpha-weighted box blur of the pixel(s) under the cursor.
     pub fn blur_at(&mut self, x: u32, y: u32) {
-        for (px, py) in self.symmetry_points(x, y) {
-            let (l, f) = (self.active_layer, self.active_frame);
-            let (w, h) = (self.sprite.width, self.sprite.height);
-            let (mut sr, mut sg, mut sb, mut sa, mut count) = (0u32, 0u32, 0u32, 0u32, 0u32);
-            for dy in -1..=1i32 {
-                for dx in -1..=1i32 {
-                    let nx = px as i32 + dx;
-                    let ny = py as i32 + dy;
-                    if nx >= 0 && ny >= 0 && (nx as u32) < w && (ny as u32) < h {
-                        let c = self.sprite.get(l, f, nx as u32, ny as u32);
-                        let a = c.3 as u32;
-                        sr += c.0 as u32 * a;
-                        sg += c.1 as u32 * a;
-                        sb += c.2 as u32 * a;
-                        sa += a;
-                        count += 1;
+        let (l, f) = (self.active_layer, self.active_frame);
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let src: Vec<Rgba> = (0..w * h)
+            .map(|i| self.sprite.get(l, f, i % w, i / w))
+            .collect();
+        let soft = box_blur(&src, w, h, self.blur_radius);
+        let brush = self.current_brush();
+        let pressure = self.pressure();
+        let ox = -(brush.w as i32 / 2);
+        let oy = -(brush.h as i32 / 2);
+        for (sx, sy) in self.symmetry_points(x, y) {
+            for by in 0..brush.h {
+                for bx in 0..brush.w {
+                    let coverage = brush.coverage(bx as i32, by as i32);
+                    if coverage == 0 {
+                        continue;
                     }
+                    let px = sx as i32 + ox + bx as i32;
+                    let py = sy as i32 + oy + by as i32;
+                    if px < 0 || py < 0 || px as u32 >= w || py as u32 >= h {
+                        continue;
+                    }
+                    let i = (py as u32 * w + px as u32) as usize;
+                    let t = (f32::from(coverage) * pressure / 255.0).clamp(0.0, 1.0);
+                    self.put_pixel(px as u32, py as u32, lerp_rgba(src[i], soft[i], t));
                 }
             }
-            if sa == 0 {
-                continue;
-            }
-            let out = Rgba(
-                (sr / sa) as u8,
-                (sg / sa) as u8,
-                (sb / sa) as u8,
-                (sa / count.max(1)) as u8,
-            );
-            self.put_pixel(px, py, out);
         }
     }
 
@@ -748,24 +794,80 @@ impl Editor {
     pub fn contour_at(&mut self, x: u32, y: u32) {
         let (w, h) = (self.sprite.width, self.sprite.height);
         let region = self.region_mask(x, y);
+        let width = self.contour_width.clamp(1, 64);
         let color = self.fg;
+        let mut ring = vec![false; region.len()];
+        if self.contour_inside {
+            let mut kept = region.clone();
+            for _ in 0..width {
+                let prev = kept.clone();
+                for yy in 0..h as i32 {
+                    for xx in 0..w as i32 {
+                        let i = (yy as u32 * w + xx as u32) as usize;
+                        if !prev[i] {
+                            continue;
+                        }
+                        let boundary = [
+                            (xx.wrapping_sub(1), yy),
+                            (xx + 1, yy),
+                            (xx, yy.wrapping_sub(1)),
+                            (xx, yy + 1),
+                        ]
+                        .iter()
+                        .any(|&(nx, ny)| {
+                            nx < 0
+                                || ny < 0
+                                || nx >= w as i32
+                                || ny >= h as i32
+                                || !prev[(ny as u32 * w + nx as u32) as usize]
+                        });
+                        if boundary {
+                            kept[i] = false;
+                        }
+                    }
+                }
+            }
+            for i in 0..ring.len() {
+                ring[i] = region[i] && !kept[i];
+            }
+        } else {
+            let mut grown = region.clone();
+            for _ in 0..width {
+                let prev = grown.clone();
+                for yy in 0..h as i32 {
+                    for xx in 0..w as i32 {
+                        let i = (yy as u32 * w + xx as u32) as usize;
+                        if prev[i] {
+                            continue;
+                        }
+                        let touching = [
+                            (xx.wrapping_sub(1), yy),
+                            (xx + 1, yy),
+                            (xx, yy.wrapping_sub(1)),
+                            (xx, yy + 1),
+                        ]
+                        .iter()
+                        .any(|&(nx, ny)| {
+                            nx >= 0
+                                && ny >= 0
+                                && nx < w as i32
+                                && ny < h as i32
+                                && prev[(ny as u32 * w + nx as u32) as usize]
+                        });
+                        if touching {
+                            grown[i] = true;
+                        }
+                    }
+                }
+            }
+            for i in 0..ring.len() {
+                ring[i] = grown[i] && !region[i];
+            }
+        }
         self.begin_stroke();
         for y in 0..h {
             for x in 0..w {
-                if region[(y * w + x) as usize] {
-                    continue;
-                }
-                let neighbors = [
-                    (x.wrapping_sub(1), y),
-                    (x + 1, y),
-                    (x, y.wrapping_sub(1)),
-                    (x, y + 1),
-                ];
-                if neighbors
-                    .iter()
-                    .any(|&(nx, ny)| nx < w && ny < h && region[(ny * w + nx) as usize])
-                {
-                    // The ring is just outside the selection by construction.
+                if ring[(y * w + x) as usize] {
                     self.put_pixel_unclipped(x, y, color);
                 }
             }
@@ -3758,7 +3860,7 @@ pub(crate) fn apply_ink(ink: Ink, old: Rgba, color: Rgba) -> Rgba {
             if old.3 == 0 {
                 old
             } else {
-                shade_color(old, luma(color) <= luma(old))
+                shade_color(old, luma(color) <= luma(old), 20)
             }
         }
         Ink::Erase => {
@@ -3773,9 +3875,10 @@ pub(crate) fn apply_ink(ink: Ink, old: Rgba, color: Rgba) -> Rgba {
     }
 }
 
-/// Darken (`f = 0.8`) or lighten (`f = 1.25`) a color, keeping alpha.
-fn shade_color(c: Rgba, darken: bool) -> Rgba {
-    let f = if darken { 0.8 } else { 1.25 };
+/// Darken or lighten a colour by `strength` percent, keeping alpha.
+fn shade_color(c: Rgba, darken: bool, strength: u32) -> Rgba {
+    let s = strength.clamp(1, 100) as f32 / 100.0;
+    let f = if darken { 1.0 - s } else { 1.0 + s };
     let ch = |v: u8| (v as f32 * f).round().clamp(0.0, 255.0) as u8;
     Rgba(ch(c.0), ch(c.1), ch(c.2), c.3)
 }
@@ -4526,8 +4629,8 @@ mod tests {
         );
         let mid = lerp_rgba(Rgba(0, 0, 0, 255), Rgba(255, 255, 255, 255), 0.5);
         assert!((mid.0 as i32 - 128).abs() <= 1);
-        assert!(shade_color(Rgba(100, 100, 100, 255), true).0 < 100);
-        assert!(shade_color(Rgba(100, 100, 100, 255), false).0 > 100);
+        assert!(shade_color(Rgba(100, 100, 100, 255), true, 20).0 < 100);
+        assert!(shade_color(Rgba(100, 100, 100, 255), false, 20).0 > 100);
     }
 
     #[test]
@@ -5366,6 +5469,100 @@ mod tests {
         e.paint_with_tool(4, 0);
         e.end_stroke();
         assert_eq!(e.sprite.get(0, 0, 4, 0).3, 255);
+    }
+
+    #[test]
+    fn spray_rate_and_radius_shape_the_scatter() {
+        let mut e = Editor::new(9, 9);
+        e.fg = Rgba(255, 0, 0, 255);
+        e.spray_rate = 1;
+        e.spray_radius = 4;
+        e.spray_at(4, 4);
+        let painted = (0..9)
+            .flat_map(|y| (0..9).map(move |x| (x, y)))
+            .filter(|&(x, y)| !e.sprite.get(0, 0, x, y).is_transparent())
+            .count();
+        assert_eq!(painted, 1, "one dot per dab at rate 1");
+
+        let mut e = Editor::new(9, 9);
+        e.fg = Rgba(255, 0, 0, 255);
+        e.spray_rate = 64;
+        e.spray_radius = 1;
+        e.spray_at(4, 4);
+        for y in 0..9 {
+            for x in 0..9 {
+                if !e.sprite.get(0, 0, x, y).is_transparent() {
+                    assert!((3..=5).contains(&x) && (3..=5).contains(&y), "({x},{y})");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn shade_strength_scales_and_the_brush_covers() {
+        let mut e = Editor::new(5, 5);
+        e.brush_size = 1;
+        e.shade_strength = 50;
+        e.sprite.set(0, 0, 2, 2, Rgba(100, 100, 100, 255));
+        e.shade_at(2, 2, true);
+        assert_eq!(e.sprite.get(0, 0, 2, 2).0, 50);
+
+        let mut e = Editor::new(5, 5);
+        e.brush_size = 3;
+        for y in 1..=3 {
+            for x in 1..=3 {
+                e.sprite.set(0, 0, x, y, Rgba(100, 100, 100, 255));
+            }
+        }
+        e.shade_at(2, 2, false);
+        assert_eq!(e.sprite.get(0, 0, 1, 1).0, 120, "brush reaches the corner");
+    }
+
+    #[test]
+    fn blur_tool_radius_shares_box_blur() {
+        let mut e = Editor::new(5, 1);
+        e.sprite.set(0, 0, 2, 0, Rgba(255, 255, 255, 255));
+        e.blur_radius = 2;
+        e.blur_at(2, 0);
+        assert_eq!(e.sprite.get(0, 0, 2, 0).3, 51, "5 samples at radius 2");
+
+        let mut e = Editor::new(5, 1);
+        e.sprite.set(0, 0, 2, 0, Rgba(255, 255, 255, 255));
+        e.blur_radius = 1;
+        e.blur_at(2, 0);
+        assert_eq!(e.sprite.get(0, 0, 2, 0).3, 85, "3 samples at radius 1");
+    }
+
+    #[test]
+    fn contour_width_and_side_are_configurable() {
+        let mut e = Editor::new(7, 7);
+        e.sprite.set(0, 0, 3, 3, Rgba(1, 2, 3, 255));
+        e.contour_width = 1;
+        e.contour_at(3, 3);
+        assert_eq!(e.sprite.get(0, 0, 3, 2), e.fg);
+        assert_eq!(e.sprite.get(0, 0, 3, 1), Rgba::TRANSPARENT);
+
+        let mut e = Editor::new(7, 7);
+        e.sprite.set(0, 0, 3, 3, Rgba(1, 2, 3, 255));
+        e.contour_width = 2;
+        e.contour_at(3, 3);
+        assert_eq!(e.sprite.get(0, 0, 3, 1), e.fg, "second ring is painted");
+
+        let mut e = Editor::new(5, 5);
+        for y in 0..5 {
+            for x in 0..5 {
+                e.sprite.set(0, 0, x, y, Rgba(1, 2, 3, 255));
+            }
+        }
+        e.contour_width = 1;
+        e.contour_inside = true;
+        e.contour_at(2, 2);
+        assert_eq!(
+            e.sprite.get(0, 0, 0, 0),
+            e.fg,
+            "inside ring hugs the border"
+        );
+        assert_eq!(e.sprite.get(0, 0, 2, 2), Rgba(1, 2, 3, 255), "middle kept");
     }
 
     #[test]
