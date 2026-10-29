@@ -14,6 +14,13 @@ pub fn run(args: &[String]) -> Result<()> {
     let mut sheet_path: Option<PathBuf> = None;
     let mut data_path: Option<PathBuf> = None;
     let mut gif_path: Option<PathBuf> = None;
+    let mut split_layers: Option<PathBuf> = None;
+    let mut split_tags: Option<PathBuf> = None;
+    let mut split_slices: Option<PathBuf> = None;
+    let mut split_grid: Option<PathBuf> = None;
+    let mut tileset_path: Option<PathBuf> = None;
+    let mut tileset_id: Option<u32> = None;
+    let mut palette_path: Option<PathBuf> = None;
     let mut cfg = io::ExportConfig {
         gif: false,
         meta: false,
@@ -50,6 +57,18 @@ pub fn run(args: &[String]) -> Result<()> {
                 gif_path = Some(PathBuf::from(next(&mut i)?));
                 cfg.gif = true;
             }
+            "--split-layers" => split_layers = Some(PathBuf::from(next(&mut i)?)),
+            "--split-tags" => split_tags = Some(PathBuf::from(next(&mut i)?)),
+            "--split-slices" => split_slices = Some(PathBuf::from(next(&mut i)?)),
+            "--split-grid" => split_grid = Some(PathBuf::from(next(&mut i)?)),
+            "--export-tileset" | "--tileset" => {
+                tileset_path = Some(PathBuf::from(next(&mut i)?));
+            }
+            "--tileset-id" => tileset_id = Some(next(&mut i)?.parse::<u32>()?),
+            "--palette" => palette_path = Some(PathBuf::from(next(&mut i)?)),
+            "--filename" => cfg.filename = next(&mut i)?,
+            "--ignore-empty" => cfg.ignore_empty = true,
+            "--merge" => cfg.merge_duplicates = true,
             "--scale" => cfg.scale = next(&mut i)?.parse::<u32>()?.clamp(1, 16),
             "--color-mode" | "--color" => {
                 let v = next(&mut i)?;
@@ -210,7 +229,16 @@ pub fn run(args: &[String]) -> Result<()> {
         println!("{}", path.display());
     }
 
-    let view = if sheet_path.is_some() || gif_path.is_some() || data_path.is_some() {
+    let view = if sheet_path.is_some()
+        || gif_path.is_some()
+        || data_path.is_some()
+        || split_layers.is_some()
+        || split_tags.is_some()
+        || split_slices.is_some()
+        || split_grid.is_some()
+        || tileset_path.is_some()
+        || palette_path.is_some()
+    {
         Some(io::configured_sprite(&editor.sprite, &cfg)?)
     } else {
         None
@@ -255,7 +283,88 @@ pub fn run(args: &[String]) -> Result<()> {
         println!("{}", path.display());
     }
 
-    if save_as.is_none() && sheet_path.is_none() && gif_path.is_none() && lists.is_empty() {
+    if let Some(dir) = split_layers.as_ref() {
+        let view = view.as_ref().unwrap();
+        std::fs::create_dir_all(dir)?;
+        let title = save_as
+            .as_ref()
+            .or(Some(&input))
+            .and_then(|p| p.file_stem())
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "vixel".into());
+        for layer in 0..view.layers.len() {
+            if view.layers[layer].group {
+                continue;
+            }
+            let mut only = view.clone();
+            for (i, l) in only.layers.iter_mut().enumerate() {
+                l.visible = i == layer;
+            }
+            let name = view.layers[layer].name.replace(['/', ' '], "_");
+            let mut layer_cfg = cfg.clone();
+            layer_cfg.per_layer = false;
+            layer_cfg.sequence = true;
+            let stem = dir.join(format!("{title}_{name}"));
+            let paths = io::export_sequence(&only, &layer_cfg, &stem)?;
+            println!("{} files in {}", paths.len(), stem.display());
+        }
+    }
+    if let Some(dir) = split_tags.as_ref() {
+        let view = view.as_ref().unwrap();
+        std::fs::create_dir_all(dir)?;
+        for tag in &view.tags {
+            let mut tag_cfg = cfg.clone();
+            tag_cfg.tag = Some(tag.name.clone());
+            tag_cfg.frames = None;
+            tag_cfg.sequence = true;
+            let sub = io::configured_sprite(view, &tag_cfg)?;
+            let name = tag.name.replace(['/', ' '], "_");
+            let stem = dir.join(&name);
+            let paths = io::export_sequence(&sub, &tag_cfg, &stem)?;
+            println!("{} files in {}", paths.len(), stem.display());
+        }
+    }
+    if let Some(dir) = split_slices.as_ref() {
+        let view = view.as_ref().unwrap();
+        let first = cfg.frames.map(|(a, _)| a).unwrap_or(0);
+        let paths = io::export_named_slices(view, first, dir, "slices")?;
+        println!("{} files in {}", paths.len(), dir.display());
+    }
+    if let Some(dir) = split_grid.as_ref() {
+        let view = view.as_ref().unwrap();
+        let first = cfg.frames.map(|(a, _)| a).unwrap_or(0);
+        let paths = io::export_slices(
+            view,
+            first,
+            dir,
+            "grid",
+            cfg.columns.unwrap_or(0),
+            cfg.rows.unwrap_or(0),
+        )?;
+        println!("{} files in {}", paths.len(), dir.display());
+    }
+    if let Some(path) = tileset_path.as_ref() {
+        let view = view.as_ref().unwrap();
+        io::export_tileset(view, tileset_id, path)?;
+        println!("{}", path.display());
+    }
+    if let Some(path) = palette_path.as_ref() {
+        let view = view.as_ref().unwrap();
+        vixel::palette::save(&view.palette, path)?;
+        println!("{}", path.display());
+    }
+
+    if save_as.is_none()
+        && sheet_path.is_none()
+        && gif_path.is_none()
+        && lists.is_empty()
+        && split_layers.is_none()
+        && split_tags.is_none()
+        && split_slices.is_none()
+        && split_grid.is_none()
+        && tileset_path.is_none()
+        && palette_path.is_none()
+    {
         println!(
             "{}x{}  {} layer(s)  {} frame(s)",
             sprite.width,
@@ -283,6 +392,11 @@ fn print_help() {
          \x20 --layout h|v|rows|columns|packed  --columns N  --rows N\n\
          \x20 --border N  --shape N  --inner N  --extrude N  --padding N\n\
          \x20 --atlas vixel|hash|array  --gif-loop N  --gif-colors N  --gif-dither\n\
+         \x20 --filename <tpl>  --ignore-empty  --merge\n\
+         Splits:\n\
+         \x20 --split-layers <dir>  --split-tags <dir>  --split-slices <dir>\n\
+         \x20 --split-grid <dir> [--columns N --rows N]\n\
+         \x20 --export-tileset <png> [--tileset-id ID]  --palette <gpl|hex|pal>\n\
          Lists:\n\
          \x20 --list-layers --list-tags --list-frames --list-slices --list-tilesets --list-palette"
     );

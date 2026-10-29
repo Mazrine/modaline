@@ -577,9 +577,14 @@ met; blocked tasks are marked with the reason.
   options, and `--list-layers/tags/frames/slices/tilesets/palette`. Output paths
   are explicit; `--data` references `--sheet`. 3 integration tests (222 total):
   filtered/trimmed sheet+atlas, list output, and indexed conversion save.
-- [ ] **P5-47 — CLI batch advanced** (L) — deps: P5-46, P5-15, P5-33.
-  split-layers/tags/slices/grid, filename templates, padding/extrude/
-  ignore-empty/merge, export-tileset, palette.
+- [x] **P5-47 — CLI batch advanced** (L) — deps: P5-46, P5-15, P5-33.
+  Landed 2026-10-28. Batch mode gains `--split-layers <dir>`,
+  `--split-tags <dir>`, `--split-slices <dir>`, `--split-grid <dir>
+  [--columns/--rows]`, `--filename <tpl>`, `--ignore-empty`, `--merge`,
+  `--export-tileset <png> [--tileset-id]` and `--palette <gpl|hex|pal>`.
+  Splits use the configured filters/scale and filename templates; slices/grid
+  export the first selected frame. 2 integration tests (224 total): layer/tag
+  splits + palette and grid/slices/tileset.
 - [ ] **P5-48 — Scripting engine decision** (S) — deps: none.
   `docs/SCRIPTING.md` comparing Lua/mlua, Rhai, QuickJS/WASM, Python and JSON
   `Op`; default **Lua/mlua** (Aseprite script compatibility); check offline

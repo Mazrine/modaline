@@ -96,6 +96,108 @@ fn batch_lists_layers_tags_and_frames() {
 }
 
 #[test]
+fn batch_splits_layers_tags_and_palette() {
+    let d = dir("split");
+    let mut s = Sprite::new(2, 2);
+    s.add_frame_after(0);
+    s.add_layer_after(0);
+    let top = s.layers.len() - 1;
+    s.set(0, 0, 0, 0, Rgba::rgb(255, 0, 0));
+    s.set(top, 1, 1, 1, Rgba::rgb(0, 0, 255));
+    s.tags.push(Tag {
+        name: "walk".into(),
+        from: 0,
+        to: 1,
+        color: Rgba::rgb(1, 2, 3),
+        direction: vixel::sprite::PlayDirection::Forward,
+        repeat: 0,
+        user_data: None,
+    });
+    let input = d.join("in.vpx");
+    io::save_project(&s, &input).unwrap();
+    let layers = d.join("layers");
+    let tags = d.join("tags");
+    let pal = d.join("pal.gpl");
+    let out = run(&[
+        "-b".into(),
+        input.display().to_string(),
+        "--split-layers".into(),
+        layers.display().to_string(),
+        "--split-tags".into(),
+        tags.display().to_string(),
+        "--palette".into(),
+        pal.display().to_string(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(std::fs::read_dir(&layers).unwrap().count(), 4);
+    assert_eq!(std::fs::read_dir(&tags).unwrap().count(), 2);
+    let text = std::fs::read_to_string(&pal).unwrap();
+    assert!(text.contains("GIMP Palette"), "{text}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn batch_splits_grid_slices_and_tileset() {
+    use vixel::sprite::{Slice, SliceKey, Tileset};
+    let d = dir("split2");
+    let mut s = Sprite::new(2, 2);
+    s.slices.push(Slice {
+        name: "head".into(),
+        keys: vec![SliceKey {
+            frame: 0,
+            x: 0,
+            y: 0,
+            w: 1,
+            h: 1,
+            center: None,
+            pivot: None,
+        }],
+        ..Default::default()
+    });
+    s.tilesets.push(Tileset {
+        id: 1,
+        name: "tiles".into(),
+        tile_w: 1,
+        tile_h: 1,
+        num_tiles: 1,
+        image: vec![Rgba::rgb(9, 8, 7)],
+        ..Default::default()
+    });
+    let input = d.join("in.vpx");
+    io::save_project(&s, &input).unwrap();
+    let grid = d.join("grid");
+    let slices = d.join("slices");
+    let tiles = d.join("tiles.png");
+    let out = run(&[
+        "-b".into(),
+        input.display().to_string(),
+        "--split-grid".into(),
+        grid.display().to_string(),
+        "--columns".into(),
+        "2".into(),
+        "--rows".into(),
+        "1".into(),
+        "--split-slices".into(),
+        slices.display().to_string(),
+        "--export-tileset".into(),
+        tiles.display().to_string(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(std::fs::read_dir(&grid).unwrap().count(), 3, "2 png + meta");
+    assert_eq!(std::fs::read_dir(&slices).unwrap().count(), 2, "png + meta");
+    assert!(tiles.exists());
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
 fn batch_converts_colour_mode_and_saves_as_project() {
     let d = dir("colour");
     let input = fixture(&d);

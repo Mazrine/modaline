@@ -138,7 +138,8 @@ L-shaped corners for the 1 px pencil/eraser.
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
 - **CLI batch** (`vixel -b`): headless save-as/sheet/data/GIF export with
   scale, colour mode/dither, frame/tag/layer filters, trim/crop, layout and
-  atlas/GIF options; `--list-*` prints structure.
+  atlas/GIF options; `--list-*` prints structure. Splits: layers, tags, slices
+  and grids; filename templates, ignore/merge, tileset and palette export.
 - **file browser**: in-app `files` window (Ctrl/Cmd+O, Ctrl/Cmd+Shift+S) with
   filtering, parent/home navigation, recents and persistent favourites; save
   dispatches `.ase`/image/`.vpx` by extension.

@@ -196,8 +196,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Colour mode/dithering options | Covered | P5-46 |
 | Frame/tag/layer filters | Covered | P5-46 |
 | `--list-*` (layers/tags/frames/slices/tilesets/palette) | Covered | P5-46 |
-| Split layers/tags/slices/grid, filename templates | Missing | P5-47 |
-| `--export-tileset`, `--palette`, `--list-*` | Missing | P5-47 |
+| Split layers/tags/slices/grid, filename templates | Covered | P5-47 |
+| `--export-tileset`, `--palette`, `--list-*` | Covered | P5-46/P5-47 |
 
 ## Scripting and extensions
 

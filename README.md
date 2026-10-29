@@ -284,6 +284,8 @@ vixel -b in.ase --sheet out.png --data out.json --scale 2 --frame-range 1 8
 vixel -b in.vpx --gif out.gif --gif-loop 0 --gif-dither --gif-colors 64
 vixel -b in.vpx --color-mode indexed --dither bayer4 --save-as out.ase
 vixel -b in.vpx --list-tags --list-layers
+vixel -b in.ase --split-layers out/ --split-tags tags/ --palette pal.gpl
+vixel -b in.ase --split-grid grid/ --columns 4 --rows 2 --export-tileset tiles.png
 ```
 
 `-b/--batch` never opens a window. Run `vixel -b --help` for all options
