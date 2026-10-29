@@ -9,6 +9,7 @@ pub mod ase;
 pub mod brush;
 pub mod color;
 pub mod editor;
+pub mod i18n;
 pub mod io;
 pub mod layout;
 pub mod ops;

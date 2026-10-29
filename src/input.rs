@@ -551,6 +551,50 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
         }
         return;
     }
+    if let Some(rest) = cmd.strip_prefix("lang")
+        && (rest.is_empty() || rest.starts_with(char::is_whitespace))
+    {
+        let rest = rest.trim();
+        if let Some(path) = rest.strip_prefix("save ") {
+            match view.i18n.catalog.save(std::path::Path::new(path.trim())) {
+                Ok(()) => editor.msg = format!("language saved: {}", path.trim()),
+                Err(e) => editor.msg = format!("language save failed: {e}"),
+            }
+        } else if rest == "check" {
+            let missing = view.i18n.missing();
+            editor.msg = if missing.is_empty() {
+                format!("language {}: complete", view.language)
+            } else {
+                format!(
+                    "language {}: {} missing ({})",
+                    view.language,
+                    missing.len(),
+                    missing.join(", ")
+                )
+            };
+        } else if rest.is_empty() || rest == "list" {
+            let mut text = format!("language: {} (", view.language);
+            for code in crate::i18n::BUILTINS {
+                let name = crate::i18n::builtin(code)
+                    .map(|c| c.name)
+                    .unwrap_or_else(|| code.to_string());
+                text.push_str(&format!("{code}={name} "));
+            }
+            text.push_str("; :lang <code|file.json>)");
+            editor.msg = text;
+        } else {
+            match crate::i18n::resolve(rest) {
+                Ok(catalog) => {
+                    let name = catalog.name.clone();
+                    view.language = rest.to_string();
+                    view.i18n = crate::i18n::Translator::new(catalog);
+                    editor.msg = format!("language: {name}");
+                }
+                Err(e) => editor.msg = format!("language: {e}"),
+            }
+        }
+        return;
+    }
     if let Some(rest) = cmd.strip_prefix("bind")
         && (rest.is_empty() || rest.starts_with(char::is_whitespace))
     {

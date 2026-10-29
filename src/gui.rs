@@ -75,6 +75,9 @@ pub struct View {
     /// A keymap action consumed a key whose character would otherwise be
     /// handled again by `Event::Text`.
     pub suppress_text: bool,
+    /// Active language spec and its catalog (with English fallback).
+    pub language: String,
+    pub i18n: crate::i18n::Translator,
     /// Mirrored from the editor each frame: 0 = no snapping.
     pub snap_grid: u32,
     pub onion: Onion,
@@ -134,6 +137,10 @@ pub struct View {
 }
 
 impl View {
+    pub fn tr(&self, key: &str) -> String {
+        self.i18n.tr(key)
+    }
+
     pub fn new() -> Self {
         Self {
             zoom: 16,
@@ -151,6 +158,8 @@ impl View {
             keymap: crate::keymap::Keymap::default(),
             wheel_consumed: false,
             suppress_text: false,
+            language: "en".into(),
+            i18n: crate::i18n::Translator::default(),
             snap_grid: 0,
             onion: Onion::default(),
             drag_frame: None,
@@ -1096,20 +1105,24 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
 
 fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &mut View) {
     ui.horizontal(|ui| {
-        let play_label = if *playing { "pause" } else { "play" };
+        let play_label = if *playing {
+            view.tr("pause")
+        } else {
+            view.tr("play")
+        };
         if ui.button(play_label).clicked() {
             *playing = !*playing;
             if *playing {
                 editor.start_playback();
             }
         }
-        if ui.button("+frame").clicked() {
+        if ui.button(view.tr("frame.add")).clicked() {
             editor.add_frame();
         }
-        if ui.button("dup").clicked() {
+        if ui.button(view.tr("frame.dup")).clicked() {
             editor.duplicate_frame();
         }
-        if ui.button("-frame").clicked() {
+        if ui.button(view.tr("frame.remove")).clicked() {
             editor.del_frame();
         }
         ui.separator();
@@ -1478,7 +1491,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.horizontal(|ui| {
         let light = !crate::theme::resolve(&view.theme).map_or(true, |t| t.dark);
         if ui
-            .selectable_label(light, "light")
+            .selectable_label(light, view.tr("theme.light"))
             .on_hover_text("theme (saved in the config)")
             .clicked()
         {
@@ -1489,7 +1502,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     });
     ui.horizontal(|ui| {
-        ui.label("brush");
+        ui.label(view.tr("brush"));
         ui.add(egui::Slider::new(&mut editor.brush_size, 1..=64));
         egui::ComboBox::from_id_salt("brush_kind")
             .selected_text(editor.brush_kind.name())
@@ -1661,7 +1674,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         });
     }
     ui.horizontal(|ui| {
-        ui.label("text");
+        ui.label(view.tr("text"));
         let edit = ui.add(
             egui::TextEdit::multiline(&mut editor.text)
                 .desired_rows(2)
@@ -1747,7 +1760,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         ui.checkbox(&mut editor.snap, "snap");
     });
     ui.horizontal(|ui| {
-        ui.label("symmetry");
+        ui.label(view.tr("symmetry"));
         for (label, mode) in [
             ("off", Symmetry::None),
             ("h", Symmetry::Horizontal),
@@ -3265,6 +3278,7 @@ const HELP: &[&str] = &[
     "  :uifont <font.ttf|default> [8-32]   (UI font and size, saved in config)",
     "  :layout [default|drawing|animation|compact|file.json]   :layout reset|save <file>",
     "  :bind <action> <chord|wheel-up|wheel-down|none>   :bind list|reset",
+    "  :lang [en|pt-BR|file.json]   :lang check|save <file>   (runtime language)",
     "  :slices [<dir> [cols rows|named]]   (list, grid export, or named slices)",
     "  :grad linear|radial   :contour   :textobj <text>   (editable text object)",
     "  :textfont vixel   :textsize <8-64>   :textalign left|center|right",

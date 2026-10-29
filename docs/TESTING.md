@@ -69,6 +69,7 @@ Rules that cost me a run each:
 | tabs | `Ctrl-t`, screenshot; `Ctrl-Tab`, screenshot | two `untitled` tabs, active marker moves; the strip shows `×` and `+`; `Ctrl-w` closes (dirty tabs refuse) |
 | layouts | `:layout animation`, screenshot; `:layout reset`, screenshot | animation hides the side panel and gives a 210 px timeline; reset restores side + 120 px; `:layout save` writes JSON |
 | keymap | `:bind undo ctrl-z`, draw + `u` + `ctrl-z`; `:bind help h`, `h`; `:bind zoom-in wheel-down`, scroll | `u` does nothing, ctrl-z undoes; help opens on `h`; scroll zooms once; config shows the bindings |
+| language | `:lang pt-BR`, screenshot; `:lang check`; `:lang save <file>`; `:lang en` | tab says `sem título`, side says `claro`/`pincel`/`texto`/`simetria`, timeline says `reproduzir`/`+quadro`; check says complete; JSON re-reads |
 
 ## Checking a screenshot
 

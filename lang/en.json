@@ -1,0 +1,16 @@
+{
+  "lang": "en",
+  "name": "English",
+  "strings": {
+    "untitled": "untitled",
+    "brush": "brush",
+    "text": "text",
+    "symmetry": "symmetry",
+    "theme.light": "light",
+    "play": "play",
+    "pause": "pause",
+    "frame.add": "+frame",
+    "frame.dup": "dup",
+    "frame.remove": "-frame"
+  }
+}

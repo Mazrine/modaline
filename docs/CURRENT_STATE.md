@@ -136,6 +136,10 @@ L-shaped corners for the 1 px pencil/eraser.
   transparency checkerboard, cursor + selection + floating-paste previews.
   **Wide pixels** render at the sprite's `pixel_aspect` (checkbox "wide px");
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
+- **localization**: JSON catalogs in `lang/` (`en`, `pt-BR`) with English
+  fallback; `:lang` switches at runtime, `:lang check` lists missing keys and
+  `:lang save` exports. Core labels (theme, brush, text, symmetry, timeline,
+  untitled) are translated; status/help text remains English. Saved in config.
 - **keymap customization**: 28 actions with default chords; `:bind` rebinds,
   steals/reports conflicts, unbinds or maps `wheel-up`/`wheel-down`, lists and
   resets. Bindings are global across tabs and persisted in `config.json`.

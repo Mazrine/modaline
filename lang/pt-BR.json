@@ -1,0 +1,16 @@
+{
+  "lang": "pt-BR",
+  "name": "Português (Brasil)",
+  "strings": {
+    "untitled": "sem título",
+    "brush": "pincel",
+    "text": "texto",
+    "symmetry": "simetria",
+    "theme.light": "claro",
+    "play": "reproduzir",
+    "pause": "pausar",
+    "frame.add": "+quadro",
+    "frame.dup": "duplicar",
+    "frame.remove": "-quadro"
+  }
+}

@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **238 tests green** (208 lib + 25 bin + 5 CLI)
+- `cargo test` → **242 tests green** (212 lib + 25 bin + 5 CLI)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-55 keymap customization** (see batch 89).
+- Last completed batch: **P5-56 localization** (see batch 90).
 
 ## How to resume
 
@@ -456,6 +456,10 @@ Read, in order:
   `:bind` rebind/steal/unbind/list/reset, wheel-up/down actions, default
   suppression, global across tabs and persisted. 5 tests (238 total); Xvfb
   verified rebinding, blocking, help and wheel zoom.
+90. **P5-56 — localization** — JSON catalogs (`en`, `pt-BR`), English fallback,
+  `:lang` switch/list/check/save, global across tabs and persisted; localized
+  core labels. 4 tests (242 total); Xvfb smoke verified pt-BR labels and export.
+  Status/help strings remain English (documented).
 
 ## Next step (exact)
 
@@ -464,8 +468,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-56** — localization infrastructure (first open task), then continue down
-  the P5 roadmap.
+- **P5-57** — preferences dialog (first open task), then continue down the P5
+  roadmap.
 
 ## Known limitations (do not forget)
 

@@ -41,6 +41,11 @@ impl Doc {
         view.ui_font_size = config.ui_font_size;
         view.layout = config.layout.clone();
         view.keymap = config.keymap.clone();
+        view.language = config.language.clone();
+        match crate::i18n::resolve(&config.language) {
+            Ok(catalog) => view.i18n = crate::i18n::Translator::new(catalog),
+            Err(e) => editor.msg = format!("language: {e}"),
+        }
         view.browser_favourites = config.favourites.iter().map(PathBuf::from).collect();
         if let Some(path) = path
             && let Err(e) = editor.open_path(&path)
@@ -65,7 +70,7 @@ impl Doc {
             .as_ref()
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "untitled".into())
+            .unwrap_or_else(|| self.view.tr("untitled"))
     }
 }
 
@@ -135,17 +140,26 @@ impl VixelApp {
 
     fn new_doc(&mut self) {
         let keymap = self.docs[self.active].view.keymap.clone();
+        let language = self.docs[self.active].view.language.clone();
+        let i18n = self.docs[self.active].view.i18n.clone();
         let mut doc = Doc::new(&self.config, None);
         doc.view.keymap = keymap;
+        doc.view.language = language;
+        doc.view.i18n = i18n;
         self.docs.push(doc);
         self.active = self.docs.len() - 1;
     }
 
-    /// Switch tabs, carrying the (global) action keymap with the selection.
+    /// Switch tabs, carrying the global keymap and language with the selection.
     fn activate(&mut self, index: usize) {
         let keymap = self.docs[self.active].view.keymap.clone();
-        self.docs[index].view.keymap = keymap;
-        self.docs[index].view.layout_pending = true;
+        let language = self.docs[self.active].view.language.clone();
+        let i18n = self.docs[self.active].view.i18n.clone();
+        let target = &mut self.docs[index].view;
+        target.keymap = keymap;
+        target.language = language;
+        target.i18n = i18n;
+        target.layout_pending = true;
         self.active = index;
     }
 
@@ -199,6 +213,7 @@ impl VixelApp {
         self.config.ui_font_size = doc.view.ui_font_size;
         self.config.layout = doc.view.layout.clone();
         self.config.keymap = doc.view.keymap.clone();
+        self.config.language = doc.view.language.clone();
         self.config.renderer = doc.editor.renderer.clone();
         self.config.recent = doc
             .editor

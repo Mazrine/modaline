@@ -641,8 +641,15 @@ met; blocked tasks are marked with the reason.
   consume scroll before canvas zoom. 5 tests (238 total). Xvfb smoke: `u`
   blocked after undo→ctrl-z, ctrl-z undid, `h`/`?` opened help, `wheel-down`
   zoomed.
-- [ ] **P5-56 — Localization infrastructure** (M) — deps: none.
-  String extraction, language files, runtime switch.
+- [x] **P5-56 — Localization infrastructure** (M) — deps: none.
+  Landed 2026-10-28. `src/i18n.rs` + `lang/en.json`/`lang/pt-BR.json` define a
+  JSON catalog with English fallback and missing-key checks. `:lang
+  <code|file.json>` switches at runtime, `:lang list|check|save <file>` support
+  translation; catalogs are global across tabs and persisted in `config.json`.
+  Core labels are localized (theme, brush, text, symmetry, untitled, play/pause,
+  frame buttons); status/help strings remain English. 4 tests (242 total). Xvfb
+  smoke: `pt-BR` rendered `sem título`/`pincel`/`texto`/`simetria` and localized
+  frame buttons, `check` reported complete, save/export re-read.
 - [ ] **P5-57 — Preferences dialog** (M) — deps: none.
   One dialog for editor/grid/export/theme/keys settings.
 - [ ] **P5-58 — Render cache / dirty rects** (L) — deps: none.
