@@ -488,6 +488,14 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
             ui.painter()
                 .rect_stroke(rect, 1.0, stroke, StrokeKind::Inside);
             if resp.clicked() {
+                let mods = ui.input(|inp| inp.modifiers);
+                if mods.command || mods.ctrl {
+                    editor.toggle_cel_selection(editor.active_layer, i);
+                } else if mods.shift {
+                    editor.select_frame_range(editor.active_layer, editor.active_frame, i);
+                } else {
+                    editor.clear_cel_selection();
+                }
                 selected = i;
             }
             if resp.drag_started() {
@@ -1085,6 +1093,9 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                     continue;
                 }
                 let before = editor.layer_props(i);
+                let multi_marker =
+                    editor.cel_selected(i, editor.active_frame) && i != editor.active_layer;
+                let mut clicked_mods = None;
                 // Each row is a drag source carrying its own index, and every
                 // row is a drop target: drag a layer onto another to move it
                 // (with its children) in front of that one.
@@ -1098,7 +1109,13 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                         } else {
                             layer.name.clone()
                         };
+                        let label = if multi_marker {
+                            format!("{label} •")
+                        } else {
+                            label
+                        };
                         if ui.selectable_label(i == selected, label).clicked() {
+                            clicked_mods = Some(ui.input(|inp| inp.modifiers));
                             selected = i;
                         }
                         if ui
@@ -1177,6 +1194,15 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                         }
                     });
                 });
+                if let Some(mods) = clicked_mods {
+                    if mods.command || mods.ctrl {
+                        editor.toggle_cel_selection(i, editor.active_frame);
+                    } else if mods.shift {
+                        editor.select_layer_range(editor.active_layer, i, editor.active_frame);
+                    } else {
+                        editor.clear_cel_selection();
+                    }
+                }
                 let resp = source.response;
                 if let Some(payload) = resp.dnd_hover_payload::<usize>() {
                     ui.painter().rect_stroke(
@@ -2270,6 +2296,8 @@ const HELP: &[&str] = &[
     "  :tile [on|off]|x|y <1-8>|repeats <x> <y>|opacity <0-255>|preview on|off",
     "  :tileid <n>   :tileflip x|y|diag|none   :tilemode manual|auto|stack|pixel",
     "  :tilepick   :tileerase   :exporttileset [out.png]   (--export-tileset headless)",
+    "  :celselect <layer> <frame>   :celclear   :exportcels <dir>",
+    "  Ctrl/Cmd-click toggles a cel; Shift-click selects a timeline range",
     "  t                  toggle filled shapes (rect / ellipse)",
     "  , / .              prev / next color",
     "  < / >              prev / next layer",

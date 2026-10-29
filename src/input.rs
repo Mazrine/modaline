@@ -714,6 +714,33 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 _ => editor.msg = "usage: :symcenter cursor|reset|<x> <y>".into(),
             }
         }
+        "celselect" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            let layer = it.next().and_then(|v| v.parse::<usize>().ok());
+            let frame = it.next().and_then(|v| v.parse::<usize>().ok());
+            match (layer, frame) {
+                (Some(layer), Some(frame))
+                    if layer < editor.sprite.layers.len() && frame < editor.sprite.frames.len() =>
+                {
+                    editor.toggle_cel_selection(layer, frame);
+                }
+                _ => editor.msg = "usage: :celselect <layer> <frame>".into(),
+            }
+        }
+        "celclear" => {
+            editor.clear_cel_selection();
+            editor.msg = "cel selection cleared".into();
+        }
+        "exportcels" => {
+            let Some(dir) = arg.filter(|p| !p.is_empty()) else {
+                editor.msg = "usage: :exportcels <dir>".into();
+                return;
+            };
+            match editor.export_cels(std::path::Path::new(dir)) {
+                Ok(n) => editor.msg = format!("cels exported: {n} -> {dir}"),
+                Err(e) => editor.msg = format!("cel export failed: {e:#}"),
+            }
+        }
         "exporttileset" | "tilesetexport" => {
             let path = arg
                 .filter(|p| !p.is_empty())

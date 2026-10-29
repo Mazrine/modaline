@@ -27,7 +27,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Loop / ping-pong playback | Covered | — |
 | Onion skin: count, opacity, tints | Covered | — |
 | Timeline thumbnails | Covered | — |
-| Multi-cel selection (layer×frame) | Missing | P5-34 |
+| Multi-cel selection (layer×frame) | Covered | P5-34 |
 | Cel copy/paste across frames/layers | Missing | P5-35 |
 | Empty cel vs empty frame | Missing | P5-35 |
 | Linked cels (authoring + write) | Covered | P5-12 |
@@ -105,7 +105,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Free rotate/scale/skew (nearest) | Covered | — |
 | RotSprite rotation | Covered (supersampled mode sampling) | P5-24 |
 | Interactive transform handles + pivot | Covered | P5-24 |
-| Transform multiple layers/frames/cels | Missing | P5-34 |
+| Transform multiple layers/frames/cels | Covered | P5-34 |
 | Canvas transforms | Covered | — |
 
 ## Tilemap

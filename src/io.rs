@@ -33,6 +33,34 @@ pub fn export_tileset(sprite: &Sprite, id: Option<u32>, path: &Path) -> Result<(
     Ok(())
 }
 
+/// Export one cel's pixels (following links) as a PNG.
+pub fn export_cel(sprite: &Sprite, layer: usize, frame: usize, path: &Path) -> Result<()> {
+    let mut cel = sprite
+        .cels
+        .get(layer)
+        .and_then(|f| f.get(frame))
+        .context("cel index")?;
+    let mut hops = 0;
+    while let Some(target) = cel.link {
+        if target >= sprite.frames.len() || hops > sprite.frames.len() {
+            break;
+        }
+        cel = &sprite.cels[layer][target];
+        hops += 1;
+    }
+    let (w, h) = (cel.w.max(1), cel.h.max(1));
+    let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+    for i in 0..(w * h) as usize {
+        let c = cel.pixels.get(i).copied().unwrap_or(Rgba::TRANSPARENT);
+        rgba.extend_from_slice(&[c.0, c.1, c.2, c.3]);
+    }
+    image::RgbaImage::from_raw(w, h, rgba)
+        .context("cel buffer")?
+        .save(path)
+        .with_context(|| format!("save {}", path.display()))?;
+    Ok(())
+}
+
 /// Save the whole sprite (frames + layers + cels) as JSON.
 pub fn save_project(sprite: &Sprite, path: &Path) -> Result<()> {
     // Compact: a 256² bundle is three 65k-pixel layers, and pretty-printing

@@ -460,8 +460,15 @@ met; blocked tasks are marked with the reason.
 
 ### Epic 7 — Timeline and animation
 
-- [ ] **P5-34 — Multi-cel selection** (L) — deps: none.
-  Layer×frame selection, paint/transform/export fan-out, timeline modifiers.
+- [x] **P5-34 — Multi-cel selection** (L) — deps: none.
+  Landed 2026-10-28. `Editor.cel_selection` stores explicit layer×frame pairs;
+  the active cel always participates. Ctrl/Cmd-click toggles a frame or layer,
+  Shift-click selects ranges; timeline thumbs/layers mark extra cels. Paint and
+  exact writes fan out through `cel_targets`, transforms loop each selected cel
+  and collapse to one snapshot, and `:exportcels <dir>` writes
+  `l<layer>_f<frame>.png` per selected cel. Commands: `:celselect`,
+  `:celclear`, `:exportcels`. 2 new tests (200 total): paint/transform/export
+  fan-out and range selection. Timeline modifiers are UI-only (manual check).
 - [ ] **P5-35 — Cel operations** (M) — deps: P5-11, P5-12, P5-34.
   Copy/paste cels, empty cel vs frame, z/link controls in the timeline.
 - [ ] **P5-36 — Preview window** (M) — deps: none.

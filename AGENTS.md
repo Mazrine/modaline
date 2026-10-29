@@ -144,6 +144,8 @@ thin shells:
   Tile edits go through `paint_tile_at` (snapshot + rerasterize); pixel mode is
   a cache edit and does not change refs. `.ase` writing emits `0x2023`, tilemap
   layer kind 2, and type-3 cels; keep the layer tileset ID before the UUID.
+- Multi-cel writes go through `cel_targets` (active always included; empty set =
+  active only). Transform loops suspend fan-out and collapse to one snapshot.
 - Text editing snapshots once in `text_edit_before`; `preview_text_object`
   re-rasterises without undo, and only `commit_text_edit` pushes the step.
 - Selection masks are sprite-sized grids (`selection_grid`/`grid_to_selection`);

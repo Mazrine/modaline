@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use crate::brush::{self, Brush, BrushKind};
@@ -332,6 +333,10 @@ pub struct Editor {
     pub bg_idx: usize,
     pub active_layer: usize,
     pub active_frame: usize,
+    /// Explicit multi-cel selection; the active cel always participates.
+    pub cel_selection: BTreeSet<(usize, usize)>,
+    /// Internal guard so per-cel transform loops write only their own cel.
+    fanout_suspended: bool,
     /// Index into `sprite.tags`; playback is restricted to it when set.
     pub active_tag: Option<usize>,
     pub symmetry: Symmetry,
@@ -470,6 +475,8 @@ impl Editor {
             bg_idx: 0,
             active_layer: 0,
             active_frame: 0,
+            cel_selection: BTreeSet::new(),
+            fanout_suspended: false,
             active_tag: None,
             symmetry: Symmetry::None,
             sym_axes: 6,
@@ -661,13 +668,69 @@ impl Editor {
     }
 
     /// Paint through the active ink, respecting the selection.
+    fn cel_targets(&self) -> Vec<(usize, usize)> {
+        if self.fanout_suspended {
+            return vec![(self.active_layer, self.active_frame)];
+        }
+        let mut targets: Vec<(usize, usize)> = self.cel_selection.iter().copied().collect();
+        if !targets.contains(&(self.active_layer, self.active_frame)) {
+            targets.push((self.active_layer, self.active_frame));
+        }
+        targets.sort_unstable();
+        targets
+    }
+
+    /// Explicitly selected cels plus the active one.
+    pub fn selected_cels(&self) -> Vec<(usize, usize)> {
+        self.cel_targets()
+    }
+
+    /// Export every selected cel to `dir` as `l<layer>_f<frame>.png`.
+    pub fn export_cels(&self, dir: &std::path::Path) -> anyhow::Result<usize> {
+        std::fs::create_dir_all(dir)?;
+        let mut count = 0;
+        for (layer, frame) in self.selected_cels() {
+            let path = dir.join(format!("l{layer}_f{frame}.png"));
+            crate::io::export_cel(&self.sprite, layer, frame, &path)?;
+            count += 1;
+        }
+        Ok(count)
+    }
+
+    pub fn cel_selected(&self, layer: usize, frame: usize) -> bool {
+        self.cel_selection.contains(&(layer, frame))
+            || (layer == self.active_layer && frame == self.active_frame)
+    }
+
+    pub fn toggle_cel_selection(&mut self, layer: usize, frame: usize) {
+        if !self.cel_selection.remove(&(layer, frame)) {
+            self.cel_selection.insert((layer, frame));
+        }
+        self.msg = format!("cel selection: {}", self.cel_selection.len());
+    }
+
+    pub fn clear_cel_selection(&mut self) {
+        self.cel_selection.clear();
+    }
+
+    /// Select the inclusive frame range on one layer.
+    pub fn select_frame_range(&mut self, layer: usize, from: usize, to: usize) {
+        let (a, b) = (from.min(to), from.max(to));
+        for frame in a..=b {
+            self.cel_selection.insert((layer, frame));
+        }
+    }
+
+    /// Select the inclusive layer range on one frame.
+    pub fn select_layer_range(&mut self, from: usize, to: usize, frame: usize) {
+        let (a, b) = (from.min(to), from.max(to));
+        for layer in a..=b {
+            self.cel_selection.insert((layer, frame));
+        }
+    }
+
     pub(crate) fn paint_pixel_unclipped(&mut self, x: u32, y: u32, color: Rgba) {
         if x >= self.sprite.width || y >= self.sprite.height {
-            return;
-        }
-        let (l, f) = (self.active_layer, self.active_frame);
-        if !self.sprite.layer_editable(l) {
-            self.msg = "layer is locked or hidden".into();
             return;
         }
         let color = if self.sprite.is_indexed() {
@@ -679,17 +742,28 @@ impl Editor {
             self.msg = "palette locked: that colour is not in it".into();
             return;
         }
-        let old = self.sprite.get(l, f, x, y);
-        if self.alpha_lock && old.3 == 0 {
-            return;
+        let mut wrote = false;
+        for (l, f) in self.cel_targets() {
+            if !self.sprite.layer_editable(l) {
+                continue;
+            }
+            let old = self.sprite.get(l, f, x, y);
+            if self.alpha_lock && old.3 == 0 {
+                continue;
+            }
+            let new = apply_ink(self.ink(), old, color);
+            if old == new {
+                continue;
+            }
+            self.sprite.set(l, f, x, y, new);
+            self.record(l, f, x, y, old, new);
+            wrote = true;
         }
-        let new = apply_ink(self.ink(), old, color);
-        if old == new {
-            return;
+        if wrote {
+            self.dirty = true;
+        } else if !self.sprite.layer_editable(self.active_layer) {
+            self.msg = "layer is locked or hidden".into();
         }
-        self.sprite.set(l, f, x, y, new);
-        self.dirty = true;
-        self.record(l, f, x, y, old, new);
     }
 
     /// Exact write for paste, transforms and contour: no ink, but the same
@@ -698,11 +772,6 @@ impl Editor {
         if x >= self.sprite.width || y >= self.sprite.height {
             return;
         }
-        let (l, f) = (self.active_layer, self.active_frame);
-        if !self.sprite.layer_editable(l) {
-            self.msg = "layer is locked or hidden".into();
-            return;
-        }
         let color = if self.sprite.is_indexed() {
             self.sprite.indexed_color(color)
         } else {
@@ -712,13 +781,24 @@ impl Editor {
             self.msg = "palette locked: that colour is not in it".into();
             return;
         }
-        let old = self.sprite.get(l, f, x, y);
-        if old == color {
-            return;
+        let mut wrote = false;
+        for (l, f) in self.cel_targets() {
+            if !self.sprite.layer_editable(l) {
+                continue;
+            }
+            let old = self.sprite.get(l, f, x, y);
+            if old == color {
+                continue;
+            }
+            self.sprite.set(l, f, x, y, color);
+            self.record(l, f, x, y, old, color);
+            wrote = true;
         }
-        self.sprite.set(l, f, x, y, color);
-        self.dirty = true;
-        self.record(l, f, x, y, old, color);
+        if wrote {
+            self.dirty = true;
+        } else if !self.sprite.layer_editable(self.active_layer) {
+            self.msg = "layer is locked or hidden".into();
+        }
     }
 
     /// What the active tool does to a pixel when dragged/clicked (primary).
@@ -2836,6 +2916,32 @@ impl Editor {
     /// three are one affine map, so they compose in the order rotate, scale,
     /// skew; the inverse map is what samples the source.
     pub fn free_transform(&mut self, angle_deg: f32, sx: f32, sy: f32, skew_deg: f32) {
+        let targets = self.cel_targets();
+        if targets.len() <= 1 {
+            self.free_transform_one(angle_deg, sx, sy, skew_deg);
+            return;
+        }
+        let before = self.sprite.clone();
+        let (saved_layer, saved_frame) = (self.active_layer, self.active_frame);
+        let undo_len = self.undo.len();
+        self.fanout_suspended = true;
+        for (layer, frame) in targets.iter().copied() {
+            self.active_layer = layer;
+            self.active_frame = frame;
+            self.free_transform_one(angle_deg, sx, sy, skew_deg);
+        }
+        self.fanout_suspended = false;
+        self.active_layer = saved_layer;
+        self.active_frame = saved_frame;
+        self.undo.truncate(undo_len);
+        self.snapshot(before);
+        self.msg = format!(
+            "transform: {} cels (rotate {angle_deg:.0} deg, scale {sx:.2}x{sy:.2}, skew {skew_deg:.0} deg)",
+            targets.len()
+        );
+    }
+
+    fn free_transform_one(&mut self, angle_deg: f32, sx: f32, sy: f32, skew_deg: f32) {
         if !self.sprite.layer_movable(self.active_layer) {
             self.msg = "layer movement is locked".into();
             return;
@@ -5561,6 +5667,60 @@ mod tests {
             "outside ring"
         );
         assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn multi_cel_paint_transform_and_export_fan_out() {
+        let mut e = Editor::new(4, 4);
+        e.sprite.add_frame_after(0);
+        e.sprite.set(0, 0, 0, 0, Rgba::rgb(200, 0, 0));
+        e.sprite.set(0, 1, 1, 0, Rgba::rgb(0, 200, 0));
+        e.cel_selection.insert((0, 0));
+        e.cel_selection.insert((0, 1));
+        e.active_frame = 0;
+
+        let blue = Rgba::rgb(0, 0, 200);
+        e.begin_stroke();
+        e.paint_pixel(2, 2, blue);
+        e.end_stroke();
+        assert_eq!(e.sprite.get(0, 0, 2, 2), blue);
+        assert_eq!(e.sprite.get(0, 1, 2, 2), blue, "paint fans out");
+        e.undo();
+        assert_eq!(e.sprite.get(0, 0, 2, 2), Rgba::TRANSPARENT);
+        assert_eq!(e.sprite.get(0, 1, 2, 2), Rgba::TRANSPARENT);
+
+        e.free_transform(180.0, 1.0, 1.0, 0.0);
+        assert_eq!(e.sprite.get(0, 0, 3, 3), Rgba::rgb(200, 0, 0));
+        assert_eq!(e.sprite.get(0, 1, 2, 3), Rgba::rgb(0, 200, 0));
+        e.undo();
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(200, 0, 0));
+        assert_eq!(e.sprite.get(0, 1, 1, 0), Rgba::rgb(0, 200, 0));
+
+        let dir = std::env::temp_dir().join(format!("vixel-cels-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(e.export_cels(&dir).unwrap(), 2);
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cel_selection_ranges_include_the_active_cel() {
+        let mut e = Editor::new(2, 2);
+        e.sprite.add_frame_after(0);
+        e.sprite.add_frame_after(1);
+        e.active_frame = 1;
+        e.select_frame_range(0, 0, 2);
+        assert_eq!(e.selected_cels(), vec![(0, 0), (0, 1), (0, 2)]);
+        e.clear_cel_selection();
+        assert_eq!(
+            e.selected_cels(),
+            vec![(0, 1)],
+            "active always participates"
+        );
+        e.toggle_cel_selection(0, 0);
+        assert!(e.cel_selected(0, 0));
+        e.toggle_cel_selection(0, 0);
+        assert!(!e.cel_selected(0, 0));
     }
 
     #[test]

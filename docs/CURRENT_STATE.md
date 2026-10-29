@@ -53,6 +53,10 @@ L-shaped corners for the 1 px pencil/eraser.
   global via `:contig`, with **tolerance** and optional **all-layers**
   matching), **lasso** (`L`, freehand mouse drag), and **polygon** (`P`, click
   vertices, `Enter` closes).
+- **Multi-cel selection**: Ctrl/Cmd-click toggles a timeline frame or layer,
+  Shift-click selects a range (`:celselect`, `:celclear`). Paint and exact
+  writes fan out to every selected cel; transforms run per cel as one undo;
+  `:exportcels <dir>` writes each selected cel as PNG.
 - **Selection ops** (`:selop` or the toolbar): replace / add / subtract / intersect
   with the existing selection.
 - **Shape ops** (`:sel`, or the toolbar chips): `expand` / `contract` /
