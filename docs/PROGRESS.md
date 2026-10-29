@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **154 tests green** (145 lib + 9 bin)
+- `cargo test` → **157 tests green** (148 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-14 user data 0x2020** (see batch 51).
+- Last completed batch: **P5-15 slices 0x2022** (see batch 52).
 
 ## How to resume
 
@@ -301,6 +301,12 @@ Read, in order:
     them in place; `.vpx` stores the data. 3 new tests (154 total): attachment
     and round trip, property payload + sprite data, `prop.ase`
     open→save→open. Tileset/slice user data stays raw until P5-15/31.
+52. **P5-15 — slices 0x2022** — `Slice`/`SliceKey` model (name, bounds,
+    per-key 9-patch centre, pivot, frame ranges, user-data colour); 0x2022
+    read/write with user-data attachment. `:slices` lists, `:slices <dir>
+    named` exports per-slice PNGs + `<stem>.slices.json`, and the side panel
+    lists them. 3 new tests (157 total): synthetic chunk bytes/round trip,
+    fixture slice round trip, named PNG+JSON export.
 
 ## Next step (exact)
 
@@ -309,7 +315,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-15** — slices 0x2022 (first open task), then continue down the P5
+- **P5-16** — text object model (first open task), then continue down the P5
   roadmap in dependency order.
 
 ## Known limitations (do not forget)

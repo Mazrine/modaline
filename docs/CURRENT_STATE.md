@@ -121,8 +121,10 @@ L-shaped corners for the 1 px pencil/eraser.
   (non-transparent content) resize every cel and layer mask, one undo step.
 - **text**: an 8x8 bitmap font at scale 1-8, stamped at the cursor as one undo
   step (`:text <string>`).
-- **slice export** (`:slices <dir> [cols rows]`): one PNG per grid cell plus a
-  `.slices.json` naming every rect.
+- **slices**: named 9-patch/pivot slice objects with per-frame keys, read and
+  written from `.ase` 0x2022 (colour from user data) and listed in the side
+  panel. `:slices` lists them; `:slices <dir> named` exports one PNG per slice
+  plus `<stem>.slices.json`; `:slices <dir> [cols rows]` still exports a grid.
 - **tile mode** (`:tile on|off`, side-panel checkbox): the sprite is previewed
   tiled 3x3 with a highlighted center, and the cursor wraps across the edges
   (moving right from the last column lands on column 0), so strokes stay
@@ -176,10 +178,11 @@ L-shaped corners for the 1 px pencil/eraser.
     order and links round-trip instead of being rasterized into the canvas.
     Layer flag bits (editable, background, reference, prefer-linked, lock
     movement, collapsed) and layer UUIDs (header bit 4) round-trip.
-  - Reads and writes **user data** (0x2020) on layers, cels, tags and the
-    sprite: text, colour and the property payload (kept verbatim). Tileset and
-    slice user data stays in the raw-chunk pass-through until those models
-    land.
+  - Reads and writes **user data** (0x2020) on layers, cels, tags, slices and
+    the sprite: text, colour and the property payload (kept verbatim). Tileset
+    user data stays in the raw-chunk pass-through until those models land.
+  - Reads and writes **slices** (0x2022): names, frame keys, bounds, 9-patch
+    centre and pivot.
   - Reads RGBA (32), grayscale (16) and indexed (8) pixels, new and legacy
     palette chunks, layer names/visibility/blend/opacity, layer groups (type +
     child level), the editable flag, **per-cel opacity** and frame durations.
@@ -259,7 +262,7 @@ middle-drag = pan.
 `aspect <x> <y>` · `sgrid [x y] <w> <h>` · `celz <n>` ·
 `link <frame>` · `unlink` · `preferlink on|off` · `movelock on|off` ·
 `collapse on|off` · `layeruuid [new|clear]` ·
-`slices <dir> [cols rows]` · `export <file> [scale]` ·
+`slices [<dir> [cols rows|named]]` · `export <file> [scale]` ·
 `profile [srgb|linear|icc <file>|gamma <g>|clear]` ·
 `renderer glow|wgpu` ·
 `ops <file.json>` · `recover [file]` · `help`.

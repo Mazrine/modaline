@@ -107,6 +107,8 @@ thin shells:
 - `UserData.properties` is the raw 0x2020 property payload after flags/text/
   colour; keep it verbatim. Tag user data is positional: write one chunk per
   tag (empty placeholder included) so later tags stay attached correctly.
+- Slice chunks carry their own user data immediately after 0x2022; slice keys
+  are valid from `frame` onward, so exports use the last key <= the frame.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not

@@ -710,6 +710,20 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             editor.set_palette_lock(!editor.palette_lock);
         }
     });
+    if !editor.sprite.slices.is_empty() {
+        ui.separator();
+        ui.label(egui::RichText::new("Slices").strong());
+        for slice in &editor.sprite.slices {
+            let label = match slice.keys.first() {
+                Some(k) => format!(
+                    "{}  f{}  {}x{} @ {},{}",
+                    slice.name, k.frame, k.w, k.h, k.x, k.y
+                ),
+                None => slice.name.clone(),
+            };
+            ui.label(label);
+        }
+    }
     ui.separator();
 
     ui.horizontal(|ui| {
@@ -1739,7 +1753,7 @@ const HELP: &[&str] = &[
     "  :pal preset <name>|insert <i> [#hex]|delete <i>|sort [rgb|luma|hue]|name <i> <name>",
     "  :profile [srgb|linear|icc <file>|gamma <g>|clear]   (working space / .ase profile)",
     "  :renderer glow|wgpu    (wgpu also needs a build with --features wgpu)",
-    "  :slices <dir> [cols rows]   (one png per grid cell + a slices.json)",
+    "  :slices [<dir> [cols rows|named]]   (list, grid export, or named slices)",
     "  :grad linear|radial   :contour",
     "  :export out.png|.ase|stem [scale 1-16]   :import in.png   :open proj.vpx|.ase|.png",
     "  :importsheet sheet.png [cols rows]   (frames from a sheet + its .json)",

@@ -998,25 +998,55 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         "slices" | "slice" => {
             let mut it = arg.unwrap_or("").split_whitespace();
             let dir = it.next().unwrap_or("").to_string();
-            let cols: u32 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0);
-            let rows: u32 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0);
             if dir.is_empty() {
-                editor.msg = "usage: :slices <dir> [cols rows]".into();
+                if editor.sprite.slices.is_empty() {
+                    editor.msg = "slices: none".into();
+                } else {
+                    let names: Vec<String> = editor
+                        .sprite
+                        .slices
+                        .iter()
+                        .map(|s| format!("{} ({} keys)", s.name, s.keys.len()))
+                        .collect();
+                    editor.msg = format!("slices: {}", names.join(", "));
+                }
             } else {
+                let mode = it.next();
+                let named = matches!(mode, Some("named") | Some("slices"));
+                let cols = if named {
+                    0
+                } else {
+                    mode.and_then(|v| v.parse().ok()).unwrap_or(0)
+                };
+                let rows = if named {
+                    0
+                } else {
+                    it.next().and_then(|v| v.parse().ok()).unwrap_or(0)
+                };
                 let stem = editor
                     .path
                     .as_ref()
                     .and_then(|p| p.file_stem())
                     .map(|s| s.to_string_lossy().into_owned())
                     .unwrap_or_else(|| "sprite".into());
-                match io::export_slices(
-                    &editor.sprite,
-                    editor.active_frame,
-                    std::path::Path::new(&dir),
-                    &stem,
-                    cols,
-                    rows,
-                ) {
+                let exported = if named {
+                    io::export_named_slices(
+                        &editor.sprite,
+                        editor.active_frame,
+                        std::path::Path::new(&dir),
+                        &stem,
+                    )
+                } else {
+                    io::export_slices(
+                        &editor.sprite,
+                        editor.active_frame,
+                        std::path::Path::new(&dir),
+                        &stem,
+                        cols,
+                        rows,
+                    )
+                };
+                match exported {
                     Ok(paths) => editor.msg = format!("slices: {} files in {dir}", paths.len()),
                     Err(e) => editor.msg = format!("slices failed: {e}"),
                 }

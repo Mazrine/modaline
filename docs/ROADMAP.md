@@ -320,9 +320,14 @@ met; blocked tasks are marked with the reason.
   `.vpx` stores the data. 3 new tests (154 total): layer/cel/tag attachment and
   round trip, property payload + sprite data, and `prop.ase` open→save→open.
   Tileset/slice user data stays in the raw-chunk pass-through until P5-15/31.
-- [ ] **P5-15 — Slices 0x2022** (L) — deps: P5-07, P5-14.
-  Slice model (name, bounds, 9-patch, pivot, color), read/write, list UI,
-  export by slice, JSON metadata.
+- [x] **P5-15 — Slices 0x2022** (L) — deps: P5-07, P5-14.
+  Landed 2026-10-28. `Slice`/`SliceKey` model (name, bounds, per-key 9-patch
+  centre, pivot, frame ranges, user-data colour). 0x2022 is read/written and
+  user data attaches to its slice. `:slices` lists slices, `:slices <dir>
+  named` exports one PNG per slice plus `<stem>.slices.json`, and the side
+  panel lists them. 3 new tests (157 total): synthetic chunk bytes + round
+  trip, `test_grayscale.ase` slice round trip, and named PNG+JSON export. UI
+  list not screenshotted (manual check: open a file with slices).
 - [ ] **P5-16 — Text object model** (L) — deps: P5-14.
   Text objects stored in user data and rasterized; `.ase` text-property round
   trip.

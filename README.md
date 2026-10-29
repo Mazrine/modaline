@@ -135,7 +135,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:fg #rrggbb` / `:bg #rrggbb` | set fg / bg exactly |
 | `:pal load\|save <file>` / `:pal move <from> <to>` / `:pal from-sprite` / `:pal lock on\|off` | palette I/O, reorder, derive from the frame, lock |
 | `:pal preset <name>` / `:pal insert <i> [#hex]` / `:pal delete <i>` / `:pal sort [rgb\|luma\|hue]` / `:pal name <i> <name>` | presets, index edits, sort, names |
-| `:slices <dir> [cols rows]` | one PNG per grid cell plus a `.slices.json` sidecar |
+| `:slices [<dir> [cols rows\|named]]` | list slices, export a grid, or one PNG per named slice + `.slices.json` |
 | `:ops <file.json>` | replay a JSON op list as one undo step |
 | `:export out.png\|out.ase\|<stem> [scale]` | PNG frame · `.ase` sprite · bare stem = sheet + GIF + meta JSON; `[scale 1-16]` upscales rasters |
 | `:import[!] in.png` | import a PNG as a new sprite; `!` drops unsaved work |
@@ -190,8 +190,9 @@ crop/resize canonicalize to the canvas.
   lossless depth (gray, indexed, or 32-bit RGBA). Indexed sprites carry a
   document palette and transparent index (header byte 28), and paint snaps to
   palette entries. Embedded sRGB/ICC/gamma profiles are read and written;
-  user data (text/colour/properties) round-trips on layers, cels, tags and the
-  sprite; unknown chunks (slices, tileset data) are preserved on save.
+  user data (text/colour/properties) round-trips on layers, cels, tags, slices
+  and the sprite; slices (name, bounds, 9-patch, pivot) round-trip and export
+  by name; unknown chunks (tileset data) are preserved on save.
 - **`.vpx`** — project file: JSON with size, layers, frames, and every cel.
 - **PNG** — single-frame import/export with full alpha.
 

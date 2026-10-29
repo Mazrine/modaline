@@ -367,6 +367,37 @@ fn is_zero_u32(v: &u32) -> bool {
     *v == 0
 }
 
+/// One slice key: valid from `frame` to the end of the animation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SliceKey {
+    pub frame: u32,
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub center: Option<(i32, i32, u32, u32)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pivot: Option<(i32, i32)>,
+}
+
+/// An Aseprite slice (0x2022), including 9-patch/pivot data and its user-data
+/// colour.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Slice {
+    pub name: String,
+    #[serde(default)]
+    pub flags: u32,
+    #[serde(default)]
+    pub nine_patch: bool,
+    #[serde(default)]
+    pub pivot: bool,
+    #[serde(default)]
+    pub keys: Vec<SliceKey>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_data: Option<UserData>,
+}
+
 /// The `.ase` colour-profile chunk (0x2007), kept verbatim.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AseProfile {
@@ -430,6 +461,8 @@ pub struct Sprite {
     /// Sprite-level user data (0x2020 after the palette chunk).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_data: Option<UserData>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub slices: Vec<Slice>,
 }
 
 /// The two working spaces this editor understands. A sprite authored in linear
@@ -571,6 +604,7 @@ impl Sprite {
             ase_profile: None,
             raw_chunks: Vec::new(),
             user_data: None,
+            slices: Vec::new(),
         }
     }
 

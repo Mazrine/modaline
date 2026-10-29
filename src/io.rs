@@ -281,6 +281,96 @@ pub fn export_slices(
     Ok(paths)
 }
 
+fn slice_filename(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Export each named slice's active key on `frame` as a PNG plus metadata.
+pub fn export_named_slices(
+    sprite: &Sprite,
+    frame: usize,
+    dir: &Path,
+    stem: &str,
+) -> Result<Vec<PathBuf>> {
+    std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
+    let cell = frame_image(sprite, frame);
+    let mut paths = Vec::new();
+    let mut named = Vec::new();
+    let mut used = std::collections::HashSet::new();
+    for (i, slice) in sprite.slices.iter().enumerate() {
+        let Some(key) = slice
+            .keys
+            .iter()
+            .rfind(|k| k.frame as usize <= frame)
+            .or_else(|| slice.keys.first())
+        else {
+            continue;
+        };
+        let x0 = key.x.max(0);
+        let y0 = key.y.max(0);
+        let x1 = key.x.saturating_add(key.w as i32).min(sprite.width as i32);
+        let y1 = key.y.saturating_add(key.h as i32).min(sprite.height as i32);
+        if x1 <= x0 || y1 <= y0 {
+            continue;
+        }
+        let mut base = slice_filename(&slice.name);
+        if base.is_empty() {
+            base = format!("slice{i}");
+        }
+        let mut name = base.clone();
+        let mut n = 2u32;
+        while !used.insert(name.clone()) {
+            name = format!("{base}_{n}");
+            n += 1;
+        }
+        let file = format!("{stem}_{name}_f{frame}.png");
+        let path = dir.join(&file);
+        image::imageops::crop_imm(
+            &cell,
+            x0 as u32,
+            y0 as u32,
+            (x1 - x0) as u32,
+            (y1 - y0) as u32,
+        )
+        .to_image()
+        .save(&path)
+        .with_context(|| format!("save {}", path.display()))?;
+        let color = slice
+            .user_data
+            .as_ref()
+            .and_then(|d| d.color)
+            .map(|c| vec![c.0, c.1, c.2, c.3]);
+        named.push(serde_json::json!({
+            "name": slice.name,
+            "file": file,
+            "frame": frame,
+            "x": x0,
+            "y": y0,
+            "w": x1 - x0,
+            "h": y1 - y0,
+            "nine_patch": slice.nine_patch,
+            "pivot": slice.pivot,
+            "center": key.center.map(|(x, y, w, h)| serde_json::json!([x, y, w, h])),
+            "pivot_xy": key.pivot.map(|(x, y)| serde_json::json!([x, y])),
+            "color": color,
+        }));
+        paths.push(path);
+    }
+    let meta = dir.join(format!("{stem}.slices.json"));
+    let text = serde_json::to_string_pretty(&named).context("serialize slices")?;
+    std::fs::write(&meta, text).with_context(|| format!("write {}", meta.display()))?;
+    paths.push(meta);
+    Ok(paths)
+}
+
 /// Export an animation: `<stem>.sheet.png`, `<stem>.gif`, `<stem>.json`.
 pub fn export_animation(
     sprite: &Sprite,
@@ -482,6 +572,45 @@ mod tests {
                 h: 4
             }
         );
+    }
+
+    #[test]
+    fn named_slice_export_writes_pngs_and_metadata() {
+        use crate::sprite::{Slice, SliceKey};
+        let mut s = Sprite::new(4, 4);
+        for y in 0..4 {
+            for x in 0..4 {
+                s.set(0, 0, x, y, Rgba(200, 30, 40, 255));
+            }
+        }
+        s.slices.push(Slice {
+            name: "button".into(),
+            flags: 3,
+            nine_patch: true,
+            pivot: true,
+            keys: vec![SliceKey {
+                frame: 0,
+                x: 1,
+                y: 1,
+                w: 2,
+                h: 2,
+                center: Some((1, 1, 1, 1)),
+                pivot: Some((0, 1)),
+            }],
+            user_data: None,
+        });
+        let dir = std::env::temp_dir().join(format!("vixel-named-{}", std::process::id()));
+        let paths = export_named_slices(&s, 0, &dir, "art").expect("named slices");
+        assert_eq!(paths.len(), 2, "one png + metadata");
+        let png = paths
+            .iter()
+            .find(|p| p.extension().is_some_and(|e| e == "png"))
+            .unwrap();
+        assert_eq!(image::image_dimensions(png).unwrap(), (2, 2));
+        let meta = std::fs::read_to_string(dir.join("art.slices.json")).unwrap();
+        assert!(meta.contains("\"name\": \"button\""));
+        assert!(meta.contains("\"nine_patch\": true"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

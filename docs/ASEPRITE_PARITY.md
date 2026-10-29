@@ -123,11 +123,11 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 
 | Capability | Status | Task |
 |---|---|---|
-| Slice objects (name, bounds, color) | Missing | P5-15 |
-| 9-patch / 9-slice metadata | Missing | P5-15 |
-| Pivot metadata | Missing | P5-15 |
-| Slice read/write in `.ase` | Missing | P5-15 |
-| Export by slice + JSON metadata | Partial (grid only) | P5-15 |
+| Slice objects (name, bounds, color) | Covered | P5-15 |
+| 9-patch / 9-slice metadata | Covered | P5-15 |
+| Pivot metadata | Covered | P5-15 |
+| Slice read/write in `.ase` | Covered | P5-15 |
+| Export by slice + JSON metadata | Covered | P5-15 |
 
 ## Text
 
@@ -150,7 +150,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | `.ase` linked-cel write | Covered | P5-12 |
 | `.ase` layer flags + UUIDs | Covered | P5-13 |
 | `.ase` user data (text/color/properties) | Covered | P5-14 |
-| `.ase` slices | Missing | P5-15 |
+| `.ase` slices | Covered | P5-15 |
 | `.ase` color profile / ICC | Covered | P5-09 |
 | `.ase` external files chunk | Missing | P5-17 |
 | `.vpx` project JSON | Covered | — |

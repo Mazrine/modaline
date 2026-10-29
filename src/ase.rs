@@ -14,8 +14,8 @@ use anyhow::{Context, Result, bail};
 
 use crate::color::Rgba;
 use crate::sprite::{
-    AseProfile, BlendMode, Cel, ChunkAnchor, Frame, Layer, PlayDirection, RawChunk, Sprite, Tag,
-    UserData,
+    AseProfile, BlendMode, Cel, ChunkAnchor, Frame, Layer, PlayDirection, RawChunk, Slice,
+    SliceKey, Sprite, Tag, UserData,
 };
 
 const MAGIC: u16 = 0xA5E0;
@@ -268,6 +268,16 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
             emit_raw(&mut body, &mut count, ChunkAnchor::Cel(li as u16));
         }
     }
+    if frame == 0 {
+        for slice in &s.slices {
+            write_slice_chunk(&mut body, slice);
+            count += 1;
+            if let Some(ud) = &slice.user_data {
+                write_user_data(&mut body, ud, true);
+                count += 1;
+            }
+        }
+    }
     // Anchors with no matching known chunk (an unwritten tileset, a deleted
     // layer, or user data on an empty cel) go to the end of the frame instead
     // of vanishing.
@@ -295,6 +305,36 @@ fn write_frame(out: &mut Vec<u8>, s: &Sprite, frame: usize, depth: &OutDepth) {
     let size = f.len() as u32;
     f[0..4].copy_from_slice(&size.to_le_bytes());
     out.extend_from_slice(&f);
+}
+
+fn write_slice_chunk(out: &mut Vec<u8>, slice: &Slice) {
+    let mut b = Vec::new();
+    let flags = (slice.flags & !3) | u32::from(slice.nine_patch) | (u32::from(slice.pivot) << 1);
+    b.extend_from_slice(&(slice.keys.len() as u32).to_le_bytes());
+    b.extend_from_slice(&flags.to_le_bytes());
+    b.extend_from_slice(&0u32.to_le_bytes());
+    b.extend_from_slice(&(slice.name.len() as u16).to_le_bytes());
+    b.extend_from_slice(slice.name.as_bytes());
+    for key in &slice.keys {
+        b.extend_from_slice(&key.frame.to_le_bytes());
+        b.extend_from_slice(&key.x.to_le_bytes());
+        b.extend_from_slice(&key.y.to_le_bytes());
+        b.extend_from_slice(&key.w.to_le_bytes());
+        b.extend_from_slice(&key.h.to_le_bytes());
+        if flags & 1 != 0 {
+            let (cx, cy, cw, ch) = key.center.unwrap_or((0, 0, 0, 0));
+            b.extend_from_slice(&cx.to_le_bytes());
+            b.extend_from_slice(&cy.to_le_bytes());
+            b.extend_from_slice(&cw.to_le_bytes());
+            b.extend_from_slice(&ch.to_le_bytes());
+        }
+        if flags & 2 != 0 {
+            let (px, py) = key.pivot.unwrap_or((0, 0));
+            b.extend_from_slice(&px.to_le_bytes());
+            b.extend_from_slice(&py.to_le_bytes());
+        }
+    }
+    write_chunk(out, CHUNK_SLICE, &b);
 }
 
 fn write_user_data(out: &mut Vec<u8>, data: &UserData, force: bool) {
@@ -522,7 +562,68 @@ fn blend_word(b: BlendMode) -> u16 {
 
 const CHUNK_PROFILE: u16 = 0x2007;
 const CHUNK_USER_DATA: u16 = 0x2020;
+const CHUNK_SLICE: u16 = 0x2022;
 const CHUNK_TILESET: u16 = 0x2023;
+
+fn parse_slice(body: &[u8]) -> Option<Slice> {
+    if body.len() < 14 {
+        return None;
+    }
+    let count = u32_at(body, 0) as usize;
+    let flags = u32_at(body, 4);
+    let name_len = u16_at(body, 12) as usize;
+    let name = String::from_utf8_lossy(body.get(14..14 + name_len)?).into_owned();
+    let mut p = 14 + name_len;
+    let mut keys = Vec::with_capacity(count);
+    for _ in 0..count {
+        let key = body.get(p..p + 20)?;
+        let frame = u32::from_le_bytes([key[0], key[1], key[2], key[3]]);
+        let x = i32::from_le_bytes([key[4], key[5], key[6], key[7]]);
+        let y = i32::from_le_bytes([key[8], key[9], key[10], key[11]]);
+        let w = u32::from_le_bytes([key[12], key[13], key[14], key[15]]);
+        let h = u32::from_le_bytes([key[16], key[17], key[18], key[19]]);
+        p += 20;
+        let center = if flags & 1 != 0 {
+            let c = body.get(p..p + 16)?;
+            p += 16;
+            Some((
+                i32::from_le_bytes([c[0], c[1], c[2], c[3]]),
+                i32::from_le_bytes([c[4], c[5], c[6], c[7]]),
+                u32::from_le_bytes([c[8], c[9], c[10], c[11]]),
+                u32::from_le_bytes([c[12], c[13], c[14], c[15]]),
+            ))
+        } else {
+            None
+        };
+        let pivot = if flags & 2 != 0 {
+            let c = body.get(p..p + 8)?;
+            p += 8;
+            Some((
+                i32::from_le_bytes([c[0], c[1], c[2], c[3]]),
+                i32::from_le_bytes([c[4], c[5], c[6], c[7]]),
+            ))
+        } else {
+            None
+        };
+        keys.push(SliceKey {
+            frame,
+            x,
+            y,
+            w,
+            h,
+            center,
+            pivot,
+        });
+    }
+    Some(Slice {
+        name,
+        flags,
+        nine_patch: flags & 1 != 0,
+        pivot: flags & 2 != 0,
+        keys,
+        user_data: None,
+    })
+}
 
 fn parse_user_data(body: &[u8]) -> Option<UserData> {
     if body.len() < 4 {
@@ -616,6 +717,7 @@ enum Last {
     Layer(usize),
     Cel(usize),
     Tags(usize, usize),
+    Slice(usize),
     Palette,
     Other,
 }
@@ -627,6 +729,7 @@ struct Import {
     palette_names: Vec<String>,
     ase_profile: Option<AseProfile>,
     sprite_user_data: Option<UserData>,
+    slices: Vec<Slice>,
     transparent_index: u8,
     /// `[layer][frame]`; `None` means an empty cel.
     cels: Vec<Vec<Option<Cel>>>,
@@ -867,6 +970,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         palette_names: vec![String::new(); 256],
         ase_profile: None,
         sprite_user_data: None,
+        slices: Vec::new(),
         transparent_index: data[28],
         cels: Vec::new(),
         layer_tilesets: Vec::new(),
@@ -936,6 +1040,19 @@ pub fn load(path: &Path) -> Result<Sprite> {
                     anchor = ChunkAnchor::Tileset(ti);
                     last = Last::Other;
                 }
+                CHUNK_SLICE => {
+                    if let Some(slice) = parse_slice(body) {
+                        im.slices.push(slice);
+                        last = Last::Slice(im.slices.len() - 1);
+                    } else {
+                        im.raw_chunks.push(RawChunk {
+                            frame,
+                            kind: chunk_type,
+                            body: body.to_vec(),
+                            after: anchor,
+                        });
+                    }
+                }
                 CHUNK_PROFILE => {
                     match parse_color_profile(body) {
                         Some(profile) => im.ase_profile = Some(profile),
@@ -971,6 +1088,12 @@ pub fn load(path: &Path) -> Result<Sprite> {
                                     }
                                     tag.user_data = Some(ud);
                                     last = Last::Tags(base, k + 1);
+                                    handled = true;
+                                }
+                            }
+                            Last::Slice(i) => {
+                                if let Some(slice) = im.slices.get_mut(i) {
+                                    slice.user_data = Some(ud);
                                     handled = true;
                                 }
                             }
@@ -1111,6 +1234,7 @@ pub fn load(path: &Path) -> Result<Sprite> {
         ase_profile: im.ase_profile,
         raw_chunks: im.raw_chunks,
         user_data: im.sprite_user_data,
+        slices: im.slices,
     };
     sprite.normalize_levels();
     sprite.clamp_tags();
@@ -2195,6 +2319,67 @@ mod tests {
         assert_eq!(back.transparent_index, ti);
         assert_eq!(back.get(2, 0, 10, 8), color);
         assert_eq!(back.get(2, 0, 11, 8), Rgba::TRANSPARENT);
+    }
+
+    #[test]
+    fn slice_chunks_round_trip() {
+        let mut s = Sprite::new(4, 4);
+        s.set(0, 0, 1, 1, Rgba(9, 8, 7, 255));
+        s.slices.push(Slice {
+            name: "button".into(),
+            flags: 3,
+            nine_patch: true,
+            pivot: true,
+            keys: vec![SliceKey {
+                frame: 0,
+                x: 1,
+                y: 1,
+                w: 2,
+                h: 2,
+                center: Some((1, 1, 2, 2)),
+                pivot: Some((0, 1)),
+            }],
+            user_data: Some(UserData {
+                text: String::new(),
+                color: Some(Rgba(1, 2, 3, 4)),
+                properties: Vec::new(),
+                flags: 2,
+            }),
+        });
+        let path = tmp("vixel_ase_slice.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let body = walk_chunks(&data)
+            .into_iter()
+            .find(|(_, k, _)| *k == CHUNK_SLICE)
+            .expect("slice chunk")
+            .2;
+        assert_eq!(u32_at(&body, 0), 1, "one key");
+        assert_eq!(u32_at(&body, 4), 3, "9-patch + pivot flags");
+        assert_eq!(u16_at(&body, 12), 6, "name length");
+        assert_eq!(&body[14..20], b"button");
+        assert_eq!(u32_at(&body, 20), 0, "frame");
+        assert_eq!(u32_at(&body, 24) as i32, 1, "x");
+        assert_eq!(u32_at(&body, 40) as i32, 1, "center x");
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.slices, s.slices);
+    }
+
+    #[test]
+    fn fixture_slices_round_trip() {
+        let src =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ase/test_grayscale.ase");
+        let a = load(&src).unwrap();
+        assert_eq!(a.slices.len(), 1);
+        assert_eq!(a.slices[0].name, "slice1");
+        assert!(a.slices[0].nine_patch && a.slices[0].pivot);
+        assert_eq!(a.slices[0].keys.len(), 1);
+        let out = tmp("vixel_ase_slice_fixture.ase");
+        save(&a, &out).unwrap();
+        let b = load(&out).unwrap();
+        let _ = std::fs::remove_file(&out);
+        assert_eq!(b.slices, a.slices);
     }
 
     #[test]
