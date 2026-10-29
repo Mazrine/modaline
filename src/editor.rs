@@ -215,6 +215,13 @@ pub enum UndoStep {
         before: LayerProps,
         after: LayerProps,
     },
+    /// One cel's z-index.
+    CelZ {
+        layer: usize,
+        frame: usize,
+        before: i16,
+        after: i16,
+    },
 }
 
 /// The sprite model plus the interaction state (modes, tools, undo, colors).
@@ -444,7 +451,8 @@ impl Editor {
                 UndoStep::Cells { cells } => cells.is_empty(),
                 UndoStep::Snapshot { .. }
                 | UndoStep::Structure { .. }
-                | UndoStep::LayerProps { .. } => false,
+                | UndoStep::LayerProps { .. }
+                | UndoStep::CelZ { .. } => false,
             };
             if !empty {
                 self.undo.push(s);
@@ -1066,6 +1074,14 @@ impl Editor {
                 UndoStep::LayerProps { layer, before, .. } => {
                     self.apply_layer_props(*layer, *before);
                 }
+                UndoStep::CelZ {
+                    layer,
+                    frame,
+                    before,
+                    ..
+                } => {
+                    self.sprite.cels[*layer][*frame].z_index = *before;
+                }
             }
             self.redo.push(step);
             self.dirty = true;
@@ -1093,6 +1109,14 @@ impl Editor {
                 }
                 UndoStep::LayerProps { layer, after, .. } => {
                     self.apply_layer_props(*layer, *after);
+                }
+                UndoStep::CelZ {
+                    layer,
+                    frame,
+                    after,
+                    ..
+                } => {
+                    self.sprite.cels[*layer][*frame].z_index = *after;
                 }
             }
             self.undo.push(step);
@@ -2702,6 +2726,26 @@ impl Editor {
         self.touch();
     }
 
+    /// Set the active cel's z-index (positive = towards the front).
+    pub fn set_cel_z(&mut self, z: i16) {
+        let (l, f) = (self.active_layer, self.active_frame);
+        let before = self.sprite.cels[l][f].z_index;
+        if before == z {
+            return;
+        }
+        self.sprite.cels[l][f].z_index = z;
+        self.undo.push(UndoStep::CelZ {
+            layer: l,
+            frame: f,
+            before,
+            after: z,
+        });
+        self.redo.clear();
+        self.dirty = true;
+        self.touch();
+        self.msg = format!("cel z: {z}");
+    }
+
     fn edit_point(&self) -> EditPoint {
         EditPoint {
             layer: self.active_layer,
@@ -4148,6 +4192,17 @@ mod tests {
     }
 
     #[test]
+    fn cel_z_changes_are_undoable() {
+        let mut e = Editor::new(1, 1);
+        e.set_cel_z(4);
+        assert_eq!(e.sprite.cels[0][0].z_index, 4);
+        e.undo();
+        assert_eq!(e.sprite.cels[0][0].z_index, 0);
+        e.redo();
+        assert_eq!(e.sprite.cels[0][0].z_index, 4);
+    }
+
+    #[test]
     fn paint_and_undo_on_an_offset_cel() {
         use crate::sprite::Cel;
         let mut e = Editor::new(4, 4);
@@ -4156,6 +4211,7 @@ mod tests {
             y: 1,
             w: 2,
             h: 2,
+            z_index: 0,
             pixels: vec![Rgba::TRANSPARENT; 4],
             opacity: 255,
         };

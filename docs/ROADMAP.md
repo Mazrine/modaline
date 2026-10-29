@@ -285,8 +285,14 @@ met; blocked tasks are marked with the reason.
   canonicalize to the new canvas. Old `.vpx` cels (no bounds) normalize on
   load. 5 new tests (139 total): clipping/growing, flip/rotate bounds, `.ase`
   offset round trip, `.vpx` migration, offset-cel paint + undo.
-- [ ] **P5-11 — Cel z-index** (M) — deps: P5-10.
-  Read/write cel z; order siblings in `composite_range`; timeline control.
+- [x] **P5-11 — Cel z-index** (M) — deps: P5-10.
+  Landed 2026-10-28. `Cel.z_index` (serde default 0). `.ase` reads/writes the
+  SHORT z field and composite sorts siblings by `-layerIndex + z` (ties by z),
+  matching Aseprite's front ordering with our top-first list. `:celz <n>` and a
+  timeline z drag set it; `UndoStep::CelZ` makes the change undoable. 3 new
+  tests (142 total): composite ordering, `.ase` z bytes + round trip, and
+  undo/redo. UI drag not screenshotted (manual check: change z, see the stack
+  reorder).
 - [ ] **P5-12 — Linked cels authoring** (L) — deps: P5-10.
   Linked cel content, copy-on-write on paint, write cel type 1, prefer-linked
   flag, timeline toggle.

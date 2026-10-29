@@ -430,6 +430,13 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
             cel.opacity = opacity;
             editor.touch();
         }
+        ui.separator();
+        ui.label("z:");
+        let mut z = editor.sprite.cels[editor.active_layer][editor.active_frame].z_index;
+        let resp = ui.add(egui::DragValue::new(&mut z).range(i16::MIN..=i16::MAX));
+        if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
+            editor.set_cel_z(z);
+        }
     });
 }
 
@@ -1656,7 +1663,7 @@ const HELP: &[&str] = &[
     "  :newframe / :dupframe / :delframe   (drag a thumbnail to reorder)",
     "  :tag <name> [from to] / :tagdel [name]   (named frame ranges)",
     "  :tagdir forward|reverse|pingpong|pingpong-reverse   :tagrepeat <n>   (0 = forever)",
-    "  :framemove <from> <to>",
+    "  :framemove <from> <to>   :celz <n>   (cel z-index; + = towards the front)",
     "  :newlayer / :dellayer / :layerup / :layerdown / :layername <name>",
     "  :duplayer   :merge   :flatten   (duplicate / merge down / flatten)",
     "  :newgroup / :indent / :outdent / :lock / :unlock   (layer groups)",

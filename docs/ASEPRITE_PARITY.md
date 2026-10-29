@@ -31,7 +31,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Cel copy/paste across frames/layers | Missing | P5-35 |
 | Empty cel vs empty frame | Missing | P5-35 |
 | Linked cels (authoring; read exists) | Partial | P5-12 |
-| Cel z-index | Missing | P5-11 |
+| Cel z-index | Covered | P5-11 |
 | Timeline layer×frame grid + per-cel cells | Missing | P5-37 |
 | Preview window / fullscreen | Missing | P5-36 |
 
@@ -145,7 +145,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | `.ase` unknown-chunk preservation | Covered | P5-07 |
 | `.ase` grid origin/size | Covered | P5-08 |
 | `.ase` cel bounds / offsets | Covered | P5-10 |
-| `.ase` cel z-index | Missing | P5-11 |
+| `.ase` cel z-index | Covered | P5-11 |
 | `.ase` linked-cel write | Missing | P5-12 |
 | `.ase` layer flags + UUIDs | Partial | P5-13 |
 | `.ase` user data (text/color/properties) | Missing | P5-14 |

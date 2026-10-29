@@ -94,6 +94,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:newframe` / `:delframe` | add / remove animation frame |
 | `:dupframe` | duplicate the current frame (cels + duration) |
 | `:framemove <from> <to>` | move a frame (or drag a timeline thumbnail) |
+| `:celz <n>` | active cel z-index (+ moves towards the front) |
 | `:tag <name> [from to]` | create/update a named frame tag |
 | `:tagdel [name]` | delete a frame tag (default: the active one) |
 | `:tagdir forward\|reverse\|pingpong\|pingpong-reverse` | play direction of the active tag |
@@ -172,8 +173,9 @@ per-backend code — deliberately avoided for now.)
 
 A sprite is a grid of **cels** indexed `[layer][frame]`, the same shape Aseprite
 uses: `layers[0]` is the topmost layer, each cel is a row-major `Vec<Rgba>`
-with its own `x/y/w/h` bounds. Editing writes to the active layer's cel on the
-active frame; the canvas shows the flattened composite of all visible layers.
+with its own `x/y/w/h` bounds and z-index. Editing writes to the active layer's
+cel on the active frame; the canvas shows the flattened composite of all visible
+layers, with cel z-index reordering them.
 Offset cels from `.ase` keep their bounds; painting outside grows a cel, while
 crop/resize canonicalize to the canvas.
 

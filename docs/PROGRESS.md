@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **139 tests green** (130 lib + 9 bin)
+- `cargo test` → **142 tests green** (133 lib + 9 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-10 cel bounds / offset cels** (see batch 47).
+- Last completed batch: **P5-11 cel z-index** (see batch 48).
 
 ## How to resume
 
@@ -276,6 +276,11 @@ Read, in order:
     canonicalize; old `.vpx` cels normalize on load. 5 new tests (139 total):
     clipping/growth, transform bounds, `.ase` offset round trip, `.vpx`
     migration, and offset-cel paint/undo.
+48. **P5-11 — cel z-index** — `Cel.z_index` (serde default 0); `.ase` reads and
+    writes the SHORT z field, composite orders siblings by `-layerIndex + z`
+    (ties by z), and `:celz <n>` / the timeline z drag set it. `UndoStep::CelZ`
+    makes it undoable. 3 new tests (142 total): composite ordering, `.ase` z
+    bytes + round trip, undo/redo.
 
 ## Next step (exact)
 
@@ -284,8 +289,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-11** — cel z-index (first open task), then continue down the P5
-  roadmap in dependency order.
+- **P5-12** — linked-cel authoring (first open task), then continue down the
+  P5 roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

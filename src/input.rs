@@ -532,6 +532,10 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 editor.msg = "usage: :tagdir forward|reverse|pingpong|pingpong-reverse".into();
             }
         },
+        "celz" | "z" => match arg.and_then(|s| s.parse::<i16>().ok()) {
+            Some(z) => editor.set_cel_z(z),
+            None => editor.msg = "usage: :celz <n>".into(),
+        },
         "tagrepeat" => match arg.and_then(|s| s.parse::<u16>().ok()) {
             Some(n) => editor.set_tag_repeat(n),
             None => editor.msg = "usage: :tagrepeat <n> (0 = forever)".into(),

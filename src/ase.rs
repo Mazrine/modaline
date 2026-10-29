@@ -376,7 +376,8 @@ fn write_cel_chunk(
     b.extend_from_slice(&(cel.y.clamp(i16::MIN as i32, i16::MAX as i32) as i16).to_le_bytes());
     b.push(cel.opacity);
     b.extend_from_slice(&0u16.to_le_bytes()); // cel type: raw
-    b.extend_from_slice(&[0u8; 7]); // z-index + reserved
+    b.extend_from_slice(&cel.z_index.to_le_bytes());
+    b.extend_from_slice(&[0u8; 5]); // reserved
     b.extend_from_slice(&(cel.w.min(u16::MAX as u32) as u16).to_le_bytes());
     b.extend_from_slice(&(cel.h.min(u16::MAX as u32) as u16).to_le_bytes());
     match depth {
@@ -491,6 +492,7 @@ struct TilemapCel {
     /// Tile id + (flip x, flip y, flip diagonal).
     tiles: Vec<(u32, bool, bool, bool)>,
     opacity: u8,
+    z_index: i16,
 }
 
 struct Import {
@@ -521,6 +523,7 @@ impl Import {
         let ox = i16_at(body, 2) as i32;
         let oy = i16_at(body, 4) as i32;
         let opacity = *body.get(6).unwrap_or(&255);
+        let z_index = i16_at(body, 9);
         match u16_at(body, 7) {
             0 => {
                 let cw = u16_at(body, 16) as u32;
@@ -534,13 +537,14 @@ impl Import {
                     self.transparent_index,
                 )
                 .2;
-                self.place((li, frame), (ox, oy), (cw, ch), &px, opacity);
+                self.place((li, frame), (ox, oy), (cw, ch), &px, opacity, z_index);
             }
             1 => {
                 // Linked cel: same pixels as the cel in the referenced frame.
                 let link = u16_at(body, 16) as usize;
                 if let Some(Some(mut cel)) = self.cels.get(li).and_then(|l| l.get(link)).cloned() {
                     cel.opacity = opacity;
+                    cel.z_index = z_index;
                     self.cels[li][frame] = Some(cel);
                 }
             }
@@ -558,7 +562,7 @@ impl Import {
                     self.transparent_index,
                 )
                 .2;
-                self.place((li, frame), (ox, oy), (cw, ch), &px, opacity);
+                self.place((li, frame), (ox, oy), (cw, ch), &px, opacity, z_index);
             }
             3 => {
                 let w = u16_at(body, 16) as u32;
@@ -595,6 +599,7 @@ impl Import {
                     tiles_w: w,
                     tiles,
                     opacity,
+                    z_index,
                 });
             }
             _ => {}
@@ -610,6 +615,7 @@ impl Import {
         (cw, ch): (u32, u32),
         px: &[Rgba],
         opacity: u8,
+        z_index: i16,
     ) {
         let mut pixels = px.to_vec();
         pixels.resize((cw * ch) as usize, Rgba::TRANSPARENT);
@@ -618,6 +624,7 @@ impl Import {
             y: oy,
             w: cw,
             h: ch,
+            z_index,
             pixels,
             opacity,
         });
@@ -667,6 +674,7 @@ impl Import {
                     y: tc.oy,
                     w: tw,
                     h: th,
+                    z_index: tc.z_index,
                     pixels,
                     opacity: tc.opacity,
                 });
@@ -1172,6 +1180,25 @@ mod tests {
     }
 
     #[test]
+    fn cel_z_index_round_trips_through_ase() {
+        let mut s = Sprite::new(1, 1);
+        s.set(0, 0, 0, 0, Rgba(255, 0, 0, 255));
+        s.cels[0][0].z_index = -3;
+        let path = tmp("vixel_ase_celz.ase");
+        save(&s, &path).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let body = walk_chunks(&data)
+            .into_iter()
+            .find(|(_, k, _)| *k == CHUNK_CEL)
+            .expect("cel chunk")
+            .2;
+        assert_eq!(i16_at(&body, 9), -3, "z-index field");
+        let back = load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.cels[0][0].z_index, -3);
+    }
+
+    #[test]
     fn offset_cels_keep_bounds_through_ase() {
         let mut s = Sprite::new(4, 4);
         let red = Rgba(200, 10, 10, 255);
@@ -1180,6 +1207,7 @@ mod tests {
             y: 2,
             w: 2,
             h: 2,
+            z_index: 0,
             pixels: vec![
                 red,
                 Rgba(0, 255, 0, 255),

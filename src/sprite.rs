@@ -15,6 +15,9 @@ pub struct Cel {
     pub w: u32,
     #[serde(default)]
     pub h: u32,
+    /// Aseprite cel z-index: positive moves this cel towards the front.
+    #[serde(default)]
+    pub z_index: i16,
     pub pixels: Vec<Rgba>,
     /// 0..255, cel opacity (Aseprite stores this per cel).
     #[serde(default = "full")]
@@ -32,6 +35,7 @@ impl Cel {
             y: 0,
             w,
             h,
+            z_index: 0,
             pixels: vec![Rgba::TRANSPARENT; (w * h) as usize],
             opacity: 255,
         }
@@ -726,7 +730,18 @@ impl Sprite {
             siblings.push(k);
             k = self.subtree_end(k).min(end);
         }
-        for &i in siblings.iter().rev() {
+        // Our list is top-first, so descending index is the base back-to-front
+        // order. Aseprite's order is layerIndex + zIndex (larger = in front);
+        // with our inverted index that is `-i + z`.
+        siblings.sort_by_key(|&i| {
+            let z = if self.layers[i].group {
+                0
+            } else {
+                self.cels[i][frame].z_index as i32
+            };
+            (-(i as i32) + z, z)
+        });
+        for &i in siblings.iter() {
             let layer = &self.layers[i];
             let stop = self.subtree_end(i).min(end);
             if !layer.visible || layer.opacity == 0 || (!include_reference && layer.reference) {
@@ -828,6 +843,7 @@ impl Sprite {
                     y: 0,
                     w: width,
                     h: height,
+                    z_index: old.z_index,
                     pixels: np,
                     opacity: old.opacity,
                 };
@@ -870,6 +886,7 @@ impl Sprite {
                     y: 0,
                     w,
                     h,
+                    z_index: old.z_index,
                     pixels: np,
                     opacity: old.opacity,
                 };
@@ -1124,6 +1141,7 @@ impl Sprite {
                 y: 0,
                 w: self.width,
                 h: self.height,
+                z_index: 0,
                 pixels: buf,
                 opacity: 255,
             };
@@ -1155,6 +1173,7 @@ impl Sprite {
                 y: 0,
                 w: self.width,
                 h: self.height,
+                z_index: 0,
                 pixels: self.export_composite(frame),
                 opacity: 255,
             });
@@ -1864,6 +1883,7 @@ mod tests {
             y: 0,
             w: 1,
             h: 1,
+            z_index: 0,
             pixels: vec![Rgba::rgb(10, 20, 30)],
             opacity: 255,
         };
@@ -1887,6 +1907,7 @@ mod tests {
             y: 0,
             w: 1,
             h: 1,
+            z_index: 0,
             pixels: vec![Rgba::rgb(128, 128, 128)],
             opacity: 255,
         }]);
@@ -1960,6 +1981,35 @@ mod tests {
     }
 
     #[test]
+    fn cel_z_orders_the_composite() {
+        let mut s = Sprite::new(1, 1);
+        let red = Rgba(255, 0, 0, 255);
+        let blue = Rgba(0, 0, 255, 255);
+        s.set(0, 0, 0, 0, red);
+        s.layers.push(Layer {
+            name: "Bottom".into(),
+            ..Default::default()
+        });
+        s.cels.push(vec![Cel {
+            x: 0,
+            y: 0,
+            w: 1,
+            h: 1,
+            z_index: 0,
+            pixels: vec![blue],
+            opacity: 255,
+        }]);
+        assert_eq!(s.composite(0)[0], red);
+        s.cels[1][0].z_index = 1;
+        assert_eq!(s.composite(0)[0], blue, "+z moves towards the front");
+        s.cels[1][0].z_index = 0;
+        s.cels[0][0].z_index = -1;
+        assert_eq!(s.composite(0)[0], blue, "-z moves towards the back");
+        s.cels[0][0].z_index = 0;
+        assert_eq!(s.composite(0)[0], red);
+    }
+
+    #[test]
     fn offset_cels_clip_composite_and_expand_on_paint() {
         let mut s = Sprite::new(4, 4);
         let red = Rgba(10, 20, 30, 255);
@@ -1968,6 +2018,7 @@ mod tests {
             y: 1,
             w: 2,
             h: 2,
+            z_index: 0,
             pixels: vec![red; 4],
             opacity: 255,
         };
@@ -1986,6 +2037,7 @@ mod tests {
             y: -1,
             w: 2,
             h: 2,
+            z_index: 0,
             pixels: vec![red; 4],
             opacity: 255,
         };
@@ -2003,6 +2055,7 @@ mod tests {
             y: 1,
             w: 2,
             h: 1,
+            z_index: 0,
             pixels: vec![red, blue],
             opacity: 255,
         };
@@ -2216,6 +2269,7 @@ mod tests {
                 y: 0,
                 w: 1,
                 h: 1,
+                z_index: 0,
                 pixels: vec![Rgba::TRANSPARENT],
                 opacity: 255,
             }]);

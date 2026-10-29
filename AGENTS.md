@@ -96,6 +96,8 @@ thin shells:
 - Cel pixels are cel-sized, not canvas-sized. Use `Cel::get`/`set_extend` or
   `Sprite::get`/`set`; never index `pixels` by the canvas width. Transform and
   composite code must honour cel bounds.
+- Composite order is `-layer_index + cel.z_index` (ties by z) because our layer
+  list is top-first; positive z moves a cel towards the front.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
   capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
   same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not

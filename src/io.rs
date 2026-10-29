@@ -696,13 +696,17 @@ mod tests {
             std::env::temp_dir().join(format!("vixel_cel_migrate_{}.vpx", std::process::id()));
         save_project(&s, &path).unwrap();
         let json = std::fs::read_to_string(&path).unwrap();
-        let old = json.replace("\"x\":0,\"y\":0,\"w\":2,\"h\":2,", "");
+        let old = json
+            .replace("\"x\":0,\"y\":0,\"w\":2,\"h\":2,", "")
+            .replace("\"z_index\":0,", "");
         assert!(!old.contains("\"w\":2"));
+        assert!(!old.contains("z_index"));
         std::fs::write(&path, old).unwrap();
         let back = load_project(&path).unwrap();
         let _ = std::fs::remove_file(&path);
         assert_eq!((back.cels[0][0].x, back.cels[0][0].y), (0, 0));
         assert_eq!((back.cels[0][0].w, back.cels[0][0].h), (2, 2));
+        assert_eq!(back.cels[0][0].z_index, 0);
         assert_eq!(back.get(0, 0, 1, 1), Rgba(1, 2, 3, 255));
     }
 
