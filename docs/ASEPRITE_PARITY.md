@@ -50,7 +50,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Collapsed group | Covered | P5-13 |
 | Alpha masks | Covered (vixel extension) | — |
 | Duplicate / merge down / flatten | Covered | — |
-| Layer UUID | Missing | P5-13 |
+| Layer UUID | Covered | P5-13 |
 | Layer user data | Missing | P5-14 |
 
 ## Colour
