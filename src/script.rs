@@ -738,8 +738,8 @@ fn execute(host: HostRef<'_>, source: &str, name: &str) -> Result<(), mlua::Erro
         fs.set(
             "read",
             scope.create_function_mut(move |_, path: String| {
-                let root = script_root(fs_read_host.borrow().editor)
-                    .map_err(mlua::Error::RuntimeError)?;
+                let root =
+                    script_root(fs_read_host.borrow().editor).map_err(mlua::Error::RuntimeError)?;
                 let full = fs_join(&root, &path).map_err(mlua::Error::RuntimeError)?;
                 std::fs::read_to_string(&full).map_err(|e| {
                     mlua::Error::RuntimeError(format!("app.fs.read {}: {e}", full.display()))

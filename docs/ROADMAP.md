@@ -751,11 +751,16 @@ Partial or Not supported, so "no unexplained gap" is true again.
   Move status, help-overlay, window and command messages to catalog keys;
   complete `pt-BR`; add a test that the catalog covers every key used by the
   UI (or an explicit allowlist). Runtime switch must leave no mixed language.
-- [ ] **P6-04 — Incremental dirty compositing** (L) — deps: P5-58.
-  Add `Sprite::composite_rect` and recompose only changed bounds instead of the
-  whole frame; patch the texture from that smaller image and extend the
-  benchmark with a dirty-rect vs full case. Correctness test compares the
-  incremental result to a full composite over random edits.
+- [x] **P6-04 — Incremental dirty compositing** (L) — deps: P5-58.
+  Landed 2026-10-29. `Sprite::composite_rect` composites only a clipped
+  rectangle (groups, masks, cel z and blend modes stay per-pixel), and the
+  canvas partial upload path now builds a `ColorImage` from that rect instead
+  of compositing the full frame and cropping it. `composite_range` delegates to
+  the rect-aware core so full and partial share one implementation. 2 tests
+  (269 total): the dirty patch matches the full image, and a 200-edit random
+  case proves rect == full composite. Ignored benchmark (debug): 256x256 x8
+  layers full 71.3 ms vs 16x16 dirty 0.55 ms vs cache hit 12 ns. Xvfb smoke:
+  paint, drag and undo updated the canvas through the partial path.
 - [ ] **P6-05 — Async filter pipeline** (M) — deps: P5-59.
   Run filters on a worker job (pointwise and neighborhood) with progress/cancel,
   apply the result on the UI thread as one undo step, and keep the editor

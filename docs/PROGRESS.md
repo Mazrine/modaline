@@ -505,6 +505,10 @@ Read, in order:
   open file's folder (absolute/`..`/symlink escapes denied). 3 tests (268
   total). Xvfb smoke: root, fs write, cel image, selection and a denial all
   visible in the status line.
+102. **P6-04 — dirty-rect compositing** — `Sprite::composite_rect` shares the
+  full compositor's core; partial canvas uploads now composite only the dirty
+  rect instead of the whole frame. 2 tests (269 total); debug benchmark:
+  256×256×8 full 71.3 ms vs 16×16 dirty 0.55 ms. Xvfb paint/drag/undo smoke.
 
 ## Next step (exact)
 
@@ -513,12 +517,15 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P6)
 
-P5 is complete; **P6 is open (3/7)** in `docs/ROADMAP.md`:
+P5 is complete; **P6 is open (4/7)** in `docs/ROADMAP.md`:
 
 - ~~**P6-00** — move layer/cel content tool~~ (done 2026-10-29).
 - ~~**P6-01** — reopen closed documents~~ (done 2026-10-29).
 - ~~**P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects~~ (done 2026-10-29).
-- **P6-03** — localization string extraction (first open task).
+- ~~**P6-04** — incremental dirty compositing~~ (done 2026-10-29).
+- **P6-03** — localization string extraction.
+- **P6-05** — async filter pipeline (next).
+- **P6-06** — PCX/FLC/FLI import.
 - **P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects.
 - **P6-03** — localization string extraction.
 - **P6-04** — incremental dirty compositing.

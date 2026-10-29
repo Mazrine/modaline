@@ -1206,6 +1206,31 @@ impl Sprite {
         out
     }
 
+    /// Composite only the rectangle `(x, y, w, h)`, clamped to the sprite. The
+    /// result is row-major `w * h` for the clipped rectangle. Editing one cel
+    /// no longer recomposites the whole canvas.
+    pub fn composite_rect(&self, frame: usize, x: u32, y: u32, w: u32, h: u32) -> Vec<Rgba> {
+        let (cw, ch) = (self.width, self.height);
+        let x0 = x.min(cw);
+        let y0 = y.min(ch);
+        let x1 = (x + w).min(cw);
+        let y1 = (y + h).min(ch);
+        if x0 >= x1 || y0 >= y1 {
+            return Vec::new();
+        }
+        let (rw, rh) = (x1 - x0, y1 - y0);
+        let mut out = vec![Rgba::TRANSPARENT; (rw * rh) as usize];
+        self.composite_range_rect(
+            frame,
+            0,
+            self.layers.len(),
+            &mut out,
+            true,
+            (x0, y0, rw, rh),
+        );
+        out
+    }
+
     /// Composite the sibling run `[start, end)` over `dst`, bottom-most first.
     fn composite_range(
         &self,
@@ -1215,6 +1240,27 @@ impl Sprite {
         dst: &mut [Rgba],
         include_reference: bool,
     ) {
+        self.composite_range_rect(
+            frame,
+            start,
+            end,
+            dst,
+            include_reference,
+            (0, 0, self.width, self.height),
+        );
+    }
+
+    /// Rect-aware core: `rect` is `(x, y, w, h)` and `dst` is `w * h`.
+    fn composite_range_rect(
+        &self,
+        frame: usize,
+        start: usize,
+        end: usize,
+        dst: &mut [Rgba],
+        include_reference: bool,
+        rect: (u32, u32, u32, u32),
+    ) {
+        let (rx, ry, rw, rh) = rect;
         let mut siblings = Vec::new();
         let mut k = start;
         while k < end {
@@ -1245,12 +1291,15 @@ impl Sprite {
                 self.cels[i][frame].opacity as u32
             };
             if layer.group {
-                let mut buf = vec![Rgba::TRANSPARENT; self.area()];
-                self.composite_range(frame, i + 1, stop, &mut buf, include_reference);
+                let mut buf = vec![Rgba::TRANSPARENT; (rw * rh) as usize];
+                self.composite_range_rect(frame, i + 1, stop, &mut buf, include_reference, rect);
                 for (k, px) in buf.iter().enumerate() {
                     let mut sa = px.3 as u32 * op / 255;
                     if let Some(m) = &layer.mask {
-                        sa = sa * *m.pixels.get(k).unwrap_or(&255) as u32 / 255;
+                        let sx = rx + (k as u32 % rw);
+                        let sy = ry + (k as u32 / rw);
+                        let sk = (sy * self.width + sx) as usize;
+                        sa = sa * *m.pixels.get(sk).unwrap_or(&255) as u32 / 255;
                     }
                     if sa > 0 {
                         dst[k] = blend_over(layer.blend, *px, sa, dst[k]);
@@ -1260,17 +1309,19 @@ impl Sprite {
             }
             let cel = self.content(i, frame);
             let (cw, ch) = (self.width as i32, self.height as i32);
+            let (rx, ry, rw, rh) = (rx as i32, ry as i32, rw as i32, rh as i32);
             for yy in 0..cel.h {
                 let y = cel.y + yy as i32;
-                if y < 0 || y >= ch {
+                if y < ry || y >= ry + rh || y < 0 || y >= ch {
                     continue;
                 }
                 for xx in 0..cel.w {
                     let x = cel.x + xx as i32;
-                    if x < 0 || x >= cw {
+                    if x < rx || x >= rx + rw || x < 0 || x >= cw {
                         continue;
                     }
                     let k = (y as u32 * self.width + x as u32) as usize;
+                    let dk = ((y - ry) as u32 * rw as u32 + (x - rx) as u32) as usize;
                     let px = cel
                         .pixels
                         .get(yy as usize * cel.w as usize + xx as usize)
@@ -1281,7 +1332,7 @@ impl Sprite {
                         sa = sa * *m.pixels.get(k).unwrap_or(&255) as u32 / 255;
                     }
                     if sa > 0 {
-                        dst[k] = blend_over(layer.blend, px, sa, dst[k]);
+                        dst[dk] = blend_over(layer.blend, px, sa, dst[dk]);
                     }
                 }
             }

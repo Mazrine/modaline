@@ -2640,11 +2640,11 @@ fn canvas(
             });
         }
         UploadPlan::Partial(rect) => {
-            let img = frame_composite(editor, frame);
+            let img = frame_composite_rect(editor, frame, rect);
             if let Some(tex) = texture.as_mut() {
                 tex.set_partial(
                     [rect.0 as usize, rect.1 as usize],
-                    sub_image(&img, rect),
+                    img,
                     egui::TextureOptions::NEAREST,
                 );
             } else {
@@ -2812,18 +2812,6 @@ fn upload_plan(
     UploadPlan::Partial((x, y, x1, y1))
 }
 
-fn sub_image(img: &egui::ColorImage, rect: (u32, u32, u32, u32)) -> egui::ColorImage {
-    let (x, y, x1, y1) = rect;
-    let w = (x1 - x) as usize;
-    let h = (y1 - y) as usize;
-    let mut pixels = Vec::with_capacity(w * h);
-    for row in y as usize..y1 as usize {
-        let start = row * img.size[0] + x as usize;
-        pixels.extend_from_slice(&img.pixels[start..start + w]);
-    }
-    egui::ColorImage::new([w, h], pixels)
-}
-
 fn upload(ui: &egui::Ui, slot: &mut Option<TextureHandle>, name: &str, img: egui::ColorImage) {
     match slot {
         Some(t) => t.set(img, egui::TextureOptions::NEAREST),
@@ -2844,6 +2832,23 @@ fn frame_composite(editor: &Editor, frame: usize) -> egui::ColorImage {
         rgba.extend_from_slice(&[c.0, c.1, c.2, c.3]);
     }
     egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba)
+}
+
+/// Composite and convert only `rect`; used to patch the canvas texture after a
+/// pixel edit without recompositing the whole frame.
+fn frame_composite_rect(
+    editor: &Editor,
+    frame: usize,
+    rect: (u32, u32, u32, u32),
+) -> egui::ColorImage {
+    let (x, y, x1, y1) = rect;
+    let (w, h) = (x1 - x, y1 - y);
+    let comp = editor.sprite.composite_rect(frame, x, y, w, h);
+    let mut rgba = Vec::with_capacity(w as usize * h as usize * 4);
+    for c in &comp {
+        rgba.extend_from_slice(&[c.0, c.1, c.2, c.3]);
+    }
+    egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba)
 }
 
 fn draw_checker(painter: &egui::Painter, rect: Rect, zoom: f32) {
@@ -3830,10 +3835,52 @@ mod tests {
         e.paint_pixel(1, 2, crate::color::Rgba::rgb(200, 10, 20));
         e.paint_pixel(3, 0, crate::color::Rgba::rgb(5, 6, 7));
         let full = frame_composite(&e, 0);
-        let patch = sub_image(&full, (1, 0, 4, 3));
+        let patch = frame_composite_rect(&e, 0, (1, 0, 4, 3));
         assert_eq!(patch.size, [3, 3]);
         assert_eq!(patch.pixels[2], egui::Color32::from_rgb(5, 6, 7));
         assert_eq!(patch.pixels[2 * 3], egui::Color32::from_rgb(200, 10, 20));
+        for y in 0..3 {
+            for x in 0..3 {
+                assert_eq!(
+                    patch.pixels[y * 3 + x],
+                    full.pixels[y * 4 + x + 1],
+                    "dirty-rect composite matches the full one at {x},{y}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn composite_rect_matches_full_composite_over_random_edits() {
+        let mut e = Editor::new(24, 18);
+        e.sprite.add_layer_after(0);
+        e.sprite.layers[0].blend = crate::sprite::BlendMode::Multiply;
+        e.sprite.layers[1].opacity = 180;
+        let mut rng = 0x1234_5678u64;
+        for _ in 0..200 {
+            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let x = ((rng >> 33) % 24) as u32;
+            let y = ((rng >> 17) % 18) as u32;
+            let layer = ((rng >> 9) % 2) as usize;
+            let c = crate::color::Rgba(
+                (rng >> 3) as u8,
+                (rng >> 11) as u8,
+                (rng >> 19) as u8,
+                (rng >> 27) as u8,
+            );
+            e.sprite.set(layer, 0, x, y, c);
+        }
+        let full = e.sprite.composite(0);
+        let rect = e.sprite.composite_rect(0, 5, 3, 11, 9);
+        for y in 0..9u32 {
+            for x in 0..11u32 {
+                assert_eq!(
+                    rect[(y * 11 + x) as usize],
+                    full[((y + 3) * 24 + x + 5) as usize],
+                    "mismatch at {x},{y}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -3856,6 +3903,11 @@ mod tests {
             let _ = frame_composite(&e, 0);
         }
         let full = start.elapsed() / 20;
+        let start = std::time::Instant::now();
+        for _ in 0..20 {
+            let _ = frame_composite_rect(&e, 0, (16, 16, 32, 32));
+        }
+        let patch = start.elapsed() / 20;
         let cache = CanvasCache {
             revision: e.revision,
             frame: 0,
@@ -3866,10 +3918,16 @@ mod tests {
             let _ = upload_plan(Some(&cache), e.revision, 0, [256, 256], false, None, None);
         }
         let hit = start.elapsed() / 100_000;
-        println!("256x256 x8 layers: composite {full:?}, cache decision {hit:?}");
+        println!(
+            "256x256 x8 layers: composite {full:?}, dirty 16x16 {patch:?}, cache decision {hit:?}"
+        );
         assert!(
             full.as_nanos() > hit.as_nanos(),
             "cache hit must be cheaper"
+        );
+        assert!(
+            patch.as_nanos() < full.as_nanos(),
+            "a dirty-rect composite must beat the full frame"
         );
     }
 }
