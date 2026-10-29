@@ -223,8 +223,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Multiple documents / tabs | Missing | P5-52 |
 | Preview window / fullscreen | Covered | P5-36 |
 | Linear undo/redo (strokes, structural, properties) | Covered | — |
-| Undo history panel | Missing | P5-38 |
-| Non-linear undo | Missing | P5-38 |
+| Undo history panel | Covered | P5-38 |
+| Non-linear undo | Covered (jump within the linear stack; branching documented) | P5-38 |
 | Compact/bounded undo memory | Partial | P5-59 |
 | Incremental rendering / large-canvas performance | Partial (CPU full-frame) | P5-58 |
 | Filter threading | Missing | P5-59 |

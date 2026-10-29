@@ -261,7 +261,7 @@ text** (text tool with live preview/size/alignment), **brush size 1-64 + custom 
 **multi-stop gradients** (presets, alpha, Bayer dither), **wide-pixel preview**, **independent preview window/OS viewport**, **layer×frame timeline grid + tag editor**, **symmetry painting**
 (mirror or radial,
 including bucket fill and paste), flip H/V + rotate 90° (**selection-aware**),
-stroke-grouped undo/redo (**structural layer/frame/tag edits and panel
+stroke-grouped undo/redo with a clickable **history window** (**structural layer/frame/tag edits and panel
 properties undo too**),
 **`.ase`/`.aseprite` + PNG + `.vpx` import/export**, **sheet + GIF + meta JSON
 export**, **sprite properties** (colour mode, pixel ratio, grid size + origin) and

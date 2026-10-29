@@ -494,9 +494,16 @@ met; blocked tasks are marked with the reason.
   name/range/colour, deletes the active tag and creates "new tag" at the
   playhead. 2 new tests (204 total): rectangle selection + tag mutations, and
   cel thumbnail sizing. Grid/tag UI is manual-check only.
-- [ ] **P5-38 — Undo history** (M) — deps: none.
-  History panel; evaluate/implement non-linear undo; otherwise document why
-  the linear stack is kept.
+- [x] **P5-38 — Undo history** (M) — deps: none.
+  Landed 2026-10-28. A history window lists labelled undo steps, redo steps and
+  the base state; clicking any row jumps there via repeated undo/redo
+  (`goto_history`). Labels cover strokes (unique pixel count), snapshots,
+  structure edits, layer properties and cel z. Branching undo is deliberately
+  not implemented: steps mix coalesced cell patches with whole-sprite snapshots
+  and active-index travel, so a tree would need per-node inverse patches and
+  redo-branch semantics for little gain; jump navigation keeps every state in
+  the linear history reachable. 1 new test (205 total): labels and
+  jump/redo navigation.
 
 ### Epic 8 — Export/import pipeline
 

@@ -139,6 +139,8 @@ thin shells:
   `preview_zoom`); keep it out of the editor's active-frame playback.
 - Timeline grid thumbnails are cached in `View::cel_thumbs` and invalidated by
   `Editor::revision`; rectangle selection uses `select_cel_rect`.
+- Undo remains linear; `goto_history` navigates by replaying undo/redo. Keep
+  every `UndoStep` variant's `label()` meaningful for the history panel.
 - Tile preview extents use `Editor::tile_offsets()`/`tile_x`/`tile_y`; the
   canvas extent and hit area must match or seam clicks land outside.
 - Tilesets live in `Sprite.tilesets` keyed by `Tileset.id`; layers reference

@@ -298,6 +298,27 @@ pub enum UndoStep {
     },
 }
 
+impl UndoStep {
+    pub fn label(&self) -> String {
+        match self {
+            UndoStep::Cells { cells } => {
+                let pixels = cells
+                    .iter()
+                    .map(|c| (c.0, c.1, c.2, c.3))
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len();
+                format!("stroke: {pixels} px")
+            }
+            UndoStep::Snapshot { .. } => "snapshot edit".into(),
+            UndoStep::Structure { .. } => "structure: layer/frame/tag".into(),
+            UndoStep::LayerProps { layer, .. } => format!("layer {} properties", layer + 1),
+            UndoStep::CelZ { layer, frame, .. } => {
+                format!("cel z: layer {} frame {}", layer + 1, frame + 1)
+            }
+        }
+    }
+}
+
 /// The sprite model plus the interaction state (modes, tools, undo, colors).
 /// All view state (zoom/pan) lives in the GUI layer, not here.
 pub struct Editor {
@@ -2179,6 +2200,30 @@ impl Editor {
             self.undo.push(step);
             self.dirty = true;
             self.touch();
+        }
+    }
+
+    pub fn history_labels(&self) -> Vec<String> {
+        self.undo.iter().map(UndoStep::label).collect()
+    }
+
+    pub fn redo_labels(&self) -> Vec<String> {
+        self.redo.iter().rev().map(UndoStep::label).collect()
+    }
+
+    /// Jump to a linear history position (0 = before the first undo step).
+    /// Within one linear stack this is the non-linear navigation the panel
+    /// offers; branching would need per-node inverse patches.
+    pub fn goto_history(&mut self, index: usize) {
+        let index = index.min(self.undo.len() + self.redo.len());
+        while self.undo.len() > index {
+            self.undo();
+        }
+        while self.undo.len() < index {
+            if self.redo.is_empty() {
+                break;
+            }
+            self.redo();
         }
     }
 
@@ -6262,6 +6307,38 @@ mod tests {
         assert_eq!(e.sprite.get(0, 0, 2, 0), Rgba(1, 2, 3, 255));
         let sel = e.selection.as_ref().unwrap();
         assert_eq!((sel.w, sel.h), (3, 2));
+    }
+
+    #[test]
+    fn history_labels_and_jump_navigation() {
+        let mut e = Editor::new(2, 2);
+        e.begin_stroke();
+        e.paint_pixel(0, 0, Rgba::rgb(255, 0, 0));
+        e.end_stroke();
+        e.begin_stroke();
+        e.paint_pixel(1, 1, Rgba::rgb(0, 0, 255));
+        e.end_stroke();
+        assert_eq!(e.undo.len(), 2);
+        assert!(e.history_labels()[0].starts_with("stroke"));
+
+        e.goto_history(1);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+        assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::TRANSPARENT);
+        e.goto_history(0);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::TRANSPARENT);
+        assert_eq!(e.redo_labels().len(), 2);
+        e.goto_history(2);
+        assert_eq!(e.sprite.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+        assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::rgb(0, 0, 255));
+
+        e.add_frame();
+        assert!(
+            e.history_labels().last().unwrap().contains("structure"),
+            "{:?}",
+            e.history_labels()
+        );
+        e.set_cel_z(3);
+        assert!(e.history_labels().last().unwrap().contains("cel z"));
     }
 
     #[test]

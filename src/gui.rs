@@ -99,6 +99,7 @@ pub struct View {
     cel_thumbs: Vec<Option<TextureHandle>>,
     cel_thumbs_revision: u64,
     pub cel_drag_anchor: Option<(usize, usize)>,
+    pub history_open: bool,
 }
 
 impl View {
@@ -144,6 +145,7 @@ impl View {
             cel_thumbs: Vec::new(),
             cel_thumbs_revision: u64::MAX,
             cel_drag_anchor: None,
+            history_open: false,
         }
     }
 
@@ -264,6 +266,7 @@ pub fn draw(
 
     preview_window(ui.ctx(), editor, view);
     preview_viewport(ui.ctx(), editor, view);
+    history_window(ui.ctx(), editor, view);
 
     if editor.mode == Mode::Help {
         help(ui.ctx());
@@ -298,6 +301,45 @@ impl View {
             _ => {}
         }
     }
+}
+
+fn history_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
+    if !view.history_open {
+        return;
+    }
+    let mut open = view.history_open;
+    egui::Window::new("history")
+        .open(&mut open)
+        .default_size([240.0, 320.0])
+        .show(ctx, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                let current = editor.undo.len();
+                if ui.selectable_label(current == 0, "base").clicked() {
+                    editor.goto_history(0);
+                }
+                let labels = editor.history_labels();
+                for (i, label) in labels.iter().enumerate() {
+                    let text = format!("{}. {label}", i + 1);
+                    if ui
+                        .selectable_label(editor.undo.len() == i + 1, text)
+                        .clicked()
+                    {
+                        editor.goto_history(i + 1);
+                    }
+                }
+                let redo = editor.redo_labels();
+                if !redo.is_empty() {
+                    ui.separator();
+                }
+                for (j, label) in redo.iter().enumerate() {
+                    let target = editor.undo.len() + 1 + j;
+                    if ui.button(format!("↷ {label}")).clicked() {
+                        editor.goto_history(target);
+                    }
+                }
+            });
+        });
+    view.history_open = open;
 }
 
 fn preview_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
@@ -1054,6 +1096,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         .on_hover_text("independent preview window");
     ui.checkbox(&mut view.preview_os, "preview OS")
         .on_hover_text("preview in a separate OS viewport");
+    ui.checkbox(&mut view.history_open, "history");
     ui.checkbox(&mut view.onion.enabled, "onion skin");
     if view.onion.enabled {
         ui.horizontal(|ui| {

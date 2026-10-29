@@ -136,6 +136,9 @@ L-shaped corners for the 1 px pencil/eraser.
   transparency checkerboard, cursor + selection + floating-paste previews.
   **Wide pixels** render at the sprite's `pixel_aspect` (checkbox "wide px");
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
+- **undo history**: a history window lists labelled steps and redo entries;
+  clicking any row jumps to that state within the linear stack (branching is
+  deliberately not implemented).
 - **timeline**: switchable layer×frame grid with per-cel thumbnails and drag
   rectangle selection, plus the compact frame strip. Tag chips show playback
   ranges and the tag editor edits name/range/colour or creates/deletes tags;

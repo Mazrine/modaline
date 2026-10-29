@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **204 tests green** (191 lib + 13 bin)
+- `cargo test` → **205 tests green** (192 lib + 13 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-37 timeline UX** (see batch 74).
+- Last completed batch: **P5-38 undo history** (see batch 75).
 
 ## How to resume
 
@@ -403,6 +403,9 @@ Read, in order:
   rectangle selection, compact onion controls, and a tag editor
   (name/range/colour/create/delete). 2 new tests (204 total): rectangle+tag
   mutations and thumbnail sizing.
+75. **P5-38 — undo history** — labelled history window with click/jump to any
+  undo/redo position; linear stack retained and branching rationale documented.
+  1 new test (205 total): labels and jump/redo navigation.
 
 ## Next step (exact)
 
@@ -411,8 +414,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-38** — undo history (first open task), then continue down the P5 roadmap
-  in dependency order.
+- **P5-39** — export config core (first open task), then continue down the P5
+  roadmap in dependency order.
 
 ## Known limitations (do not forget)
 
