@@ -1084,7 +1084,7 @@ fn preview_viewport(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
         return;
     }
     let builder = egui::ViewportBuilder::default()
-        .with_title("vixel preview")
+        .with_title(view.tr("title.preview"))
         .with_inner_size([480.0, 360.0])
         .with_fullscreen(view.preview_fullscreen);
     ctx.show_viewport_immediate(

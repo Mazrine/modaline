@@ -294,7 +294,9 @@
     "ui.merge": "mesclar",
     "ui.flat": "achatar",
     "ui.apply_transform": "aplicar transformação",
-    "ui.apply": "aplicar"
+    "ui.apply": "aplicar",
+    "title.fix": "correção",
+    "title.preview": "prévia do vixel"
   },
   "messages": {
     "alpha lock off": "bloqueio alfa desligado",
@@ -775,6 +777,9 @@
     "add": "adição",
     "subtract": "subtração",
     "divide": "divisão",
-    "intersect": "interseção"
+    "intersect": "interseção",
+    "drawing": "desenho",
+    "animation": "animação",
+    "compact": "compacto"
   }
 }

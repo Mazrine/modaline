@@ -523,7 +523,7 @@ Read, in order:
 105. **P6-03 — localization extraction** — `Editor::msg` is a `Status` (English
   text + `format!` template); `status!` records the template and the status line
   re-renders translated values in place, with a value dictionary for enum names.
-  411 message templates + help overlay + window titles + preferences + side
+  427 message templates + help overlay + window titles + preferences + side
   panel/timeline chrome + tool labels translated to pt-BR; tests scan
   `status!`/`.msg`/`.tr()` usage and check every key/message/value (3 tests, 286
   total). Xvfb: `:lang pt-BR` gave `tinta: simples`, `grade: 12 px`, Portuguese

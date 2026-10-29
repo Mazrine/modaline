@@ -752,7 +752,7 @@ Partial or Not supported, so "no unexplained gap" is true again.
   `format!` template); `status!` records the template so the status line
   re-renders in the active language by substituting values into translated
   literal segments; a value dictionary translates enum names embedded in those
-  messages. 411 message templates, the 96-line help overlay, window titles,
+  messages. 427 message templates, the 96-line help overlay, window titles,
   preferences, the whole side panel/timeline chrome and the tool labels have
   pt-BR entries. Tests scan `status!`, `.msg` literals and `.tr()` keys in the
   UI sources and fail on a missing translation; pt-BR strings, messages and

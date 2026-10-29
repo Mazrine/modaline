@@ -435,7 +435,7 @@ impl eframe::App for VixelApp {
             .any(|(i, d)| i != self.active && d.editor.dirty);
         let doc = &mut self.docs[self.active];
         let title = match &doc.editor.bundle_stage {
-            Some(stage) => format!("vixel — {stage} fix"),
+            Some(stage) => format!("vixel — {stage} {}", doc.view.tr("title.fix")),
             None => format!("vixel — {}", doc.title()),
         };
         if title != self.title {
