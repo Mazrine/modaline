@@ -164,6 +164,8 @@ keyboard-first, but the mouse is fully wired.)
 | `:export out.png\|out.ase\|<stem> [scale]` | PNG frame · `.ase` sprite · bare stem = sheet + GIF + meta JSON; `[scale 1-16]` upscales rasters |
 | `:import[!] in.png` | import a PNG as a new sprite; `!` drops unsaved work |
 | `:importsheet[!] sheet.png [cols rows]` | rebuild frames from a sheet + its `.json` sidecar |
+| `:importatlas sheet.png [meta.json\|xml]` | Aseprite/TexturePacker JSON or XML atlas |
+| `:importseq <dir>` | image folder as frames in natural order |
 | `:open[!] proj.vpx\|proj.ase\|in.png` | load a project / `.ase` / PNG (by extension); `!` drops unsaved work |
 | `:recover [file]` | load the autosave snapshot (`recovery.vpx`) as unsaved work |
 | `:recent [n]` | list the last 10 opened/saved files, or open the nth |

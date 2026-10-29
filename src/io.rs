@@ -1279,8 +1279,310 @@ fn default_duration() -> u16 {
     100
 }
 
+/// Import an Aseprite/TexturePacker atlas (image + JSON hash/array or XML).
+pub fn import_atlas(image_path: &Path, meta_path: &Path) -> Result<Sprite> {
+    let img = image::open(image_path)
+        .with_context(|| format!("open {}", image_path.display()))?
+        .to_rgba8();
+    let text = std::fs::read_to_string(meta_path)
+        .with_context(|| format!("read {}", meta_path.display()))?;
+    if meta_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("xml"))
+        || text.trim_start().starts_with('<')
+    {
+        return import_atlas_xml(&img, &text);
+    }
+    import_atlas_json(&img, &text)
+}
+
+struct AtlasFrame {
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    duration: u16,
+}
+
+fn import_atlas_json(img: &image::RgbaImage, text: &str) -> Result<Sprite> {
+    use crate::sprite::{PlayDirection, Slice, SliceKey, Tag};
+    let value: serde_json::Value = serde_json::from_str(text).context("parse atlas json")?;
+    let entries: Vec<&serde_json::Value> = match value.get("frames") {
+        Some(serde_json::Value::Array(a)) => a.iter().collect(),
+        Some(serde_json::Value::Object(m)) => m.values().collect(),
+        _ => bail!("atlas json has no frames"),
+    };
+    let mut frames = Vec::new();
+    for f in entries {
+        let rect = f.get("frame").unwrap_or(f);
+        let num = |k: &str| rect.get(k).and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
+        let duration = f
+            .get("duration")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(100)
+            .clamp(1, u16::MAX as u64) as u16;
+        frames.push(AtlasFrame {
+            x: num("x"),
+            y: num("y"),
+            w: num("w").max(1),
+            h: num("h").max(1),
+            duration,
+        });
+    }
+    if frames.is_empty() {
+        bail!("atlas has no frames");
+    }
+    let (w, h) = (
+        frames.iter().map(|f| f.x + f.w).max().unwrap_or(1),
+        frames.iter().map(|f| f.y + f.h).max().unwrap_or(1),
+    );
+    let mut sprite = Sprite::new(w, h);
+    for (i, f) in frames.iter().enumerate() {
+        if i > 0 {
+            sprite.add_frame_after(sprite.frames.len() - 1);
+        }
+        sprite.frames[i].duration_ms = f.duration;
+        for y in 0..f.h.min(h) {
+            for x in 0..f.w.min(w) {
+                let px = img.get_pixel(f.x + x, f.y + y);
+                let c = Rgba(px[0], px[1], px[2], px[3]);
+                if !c.is_transparent() {
+                    sprite.set(0, i, x, y, c);
+                }
+            }
+        }
+    }
+    if let Some(meta) = value.get("meta") {
+        if let Some(tags) = meta.get("frameTags").and_then(|v| v.as_array()) {
+            for t in tags {
+                let direction = match t
+                    .get("direction")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("forward")
+                {
+                    "reverse" => PlayDirection::Reverse,
+                    "pingpong" => PlayDirection::PingPong,
+                    "pingpong-reverse" => PlayDirection::PingPongReverse,
+                    _ => PlayDirection::Forward,
+                };
+                let color = t
+                    .get("color")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        let c = |i: usize| a.get(i).and_then(|v| v.as_u64()).unwrap_or(255) as u8;
+                        Rgba(c(0), c(1), c(2), 255)
+                    })
+                    .unwrap_or(Rgba(120, 170, 255, 255));
+                sprite.tags.push(Tag {
+                    name: t
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Tag")
+                        .to_string(),
+                    from: t.get("from").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
+                    to: t.get("to").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
+                    color,
+                    direction,
+                    repeat: t.get("repeat").and_then(|v| v.as_u64()).unwrap_or(0) as u16,
+                    user_data: None,
+                });
+            }
+        }
+        if let Some(slices) = meta.get("slices").and_then(|v| v.as_array()) {
+            for s in slices {
+                let mut keys = Vec::new();
+                for k in s
+                    .get("keys")
+                    .and_then(|v| v.as_array())
+                    .into_iter()
+                    .flatten()
+                {
+                    let bounds = k.get("bounds");
+                    let n = |name: &str| {
+                        bounds
+                            .and_then(|b| b.get(name))
+                            .and_then(serde_json::Value::as_i64)
+                            .unwrap_or(0)
+                    };
+                    keys.push(SliceKey {
+                        frame: k.get("frame").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                        x: n("x") as i32,
+                        y: n("y") as i32,
+                        w: n("w").max(0) as u32,
+                        h: n("h").max(0) as u32,
+                        center: k.get("center").and_then(|c| {
+                            let a = c.as_array()?;
+                            Some((
+                                a.first()?.as_i64()? as i32,
+                                a.get(1)?.as_i64()? as i32,
+                                a.get(2)?.as_u64()? as u32,
+                                a.get(3)?.as_u64()? as u32,
+                            ))
+                        }),
+                        pivot: k.get("pivot").and_then(|c| {
+                            let a = c.as_array()?;
+                            Some((a.first()?.as_i64()? as i32, a.get(1)?.as_i64()? as i32))
+                        }),
+                    });
+                }
+                sprite.slices.push(Slice {
+                    name: s
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("slice")
+                        .to_string(),
+                    keys,
+                    ..Default::default()
+                });
+            }
+        }
+    }
+    sprite.clamp_tags();
+    Ok(sprite)
+}
+
+fn import_atlas_xml(img: &image::RgbaImage, text: &str) -> Result<Sprite> {
+    use quick_xml::Reader;
+    use quick_xml::events::Event;
+    let mut reader = Reader::from_str(text);
+    let mut buf = Vec::new();
+    let mut frames: Vec<AtlasFrame> = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                if e.name().as_ref() == b"SubTexture" {
+                    let mut map = std::collections::HashMap::new();
+                    for attr in e.attributes().flatten() {
+                        if let Ok(v) = attr.unescape_value() {
+                            map.insert(
+                                String::from_utf8_lossy(attr.key.as_ref()).into_owned(),
+                                v.into_owned(),
+                            );
+                        }
+                    }
+                    let n = |k: &str| map.get(k).and_then(|v| v.parse::<u32>().ok()).unwrap_or(0);
+                    frames.push(AtlasFrame {
+                        x: n("x"),
+                        y: n("y"),
+                        w: n("width").max(1),
+                        h: n("height").max(1),
+                        duration: map
+                            .get("duration")
+                            .and_then(|v| v.parse::<u16>().ok())
+                            .unwrap_or(100),
+                    });
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(anyhow::anyhow!("xml: {e}")),
+            _ => {}
+        }
+        buf.clear();
+    }
+    if frames.is_empty() {
+        bail!("xml atlas has no SubTexture frames");
+    }
+    let (w, h) = (
+        frames.iter().map(|f| f.x + f.w).max().unwrap_or(1),
+        frames.iter().map(|f| f.y + f.h).max().unwrap_or(1),
+    );
+    let mut sprite = Sprite::new(w, h);
+    for (i, f) in frames.iter().enumerate() {
+        if i > 0 {
+            sprite.add_frame_after(sprite.frames.len() - 1);
+        }
+        sprite.frames[i].duration_ms = f.duration;
+        for y in 0..f.h.min(h) {
+            for x in 0..f.w.min(w) {
+                let p = img.get_pixel(f.x + x, f.y + y);
+                let c = Rgba(p[0], p[1], p[2], p[3]);
+                if !c.is_transparent() {
+                    sprite.set(0, i, x, y, c);
+                }
+            }
+        }
+    }
+    Ok(sprite)
+}
+
+/// Import a directory of images as frames, sorted by natural filename order.
+pub fn import_sequence_dir(dir: &Path) -> Result<Sprite> {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+        .with_context(|| format!("read {}", dir.display()))?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| is_image(p))
+        .collect();
+    if files.is_empty() {
+        bail!("no image files in {}", dir.display());
+    }
+    files.sort_by_key(|p| natural_key(&p.file_name().unwrap_or_default().to_string_lossy()));
+    import_sequence(&files)
+}
+
+fn natural_key(s: &str) -> Vec<(u64, String)> {
+    let mut out = Vec::new();
+    let mut digits = String::new();
+    let mut text = String::new();
+    for c in s.chars() {
+        if c.is_ascii_digit() {
+            if !text.is_empty() {
+                out.push((u64::MAX, std::mem::take(&mut text)));
+            }
+            digits.push(c);
+        } else {
+            if !digits.is_empty() {
+                out.push((digits.parse().unwrap_or(0), std::mem::take(&mut digits)));
+            }
+            text.push(c);
+        }
+    }
+    if !digits.is_empty() {
+        out.push((digits.parse().unwrap_or(0), digits));
+    }
+    if !text.is_empty() {
+        out.push((u64::MAX, text));
+    }
+    out
+}
+
+/// Import explicit image files as animation frames.
+pub fn import_sequence(files: &[PathBuf]) -> Result<Sprite> {
+    if files.is_empty() {
+        bail!("no frames to import");
+    }
+    let images: Vec<image::RgbaImage> = files
+        .iter()
+        .map(|p| {
+            image::open(p)
+                .with_context(|| format!("open {}", p.display()))
+                .map(|i| i.to_rgba8())
+        })
+        .collect::<Result<_>>()?;
+    let w = images.iter().map(|i| i.width()).max().unwrap_or(1);
+    let h = images.iter().map(|i| i.height()).max().unwrap_or(1);
+    let mut sprite = Sprite::new(w, h);
+    for (i, img) in images.iter().enumerate() {
+        if i > 0 {
+            sprite.add_frame_after(sprite.frames.len() - 1);
+        }
+        for y in 0..img.height().min(h) {
+            for x in 0..img.width().min(w) {
+                let p = img.get_pixel(x, y);
+                let c = Rgba(p[0], p[1], p[2], p[3]);
+                if !c.is_transparent() {
+                    sprite.set(0, i, x, y, c);
+                }
+            }
+        }
+    }
+    Ok(sprite)
+}
+
 /// Split a sheet PNG back into frames. `cols`/`rows` of 0 mean "read the
-/// sidecar"; explicit values tile the image evenly. The G6 round trip.
+/// sidecar"; explicit values tile the image evenly. Hash/array atlas metadata
+/// is recognized and delegated to `import_atlas`.
 pub fn import_sheet(path: &Path, cols: u32, rows: u32) -> Result<Sprite> {
     let img = image::open(path)
         .with_context(|| format!("open {}", path.display()))?
@@ -1301,6 +1603,12 @@ pub fn import_sheet(path: &Path, cols: u32, rows: u32) -> Result<Sprite> {
         }
         let text = std::fs::read_to_string(&meta_path)
             .with_context(|| format!("read {}", meta_path.display()))?;
+        if serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .is_some_and(|v| v.get("meta").is_some() && v.get("frames").is_some())
+        {
+            return import_atlas(path, &meta_path);
+        }
         let meta: SheetMeta = serde_json::from_str(&text).context("parse sheet meta")?;
         if meta.frame_w == 0 || meta.frame_h == 0 || meta.columns == 0 || meta.rows == 0 {
             anyhow::bail!("sheet meta has an empty frame grid");
@@ -1501,6 +1809,95 @@ mod tests {
         assert_eq!((sheet.columns, sheet.rows), (2, 2));
         assert_eq!(image::open(&path).unwrap().to_rgba8().dimensions(), (4, 4));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn hash_atlas_round_trips_through_import_sheet() {
+        use crate::sprite::Tag;
+        let mut s = Sprite::new(2, 2);
+        s.add_frame_after(0);
+        s.set(0, 0, 0, 0, Rgba::rgb(255, 0, 0));
+        s.set(0, 1, 1, 1, Rgba::rgb(0, 0, 255));
+        s.tags.push(Tag {
+            name: "walk".into(),
+            from: 0,
+            to: 1,
+            color: Rgba::rgb(1, 2, 3),
+            direction: crate::sprite::PlayDirection::PingPong,
+            repeat: 2,
+            user_data: None,
+        });
+        let dir = std::env::temp_dir().join(format!("vixel-atlas-in-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = ExportConfig {
+            gif: false,
+            atlas: AtlasFormat::JsonHash,
+            ..Default::default()
+        };
+        export_config(&s, &cfg, &dir.join("walk")).unwrap();
+        let back = import_sheet(&dir.join("walk.sheet.png"), 0, 0).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(back.frames.len(), 2);
+        assert_eq!(back.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+        assert_eq!(back.get(0, 1, 1, 1), Rgba::rgb(0, 0, 255));
+        assert_eq!(back.tags[0].name, "walk");
+        assert_eq!(
+            back.tags[0].direction,
+            crate::sprite::PlayDirection::PingPong
+        );
+        assert_eq!(back.tags[0].repeat, 2);
+    }
+
+    #[test]
+    fn xml_atlas_imports_subtextures() {
+        let dir = std::env::temp_dir().join(format!("vixel-xml-atlas-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut img = image::RgbaImage::new(4, 2);
+        for y in 0..2 {
+            for x in 0..2 {
+                img.put_pixel(x, y, image::Rgba([255, 0, 0, 255]));
+                img.put_pixel(x + 2, y, image::Rgba([0, 0, 255, 255]));
+            }
+        }
+        img.save(dir.join("atlas.png")).unwrap();
+        let xml = r#"<TextureAtlas imagePath="atlas.png">
+            <SubTexture name="a" x="0" y="0" width="2" height="2"/>
+            <SubTexture name="b" x="2" y="0" width="2" height="2"/>
+        </TextureAtlas>"#;
+        std::fs::write(dir.join("atlas.xml"), xml).unwrap();
+        let s = import_atlas(&dir.join("atlas.png"), &dir.join("atlas.xml")).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(s.frames.len(), 2);
+        assert_eq!(s.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+        assert_eq!(s.get(0, 1, 0, 0), Rgba::rgb(0, 0, 255));
+    }
+
+    #[test]
+    fn image_sequence_imports_in_natural_order() {
+        let dir = std::env::temp_dir().join(format!("vixel-seq-in-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, color) in [
+            ("frame1.png", [255, 0, 0, 255]),
+            ("frame2.png", [0, 255, 0, 255]),
+            ("frame10.png", [0, 0, 255, 255]),
+        ] {
+            let mut img = image::RgbaImage::new(2, 2);
+            for y in 0..2 {
+                for x in 0..2 {
+                    img.put_pixel(x, y, image::Rgba(color));
+                }
+            }
+            img.save(dir.join(name)).unwrap();
+        }
+        let s = import_sequence_dir(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(s.frames.len(), 3);
+        assert_eq!(s.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+        assert_eq!(s.get(0, 1, 0, 0), Rgba::rgb(0, 255, 0));
+        assert_eq!(s.get(0, 2, 0, 0), Rgba::rgb(0, 0, 255));
     }
 
     #[test]

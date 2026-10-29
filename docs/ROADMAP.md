@@ -550,8 +550,15 @@ met; blocked tasks are marked with the reason.
   RGBA. GIF/PNG unchanged. FLC/FLI/PCX are a deliberate gap (no codec in
   `image`); documented in the matrix. 1 new test (214 total): all four formats
   export, scale, classify and BMP reloads exactly.
-- [ ] **P5-44 — Import parity** (L) — deps: P5-39.
-  Aseprite JSON/XML atlas, image sequence, sheet layouts, layers/tags.
+- [x] **P5-44 — Import parity** (L) — deps: P5-39.
+  Landed 2026-10-28. `import_atlas` reads Aseprite/TexturePacker JSON
+  hash/array and XML `SubTexture` metadata, reconstructing frames, durations,
+  tags (direction/repeat/colour) and slices; `:importsheet` auto-detects atlas
+  sidecars. `import_sequence_dir` loads a folder of PNG/JPEG/BMP/TGA/WebP frames
+  in natural numeric order (explicit file lists supported). Layers in atlas
+  metadata are merged into one pixel layer (metadata cannot un-composite them).
+  Commands: `:importatlas`, `:importseq`. 3 new tests (217 total): hash
+  round-trip, XML atlas, natural-order sequence.
 - [ ] **P5-45 — In-app file browser** (M) — deps: none.
   Keyboard open/save browser with recents/favourites; no native dialog dep.
 

@@ -2990,6 +2990,7 @@ const HELP: &[&str] = &[
     "  :textfont vixel   :textsize <8-64>   :textalign left|center|right",
     "  :export out.png|.jpg|.bmp|.tga|.webp|.ase|stem [scale 1-16]   :import in.png",
     "  :importsheet sheet.png [cols rows]   (frames from a sheet + its .json)",
+    "  :importatlas sheet.png [meta.json|xml]   :importseq <dir>   (atlas/sequence)",
     "  :recent [n]   (last 10 files; drop a file on the window to open it)",
 ];
 

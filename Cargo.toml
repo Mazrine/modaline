@@ -27,6 +27,7 @@ eframe = { version = "0.37", default-features = false, features = [
 
 image = { version = "0.25", default-features = false, features = ["png", "gif", "jpeg", "bmp", "tga", "webp"] }
 flate2 = "1"
+quick-xml = "0.38"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"

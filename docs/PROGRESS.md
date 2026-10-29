@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **214 tests green** (201 lib + 13 bin)
+- `cargo test` → **217 tests green** (204 lib + 13 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-43 extra image formats** (see batch 80).
+- Last completed batch: **P5-44 import parity** (see batch 81).
 
 ## How to resume
 
@@ -422,6 +422,9 @@ Read, in order:
 80. **P5-43 — extra image formats** — JPEG/BMP/TGA/WebP export and import
   through extension dispatch; JPEG alpha flattened, FLC/FLI/PCX documented as
   unsupported. 1 new test (214 total): export/scale/classify/reload.
+81. **P5-44 — import parity** — JSON hash/array + XML atlas import with
+  durations/tags/slices, auto-detected by `:importsheet`; natural-order image
+  sequence import; `:importatlas`/`:importseq`. 3 new tests (217 total).
 
 ## Next step (exact)
 
@@ -430,8 +433,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-44** — import parity (first open task), then continue down the P5 roadmap
-  in dependency order.
+- **P5-45** — in-app file browser (first open task), then continue down the P5
+  roadmap in dependency order.
 
 ## Known limitations (do not forget)
 

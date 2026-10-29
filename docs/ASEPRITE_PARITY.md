@@ -184,8 +184,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Export config (ignore empty, merge, trim, padding, toggles) | Covered | P5-39 |
 | Export scale | Covered | — |
 | Import sheet (own sidecar/grid) | Covered | — |
-| Import Aseprite JSON/XML atlas | Missing | P5-44 |
-| Import image sequence | Missing | P5-44 |
+| Import Aseprite JSON/XML atlas | Covered | P5-44 |
+| Import image sequence | Covered (natural filename order) | P5-44 |
 
 ## CLI
 

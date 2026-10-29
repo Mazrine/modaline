@@ -157,7 +157,10 @@ L-shaped corners for the 1 px pencil/eraser.
   trim, recorded in metadata. Atlas metadata can be vixel, JSON-hash or
   JSON-array (tags/layers/slices); GIF supports repeat count, palette size and
   ordered dithering. Static PNG/JPEG/BMP/TGA/WebP import and export dispatch by
-  extension; JPEG flattens alpha. PCX/FLC/FLI remain unsupported.
+  extension; JPEG flattens alpha. PCX/FLC/FLI remain unsupported. Atlas import
+  understands JSON hash/array and XML `SubTexture` metadata (frames, durations,
+  tags, slices); image folders import as natural-order sequences
+  (`:importatlas`, `:importseq`).
 - **filters** (panel + `:filter`): invert, brightness, contrast, hue,
   saturation, desaturate, curves, levels, colour balance, posterize, outline,
   blur, sharpen, median, 3×3 convolution (custom kernel/divisor/bias) and

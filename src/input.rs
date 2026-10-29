@@ -1798,6 +1798,38 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
                 }
             }
         }
+        "importatlas" | "atlasimport" => {
+            let mut parts = arg.unwrap_or("").split_whitespace();
+            let image = parts.next().map(std::path::PathBuf::from);
+            let meta = parts.next().map(std::path::PathBuf::from);
+            match image {
+                Some(image) => {
+                    let meta = meta.unwrap_or_else(|| image.with_extension("json"));
+                    match crate::io::import_atlas(&image, &meta) {
+                        Ok(sprite) => {
+                            editor.replace_sprite(sprite);
+                            editor.msg = "atlas imported".into();
+                        }
+                        Err(e) => editor.msg = format!("atlas import failed: {e:#}"),
+                    }
+                }
+                None => editor.msg = "usage: :importatlas <sheet.png> [meta.json|xml]".into(),
+            }
+        }
+        "importseq" | "importsequence" => {
+            let Some(dir) = arg.filter(|p| !p.is_empty()) else {
+                editor.msg = "usage: :importseq <dir>".into();
+                return;
+            };
+            match crate::io::import_sequence_dir(std::path::Path::new(dir)) {
+                Ok(sprite) => {
+                    editor.replace_sprite(sprite);
+                    editor.msg =
+                        format!("sequence imported: {} frames", editor.sprite.frames.len());
+                }
+                Err(e) => editor.msg = format!("sequence import failed: {e:#}"),
+            }
+        }
         "importsheet" | "importsheet!" => {
             let mut it = arg.unwrap_or("").split_whitespace();
             let p = it.next().unwrap_or("");
