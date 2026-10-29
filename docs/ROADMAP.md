@@ -311,8 +311,14 @@ met; blocked tasks are marked with the reason.
   anchoring. A "wide px" checkbox toggles aspect preview. 1 new test (186
   total): cell sizing, hit-testing and fit with a 2:1 ratio. Toggle is UI-only
   and was not screenshotted (manual check: set `:aspect 2 1` and toggle).
-- [ ] **P5-27 — Tiled-mode options** (S) — deps: none.
-  Configurable X/Y repeats and preview options; seam wrapping stays.
+- [x] **P5-27 — Tiled-mode options** (S) — deps: none.
+  Landed 2026-10-28. X/Y repeats (1-8 copies per side, default 3×3), neighbour
+  opacity, and a preview toggle; the canvas extent and hit area follow the
+  repeats while seam wrapping is unchanged. Commands: `:tile x|y <1-8>`,
+  `:tile repeats <x> <y>`, `:tile opacity <0-255>`, `:tile preview on|off`;
+  panel controls appear while tile mode is on. 1 new test (187 total): offset
+  counts/clamping. Controls are UI-only and were not screenshotted (manual
+  check: turn on tile mode and change the repeats).
 
 ### Epic 4 — `.ase` document fidelity
 

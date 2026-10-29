@@ -113,7 +113,8 @@ keyboard-first, but the mouse is fully wired.)
 | `:reference on\|off` | tracing layer: drawn, never painted or exported |
 | `:background on\|off` | the opaque bottom layer |
 | `:mask add\|apply\|del` | alpha mask from the selection (or full) / bake / remove |
-| `:tile [on\|off]` | seamless 3x3 preview; cursor and shapes wrap across the seam |
+| `:tile [on\|off]` / `:tile x\|y <1-8>` / `:tile repeats <x> <y>` | seamless tiled preview with configurable repeats; cursor and shapes wrap |
+| `:tile opacity <0-255>` / `:tile preview on\|off` | dim or hide neighbour copies |
 | `:fliph` / `:flipv` / `:rot90` | mirror H / V / rotate 90° (selection if any, else whole sprite) |
 | `:sym none\|h\|v\|both\|radial [axes]` | set symmetry (mirror painting) |
 | `:symcenter cursor\|reset\|<x> <y>` | radial symmetry centre |

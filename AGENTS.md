@@ -135,6 +135,8 @@ thin shells:
   release. Keep new canvas drag modes out of the paint path.
 - Canvas geometry goes through `View::cell()` (zoom × aspect); never multiply
   overlay coordinates by `zoom` directly, or wide-pixel sprites drift.
+- Tile preview extents use `Editor::tile_offsets()`/`tile_x`/`tile_y`; the
+  canvas extent and hit area must match or seam clicks land outside.
 - Selection masks are sprite-sized grids (`selection_grid`/`grid_to_selection`);
   fill/stroke and mask transforms go through the paint/put helpers so clipping
   and undo stay correct. `transform_selection_mask` is mask-only; the pixel

@@ -355,8 +355,14 @@ pub struct Editor {
     pub wand_all_layers: bool,
     /// Wand and bucket restrict themselves to the seed's contiguous region.
     pub contiguous: bool,
-    /// Show the sprite tiled 3x3 and wrap the cursor across its edges.
+    /// Show the sprite tiled and wrap the cursor across its edges.
     pub tile_mode: bool,
+    /// Copies on each side of the centre (1 = 3x3 overall), max 8.
+    pub tile_x: u32,
+    pub tile_y: u32,
+    /// Neighbour preview alpha and whether neighbours are drawn at all.
+    pub tile_opacity: u8,
+    pub tile_preview: bool,
     /// Design grid in sprite pixels (1 = off) and whether the cursor snaps to
     /// it. The pixel grid is a separate view flag.
     pub grid: u32,
@@ -463,6 +469,10 @@ impl Editor {
             wand_all_layers: false,
             contiguous: true,
             tile_mode: false,
+            tile_x: 1,
+            tile_y: 1,
+            tile_opacity: 120,
+            tile_preview: true,
             grid: 8,
             snap: false,
             text_scale: 1,
@@ -1047,6 +1057,19 @@ impl Editor {
         self.gradient_stops
             .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         self.msg = format!("gradient stop: {:.0}%", pos * 100.0);
+    }
+
+    /// Neighbour offsets for the tiled preview, including `(0, 0)`.
+    pub fn tile_offsets(&self) -> Vec<(i32, i32)> {
+        let x = self.tile_x.clamp(1, 8) as i32;
+        let y = self.tile_y.clamp(1, 8) as i32;
+        let mut out = Vec::with_capacity(((2 * x + 1) * (2 * y + 1)) as usize);
+        for dy in -y..=y {
+            for dx in -x..=x {
+                out.push((dx, dy));
+            }
+        }
+        out
     }
 
     /// Shortest signed delta from `from` to `to` on an axis of `size` pixels:
@@ -6014,6 +6037,22 @@ mod tests {
         assert_eq!(e.active_frame, 0);
         assert!(e.advance_frame());
         assert_eq!(e.active_frame, 1, "bounces off the start");
+    }
+
+    #[test]
+    fn tile_offsets_follow_repeats_and_clamp() {
+        let mut e = Editor::new(4, 4);
+        assert_eq!(e.tile_offsets().len(), 9, "default 3x3");
+        e.tile_x = 2;
+        e.tile_y = 1;
+        let offsets = e.tile_offsets();
+        assert_eq!(offsets.len(), 15, "5x3");
+        assert!(offsets.contains(&(2, 1)) && offsets.contains(&(-2, -1)));
+        e.tile_x = 99;
+        e.tile_y = 99;
+        let offsets = e.tile_offsets();
+        assert_eq!(offsets.len(), 17 * 17, "clamped to 8 per side");
+        assert!(offsets.contains(&(8, 8)) && !offsets.contains(&(9, 9)));
     }
 
     #[test]

@@ -535,11 +535,64 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             Some("del" | "delete" | "remove") => editor.mask_del(),
             _ => editor.msg = "usage: :mask add|apply|del".into(),
         },
-        "tile" => match arg {
-            Some("on") => editor.set_tile_mode(Some(true)),
-            Some("off") => editor.set_tile_mode(Some(false)),
-            _ => editor.set_tile_mode(None),
-        },
+        "tile" => {
+            let mut it = arg.unwrap_or("").split_whitespace();
+            match it.next() {
+                Some("on") => editor.set_tile_mode(Some(true)),
+                Some("off") => editor.set_tile_mode(Some(false)),
+                Some("x") => match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                    Some(n) => {
+                        editor.tile_x = n.clamp(1, 8);
+                        editor.msg = format!("tile: {}x per side", editor.tile_x);
+                    }
+                    None => editor.msg = "usage: :tile x <1-8>".into(),
+                },
+                Some("y") => match it.next().and_then(|v| v.parse::<u32>().ok()) {
+                    Some(n) => {
+                        editor.tile_y = n.clamp(1, 8);
+                        editor.msg = format!("tile: {}y per side", editor.tile_y);
+                    }
+                    None => editor.msg = "usage: :tile y <1-8>".into(),
+                },
+                Some("repeats") => {
+                    let x = it.next().and_then(|v| v.parse::<u32>().ok());
+                    let y = it.next().and_then(|v| v.parse::<u32>().ok());
+                    match (x, y) {
+                        (Some(x), Some(y)) => {
+                            editor.tile_x = x.clamp(1, 8);
+                            editor.tile_y = y.clamp(1, 8);
+                            editor.msg =
+                                format!("tile: {}x {}y per side", editor.tile_x, editor.tile_y);
+                        }
+                        _ => editor.msg = "usage: :tile repeats <x> <y>".into(),
+                    }
+                }
+                Some("opacity") => match it.next().and_then(|v| v.parse::<u8>().ok()) {
+                    Some(n) => {
+                        editor.tile_opacity = n;
+                        editor.msg = format!("tile opacity: {n}");
+                    }
+                    None => editor.msg = "usage: :tile opacity <0-255>".into(),
+                },
+                Some("preview") => match it.next() {
+                    Some("on") => {
+                        editor.tile_preview = true;
+                        editor.msg = "tile preview: on".into();
+                    }
+                    Some("off") => {
+                        editor.tile_preview = false;
+                        editor.msg = "tile preview: off".into();
+                    }
+                    _ => editor.msg = "usage: :tile preview on|off".into(),
+                },
+                None => editor.set_tile_mode(None),
+                _ => {
+                    editor.msg = "usage: :tile [on|off] | x|y <1-8> | repeats <x> <y> | \
+                                  opacity <0-255> | preview on|off"
+                        .into()
+                }
+            }
+        }
         "tag" | "tags" => match arg {
             Some(rest) => {
                 let mut parts = rest.split_whitespace();

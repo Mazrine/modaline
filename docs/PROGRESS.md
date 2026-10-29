@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **186 tests green** (175 lib + 11 bin)
+- `cargo test` → **187 tests green** (176 lib + 11 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-26 wide pixels** (see batch 63).
+- Last completed batch: **P5-27 tiled options** (see batch 64).
 
 ## How to resume
 
@@ -361,6 +361,9 @@ Read, in order:
 63. **P5-26 — wide pixels** — every canvas overlay/hit-test/fit/zoom uses the
     aspect-aware `View::cell()`; "wide px" toggles preview. 1 new test (186
     total): 2:1 cell sizing, hit-testing and fit.
+64. **P5-27 — tiled options** — configurable X/Y repeats, neighbour opacity and
+    preview toggle; hit extent follows the grid, seam wrapping unchanged. 1 new
+    test (187 total): offset counts and clamping.
 
 ## Next step (exact)
 
@@ -369,8 +372,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-27** — tiled-mode options (first open task), then continue down the P5
-  roadmap in dependency order.
+- **P5-28** — text tool (first open task), then continue down the P5 roadmap in
+  dependency order.
 
 ## Known limitations (do not forget)
 

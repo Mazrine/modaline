@@ -149,7 +149,8 @@ L-shaped corners for the 1 px pencil/eraser.
   panel. `:slices` lists them; `:slices <dir> named` exports one PNG per slice
   plus `<stem>.slices.json`; `:slices <dir> [cols rows]` still exports a grid.
 - **tile mode** (`:tile on|off`, side-panel checkbox): the sprite is previewed
-  tiled 3x3 with a highlighted center, and the cursor wraps across the edges
+  tiled with configurable X/Y repeats, neighbour opacity and a preview toggle
+  (default 3x3), and the cursor wraps across the edges
   (moving right from the last column lands on column 0), so strokes stay
   seamless across the tile boundary. Line, rect, ellipse and gradient take the
   short way round too: geometry past the seam lands on the opposite edge.

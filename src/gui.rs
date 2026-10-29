@@ -687,7 +687,17 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         ui.checkbox(&mut editor.play_loop, "loop playback");
         ui.checkbox(&mut editor.play_pingpong, "ping-pong");
     });
-    ui.checkbox(&mut editor.tile_mode, "tile mode (3x3, wraps)");
+    ui.checkbox(&mut editor.tile_mode, "tile mode (wraps)");
+    if editor.tile_mode {
+        ui.horizontal(|ui| {
+            ui.label("tiles x");
+            ui.add(egui::DragValue::new(&mut editor.tile_x).range(1..=8));
+            ui.label("y");
+            ui.add(egui::DragValue::new(&mut editor.tile_y).range(1..=8));
+            ui.checkbox(&mut editor.tile_preview, "preview");
+            ui.add(egui::Slider::new(&mut editor.tile_opacity, 0..=255).prefix("alpha "));
+        });
+    }
     ui.horizontal(|ui| {
         ui.label("text");
         ui.add(egui::TextEdit::singleline(&mut editor.text).desired_width(120.0));
@@ -1373,20 +1383,28 @@ fn canvas(
     let rect = Rect::from_min_size(view.pan, size);
     let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
 
+    let tile_half = Vec2::new(
+        size.x * editor.tile_x.clamp(1, 8) as f32,
+        size.y * editor.tile_y.clamp(1, 8) as f32,
+    );
     ui.painter().rect_filled(panel, 0.0, Color32::from_gray(18));
     draw_checker(ui.painter(), rect, cell.x.min(cell.y).max(4.0));
     if editor.tile_mode {
-        // Seamless preview: the sprite repeated 3x3, neighbours dimmed.
-        let full = Rect::from_min_size(view.pan - size, size * 3.0);
+        // Seamless preview: the configured grid, neighbours dimmed.
+        let full = Rect::from_min_size(view.pan - tile_half, size + tile_half * 2.0);
         draw_checker(ui.painter(), full, cell.x.min(cell.y).max(4.0));
-        for dy in -1..=1 {
-            for dx in -1..=1 {
+        if editor.tile_preview {
+            for (dx, dy) in editor.tile_offsets() {
                 if dx == 0 && dy == 0 {
                     continue;
                 }
                 let r = rect.translate(Vec2::new(dx as f32 * size.x, dy as f32 * size.y));
-                ui.painter()
-                    .image(tex.id(), r, uv, Color32::from_white_alpha(120));
+                ui.painter().image(
+                    tex.id(),
+                    r,
+                    uv,
+                    Color32::from_white_alpha(editor.tile_opacity),
+                );
             }
         }
     }
@@ -1445,7 +1463,7 @@ fn canvas(
     draw_cursor(ui.painter(), editor, view);
 
     let hit = if editor.tile_mode {
-        rect.expand2(size)
+        rect.expand2(tile_half)
     } else {
         rect
     };
@@ -2149,7 +2167,7 @@ const HELP: &[&str] = &[
     "  w                  magic wand (select same-color region)",
     "  L / P              lasso / polygon selection (mouse)",
     "  s                  cycle symmetry (none / H / V / both)",
-    "  :tile [on|off]     seamless 3x3 preview; cursor wraps at the edges",
+    "  :tile [on|off]|x|y <1-8>|repeats <x> <y>|opacity <0-255>|preview on|off",
     "  t                  toggle filled shapes (rect / ellipse)",
     "  , / .              prev / next color",
     "  < / >              prev / next layer",
