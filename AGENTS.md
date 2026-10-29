@@ -164,7 +164,9 @@ thin shells:
   library or `vixel::status!` in the shell so the `format!` template is
   recorded (plain `.into()` literals translate by exact text). Add the English
   template to `lang/en.json` `messages` and its translation to
-  `lang/pt-BR.json`; the i18n coverage test fails on a missing entry.
+  `lang/pt-BR.json`; enum names embedded in messages go in both `values` maps;
+  the i18n coverage test fails on a missing entry. Static labels use
+  `View::tr`/`View::value` (value keys are `kind.name`).
 - Keymap actions run before the fixed modal handlers. When a char key is
   consumed, set `view.suppress_text` so the following `Event::Text` does not run
   the old handler again; `blocks_default` handles moved defaults.

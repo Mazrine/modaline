@@ -15,6 +15,8 @@ pub struct Catalog {
     pub strings: BTreeMap<String, String>,
     /// English status template → translated template.
     pub messages: BTreeMap<String, String>,
+    /// Whole-value translations used inside status templates (enum names).
+    pub values: BTreeMap<String, String>,
 }
 
 impl Catalog {
@@ -79,6 +81,16 @@ impl Translator {
             .or_else(|| self.source.messages.get(template))
             .cloned()
             .unwrap_or_else(|| template.to_string())
+    }
+
+    /// Translate a whole status value (an enum name such as `simple`).
+    pub fn value(&self, english: &str) -> String {
+        self.catalog
+            .values
+            .get(english)
+            .or_else(|| self.source.values.get(english))
+            .cloned()
+            .unwrap_or_else(|| english.to_string())
     }
 
     pub fn missing(&self) -> Vec<String> {
@@ -292,6 +304,19 @@ mod tests {
             .filter(|m| !pt.messages.contains_key(*m))
             .collect();
         assert!(missing.is_empty(), "pt-BR missing messages: {missing:?}");
+    }
+
+    #[test]
+    fn status_value_dictionary_is_complete() {
+        let en = english();
+        let pt = builtin("pt-BR").unwrap();
+        let missing: Vec<_> = en
+            .values
+            .keys()
+            .filter(|k| !pt.values.contains_key(*k))
+            .collect();
+        assert!(missing.is_empty(), "pt-BR missing values: {missing:?}");
+        assert!(!en.values.is_empty());
     }
 
     #[test]

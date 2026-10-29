@@ -1274,7 +1274,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         },
         "textobj" | "textobject" => match arg.filter(|t| !t.is_empty()) {
             Some(text) => editor.set_text_object(text),
-            None => editor.msg = editor.text_object_summary().into(),
+            None => editor.msg = editor.text_object_summary(),
         },
         "text" | "t" => {
             let Some(text) = arg.filter(|t| !t.is_empty()) else {
@@ -1461,7 +1461,7 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
             let mut it = rest.split_whitespace();
             let sub = it.next().unwrap_or("");
             match sub {
-                "" => editor.msg = editor.profile_summary().into(),
+                "" => editor.msg = editor.profile_summary(),
                 "srgb" | "linear" => {
                     if let Some(p) = crate::sprite::ColorProfile::parse(sub) {
                         editor.set_color_profile(p);

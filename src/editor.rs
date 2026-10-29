@@ -2169,16 +2169,19 @@ impl Editor {
         }
     }
 
-    pub fn text_object_summary(&self) -> String {
+    pub fn text_object_summary(&self) -> crate::status::Status {
         let (l, f) = (self.active_layer, self.active_frame);
         match self.sprite.cels[l][f]
             .user_data
             .as_ref()
             .and_then(|d| d.text_object())
         {
-            Some(o) => format!(
+            Some(o) => crate::status::Status::new(
                 "text object: {:?}  {} px  at {},{}  align {}  antialias {}",
-                o.text, o.size, o.x, o.y, o.align, o.antialias
+                format!(
+                    "text object: {:?}  {} px  at {},{}  align {}  antialias {}",
+                    o.text, o.size, o.x, o.y, o.align, o.antialias
+                ),
             ),
             None => "no text object on this cel".into(),
         }
@@ -3270,26 +3273,31 @@ impl Editor {
         self.sprite.ase_profile = profile;
         self.dirty = true;
         self.touch();
-        self.msg = self.profile_summary().into();
+        self.msg = self.profile_summary();
     }
 
     /// One-line description of the embedded `.ase` colour profile.
-    pub fn profile_summary(&self) -> String {
-        match &self.sprite.ase_profile {
-            None => "profile: none (no 0x2007 chunk)".into(),
-            Some(p) => {
-                let mut s = match p.kind {
-                    0 => "profile: none".to_string(),
-                    1 => "profile: sRGB".to_string(),
-                    2 => format!("profile: ICC ({} bytes)", p.icc.len()),
-                    k => format!("profile: type {k}"),
-                };
-                if p.flags & 1 != 0 || p.gamma > 0.0 {
-                    s.push_str(&format!(", gamma {:.4}", p.gamma));
-                }
-                s
-            }
+    pub fn profile_summary(&self) -> crate::status::Status {
+        let Some(p) = &self.sprite.ase_profile else {
+            return "profile: none (no 0x2007 chunk)".into();
+        };
+        let (mut template, mut text) = match p.kind {
+            0 => ("profile: none".to_string(), "profile: none".to_string()),
+            1 => ("profile: sRGB".to_string(), "profile: sRGB".to_string()),
+            2 => (
+                "profile: ICC ({} bytes)".to_string(),
+                format!("profile: ICC ({} bytes)", p.icc.len()),
+            ),
+            k => (
+                "profile: type {k}".to_string(),
+                format!("profile: type {k}"),
+            ),
+        };
+        if p.flags & 1 != 0 || p.gamma > 0.0 {
+            template.push_str(", gamma {:.4}");
+            text.push_str(&format!(", gamma {:.4}", p.gamma));
         }
+        crate::status::Status::new(&template, text)
     }
 
     pub fn set_color_profile(&mut self, to: crate::sprite::ColorProfile) {

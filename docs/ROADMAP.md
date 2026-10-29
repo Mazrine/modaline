@@ -751,15 +751,14 @@ Partial or Not supported, so "no unexplained gap" is true again.
   Landed 2026-10-29. `Editor::msg` is a `Status` (English text plus the
   `format!` template); `status!` records the template so the status line
   re-renders in the active language by substituting values into translated
-  literal segments, and plain literals use their text as the key. 411 message
-  templates, the 96-line help overlay, window titles and the preferences labels
-  have pt-BR entries. Tests scan `status!`, `.msg` literals and `.tr()` keys in
-  the UI sources and fail on a missing translation, and pt-BR is checked
-  against the English source. Technical widget words still shown in English
-  (side-panel/timeline labels such as "spacing") are allowlisted. Xvfb:
-  `:lang pt-BR` then `:grid 12` reported "grade: 12 px", `:filter invert`
-  "filtro: invert (25 px)", `?` opened the Portuguese help and `:prefs` was
-  fully Portuguese; `:lang en` switched them back with no stale text.
+  literal segments; a value dictionary translates enum names embedded in those
+  messages. 411 message templates, the 96-line help overlay, window titles,
+  preferences, the whole side panel/timeline chrome and the tool labels have
+  pt-BR entries. Tests scan `status!`, `.msg` literals and `.tr()` keys in the
+  UI sources and fail on a missing translation; pt-BR strings, messages and
+  enum values are all checked against English. Xvfb: `:lang pt-BR` shows
+  `tinta: simples`, `grade: 12 px`, `[desenho]`, Portuguese tools, panels and
+  `:prefs`; `:lang en` switches it all back with no stale text.
 - [x] **P6-04 — Incremental dirty compositing** (L) — deps: P5-58.
   Landed 2026-10-29. `Sprite::composite_rect` composites only a clipped
   rectangle (groups, masks, cel z and blend modes stay per-pixel), and the

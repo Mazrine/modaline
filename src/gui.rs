@@ -141,8 +141,25 @@ pub struct View {
 }
 
 impl View {
+    /// Translate an enum/value label (`brush.square`); falls back to `name`.
+    pub fn value(&self, kind: &str, name: &str) -> String {
+        let key = format!("{kind}.{name}");
+        let text = self.tr(&key);
+        if text == key { name.to_string() } else { text }
+    }
+
     pub fn tr(&self, key: &str) -> String {
         self.i18n.tr(key)
+    }
+
+    /// Translate a runtime English string by exact match in `messages`.
+    pub fn text(&self, english: &str) -> String {
+        let text = self.i18n.message(english);
+        if text == english {
+            english.to_string()
+        } else {
+            text
+        }
     }
 
     pub fn new() -> Self {
@@ -472,13 +489,13 @@ fn file_browser_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View
                     view.browser_dir = parent.to_path_buf();
                 }
                 ui.label(view.browser_dir.display().to_string());
-                if ui.small_button("☆ add").clicked() {
+                if ui.small_button(view.tr("ui.star_add")).clicked() {
                     let dir = view.browser_dir.clone();
                     if !view.browser_favourites.contains(&dir) {
                         view.browser_favourites.push(dir);
                     }
                 }
-                if ui.small_button("home").clicked()
+                if ui.small_button(view.tr("ui.home")).clicked()
                     && let Some(home) = std::env::var_os("HOME")
                 {
                     view.browser_dir = PathBuf::from(home);
@@ -486,7 +503,7 @@ fn file_browser_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View
             });
             if !view.browser_favourites.is_empty() {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label("favourites");
+                    ui.label(view.tr("ui.favourites"));
                     for dir in view.browser_favourites.clone() {
                         let name = dir
                             .file_name()
@@ -504,7 +521,7 @@ fn file_browser_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View
             }
             if !editor.recent.is_empty() {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label("recent");
+                    ui.label(view.tr("ui.recent"));
                     for path in editor.recent.iter().take(5) {
                         let name = path
                             .file_name()
@@ -527,7 +544,7 @@ fn file_browser_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View
                 });
             }
             ui.horizontal(|ui| {
-                ui.label("filter");
+                ui.label(view.tr("ui.filter"));
                 ui.add(egui::TextEdit::singleline(&mut view.browser_query).desired_width(200.0));
             });
             let (dirs, files) = browser_entries(&view.browser_dir, &view.browser_query);
@@ -564,21 +581,27 @@ fn file_browser_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View
                 });
             if view.browser_mode == BrowserMode::Save {
                 ui.horizontal(|ui| {
-                    ui.label("name");
+                    ui.label(view.tr("ui.name"));
                     ui.add(egui::TextEdit::singleline(&mut view.browser_name).desired_width(260.0));
                 });
             }
             ui.horizontal(|ui| {
-                ui.checkbox(&mut view.browser_force, "force");
-                let label = match view.browser_mode {
-                    BrowserMode::Open => "open",
-                    BrowserMode::Save => "save",
+                {
+                    let l = view.tr("ui.force");
+                    ui.checkbox(&mut view.browser_force, l)
                 };
+                let label = view.value(
+                    "browser",
+                    match view.browser_mode {
+                        BrowserMode::Open => "open",
+                        BrowserMode::Save => "save",
+                    },
+                );
                 if ui.button(label).clicked() && !view.browser_name.is_empty() {
                     let path = view.browser_dir.join(&view.browser_name);
                     browser_activate(editor, view, path);
                 }
-                if ui.button("cancel").clicked() {
+                if ui.button(view.tr("ui.cancel")).clicked() {
                     view.browser_open = false;
                 }
             });
@@ -608,17 +631,18 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
                                 ui.label(view.tr("brush"));
                                 ui.add(egui::Slider::new(&mut editor.brush_size, 1..=64));
                                 egui::ComboBox::from_id_salt("prefs_brush")
-                                    .selected_text(editor.brush_kind.name())
+                                    .selected_text(view.value("brush", editor.brush_kind.name()))
                                     .show_ui(ui, |ui| {
                                         for kind in [
                                             BrushKind::Square,
                                             BrushKind::Circle,
                                             BrushKind::Custom,
                                         ] {
+                                            let label = view.value("brush", kind.name());
                                             ui.selectable_value(
                                                 &mut editor.brush_kind,
                                                 kind,
-                                                kind.name(),
+                                                label,
                                             );
                                         }
                                     });
@@ -629,7 +653,10 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
                                     egui::Slider::new(&mut editor.brush_spacing, 1..=200)
                                         .suffix("%"),
                                 );
-                                ui.checkbox(&mut editor.pixel_perfect, view.tr("prefs.pixel_perfect"));
+                                ui.checkbox(
+                                    &mut editor.pixel_perfect,
+                                    view.tr("prefs.pixel_perfect"),
+                                );
                             });
                             ui.horizontal(|ui| {
                                 ui.checkbox(&mut editor.snap, view.tr("prefs.snap"));
@@ -740,18 +767,22 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
                             });
                         });
                     egui::CollapsingHeader::new(view.tr("prefs.keys")).show(ui, |ui| {
-                        ui.label(format!(
+                        let line = vixel::status!(
                             "{} actions bound, {} conflicts",
                             view.keymap.bindings.len(),
                             view.keymap.conflicts().len()
-                        ));
+                        );
+                        ui.label(line.render(&view.i18n));
                         ui.label(view.tr("prefs.rebind_hint"));
                         if ui.button(view.tr("prefs.reset_bindings")).clicked() {
                             view.keymap = crate::keymap::Keymap::default();
                         }
                     });
                     egui::CollapsingHeader::new(view.tr("prefs.workspace")).show(ui, |ui| {
-                        ui.label(format!("layout: {}", view.layout.name));
+                        {
+                            let line = vixel::status!("layout: {}", view.layout.name);
+                            ui.label(line.render(&view.i18n));
+                        }
                         if ui.button(view.tr("prefs.reset_layout")).clicked() {
                             view.layout = crate::layout::Layout::default();
                             view.layout_pending = true;
@@ -778,13 +809,13 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
         .default_size([320.0, 300.0])
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label("stem");
+                ui.label(view.tr("ui.stem"));
                 ui.add(egui::TextEdit::singleline(&mut view.export_path).desired_width(200.0));
             });
             let cfg = &mut editor.export_config;
             ui.horizontal(|ui| {
                 let mut ranged = cfg.frames.is_some();
-                if ui.checkbox(&mut ranged, "frames").changed() {
+                if ui.checkbox(&mut ranged, view.tr("ui.frames")).changed() {
                     cfg.frames =
                         ranged.then_some((0, editor.sprite.frames.len().saturating_sub(1)));
                 }
@@ -795,11 +826,14 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                 }
             });
             ui.horizontal(|ui| {
-                ui.label("tag");
+                ui.label(view.tr("ui.tag_word"));
                 egui::ComboBox::from_id_salt("export_tag")
-                    .selected_text(cfg.tag.as_deref().unwrap_or("all"))
+                    .selected_text(cfg.tag.clone().unwrap_or_else(|| view.tr("ui.all")))
                     .show_ui(ui, |ui| {
-                        if ui.selectable_label(cfg.tag.is_none(), "all").clicked() {
+                        if ui
+                            .selectable_label(cfg.tag.is_none(), view.tr("ui.all"))
+                            .clicked()
+                        {
                             cfg.tag = None;
                         }
                         for tag in &editor.sprite.tags {
@@ -813,20 +847,29 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                     });
             });
             ui.horizontal(|ui| {
-                ui.label("layers");
+                ui.label(view.tr("ui.layers"));
                 egui::ComboBox::from_id_salt("export_layers")
-                    .selected_text(match cfg.layers {
-                        crate::io::ExportLayers::Visible => "visible",
-                        crate::io::ExportLayers::All => "all",
-                        crate::io::ExportLayers::Indices => "indices",
-                    })
+                    .selected_text(view.value(
+                        "exportlayers",
+                        match cfg.layers {
+                            crate::io::ExportLayers::Visible => "visible",
+                            crate::io::ExportLayers::All => "all",
+                            crate::io::ExportLayers::Indices => "indices",
+                        },
+                    ))
                     .show_ui(ui, |ui| {
                         for (mode, name) in [
                             (crate::io::ExportLayers::Visible, "visible"),
                             (crate::io::ExportLayers::All, "all"),
                             (crate::io::ExportLayers::Indices, "indices"),
                         ] {
-                            if ui.selectable_label(cfg.layers == mode, name).clicked() {
+                            if ui
+                                .selectable_label(
+                                    cfg.layers == mode,
+                                    view.value("exportlayers", name),
+                                )
+                                .clicked()
+                            {
                                 cfg.layers = mode;
                             }
                         }
@@ -842,25 +885,25 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                 }
             });
             ui.horizontal(|ui| {
-                ui.checkbox(&mut cfg.ignore_empty, "ignore empty");
-                ui.checkbox(&mut cfg.merge_duplicates, "merge dup");
-                ui.checkbox(&mut cfg.trim, "trim");
+                ui.checkbox(&mut cfg.ignore_empty, view.tr("ui.ignore_empty"));
+                ui.checkbox(&mut cfg.merge_duplicates, view.tr("ui.merge_dup"));
+                ui.checkbox(&mut cfg.trim, view.tr("ui.trim"));
             });
             ui.horizontal(|ui| {
-                ui.checkbox(&mut cfg.sheet, "sheet");
+                ui.checkbox(&mut cfg.sheet, view.tr("ui.sheet"));
                 ui.checkbox(&mut cfg.gif, "gif");
                 ui.checkbox(&mut cfg.meta, "meta");
-                ui.checkbox(&mut cfg.sequence, "sequence");
+                ui.checkbox(&mut cfg.sequence, view.tr("ui.sequence"));
             });
             if cfg.sequence {
                 ui.horizontal(|ui| {
-                    ui.label("pattern");
+                    ui.label(view.tr("ui.pattern"));
                     ui.add(egui::TextEdit::singleline(&mut cfg.filename).desired_width(180.0));
-                    ui.checkbox(&mut cfg.per_layer, "per layer");
+                    ui.checkbox(&mut cfg.per_layer, view.tr("ui.per_layer"));
                 });
             }
             ui.horizontal(|ui| {
-                ui.label("layout");
+                ui.label(view.tr("ui.layout"));
                 egui::ComboBox::from_id_salt("sheet_layout")
                     .selected_text(
                         cfg.sheet_layout
@@ -869,7 +912,7 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                     )
                     .show_ui(ui, |ui| {
                         if ui
-                            .selectable_label(cfg.sheet_layout.is_none(), "uniform")
+                            .selectable_label(cfg.sheet_layout.is_none(), view.tr("ui.uniform"))
                             .clicked()
                         {
                             cfg.sheet_layout = None;
@@ -882,7 +925,10 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                             crate::io::SheetLayout::Packed,
                         ] {
                             if ui
-                                .selectable_label(cfg.sheet_layout == Some(layout), layout.name())
+                                .selectable_label(
+                                    cfg.sheet_layout == Some(layout),
+                                    view.value("layout", layout.name()),
+                                )
                                 .clicked()
                             {
                                 cfg.sheet_layout = Some(layout);
@@ -892,7 +938,7 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
             });
             if cfg.sheet_layout.is_some() {
                 ui.horizontal(|ui| {
-                    ui.label("cols");
+                    ui.label(view.tr("ui.cols"));
                     let mut cols = cfg.columns.unwrap_or(0);
                     if ui
                         .add(egui::DragValue::new(&mut cols).range(0..=64))
@@ -900,7 +946,7 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                     {
                         cfg.columns = (cols > 0).then_some(cols);
                     }
-                    ui.label("rows");
+                    ui.label(view.tr("ui.rows"));
                     let mut rows = cfg.rows.unwrap_or(0);
                     if ui
                         .add(egui::DragValue::new(&mut rows).range(0..=64))
@@ -910,26 +956,26 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                     }
                 });
                 ui.horizontal(|ui| {
-                    ui.label("border");
+                    ui.label(view.tr("ui.border"));
                     ui.add(egui::DragValue::new(&mut cfg.border_padding).range(0..=64));
-                    ui.label("shape");
+                    ui.label(view.tr("ui.shape"));
                     ui.add(egui::DragValue::new(&mut cfg.shape_padding).range(0..=64));
                 });
                 ui.horizontal(|ui| {
-                    ui.label("inner");
+                    ui.label(view.tr("ui.inner"));
                     ui.add(egui::DragValue::new(&mut cfg.inner_padding).range(0..=64));
-                    ui.label("extrude");
+                    ui.label(view.tr("ui.extrude"));
                     ui.add(egui::DragValue::new(&mut cfg.extrude).range(0..=64));
                 });
             }
             ui.horizontal(|ui| {
-                ui.label("scale");
+                ui.label(view.tr("ui.scale"));
                 ui.add(egui::DragValue::new(&mut cfg.scale).range(1..=16));
-                ui.label("padding");
+                ui.label(view.tr("ui.padding"));
                 ui.add(egui::DragValue::new(&mut cfg.padding).range(0..=64));
             });
             ui.horizontal(|ui| {
-                ui.label("atlas");
+                ui.label(view.tr("ui.atlas"));
                 egui::ComboBox::from_id_salt("atlas_format")
                     .selected_text(cfg.atlas.name())
                     .show_ui(ui, |ui| {
@@ -947,14 +993,14 @@ fn export_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                         }
                     });
                 if cfg.gif {
-                    ui.label("loop");
+                    ui.label(view.tr("ui.loop"));
                     ui.add(egui::DragValue::new(&mut cfg.gif_loop).range(0..=1000));
-                    ui.label("colors");
+                    ui.label(view.tr("ui.colors"));
                     ui.add(egui::DragValue::new(&mut cfg.gif_colors).range(2..=256));
-                    ui.checkbox(&mut cfg.gif_dither, "dither");
+                    ui.checkbox(&mut cfg.gif_dither, view.tr("ui.dither"));
                 }
             });
-            if ui.button("export").clicked() {
+            if ui.button(view.tr("ui.export")).clicked() {
                 let stem = if view.export_path.trim().is_empty() {
                     editor
                         .path
@@ -989,12 +1035,15 @@ fn history_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
         .show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 let current = editor.undo.len();
-                if ui.selectable_label(current == 0, "base").clicked() {
+                if ui
+                    .selectable_label(current == 0, view.tr("ui.base"))
+                    .clicked()
+                {
                     editor.goto_history(0);
                 }
                 let labels = editor.history_labels();
                 for (i, label) in labels.iter().enumerate() {
-                    let text = format!("{}. {label}", i + 1);
+                    let text = format!("{}. {}", i + 1, view.text(label));
                     if ui
                         .selectable_label(editor.undo.len() == i + 1, text)
                         .clicked()
@@ -1008,7 +1057,7 @@ fn history_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
                 }
                 for (j, label) in redo.iter().enumerate() {
                     let target = editor.undo.len() + 1 + j;
-                    if ui.button(format!("↷ {label}")).clicked() {
+                    if ui.button(format!("↷ {}", view.text(label))).clicked() {
                         editor.goto_history(target);
                     }
                 }
@@ -1083,21 +1132,31 @@ fn preview_ui(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View, os: bool)
             view.preview_playing = !view.preview_playing;
             view.preview_next = None;
         }
-        ui.checkbox(&mut view.preview_loop, "loop");
+        {
+            let l = view.tr("ui.loop");
+            ui.checkbox(&mut view.preview_loop, l)
+        };
+        let zoom_prefix = view.tr("ui.zoom_prefix");
         ui.add(
             egui::DragValue::new(&mut view.preview_zoom)
                 .range(1..=16)
-                .prefix("zoom "),
+                .prefix(zoom_prefix),
         );
         if !os {
-            ui.checkbox(&mut view.preview_os, "OS window");
+            {
+                let l = view.tr("ui.os_window");
+                ui.checkbox(&mut view.preview_os, l)
+            };
         } else {
-            ui.checkbox(&mut view.preview_fullscreen, "fullscreen");
+            {
+                let l = view.tr("ui.fullscreen");
+                ui.checkbox(&mut view.preview_fullscreen, l)
+            };
         }
     });
     let mut frame = view.preview_frame + 1;
     if ui
-        .add(egui::Slider::new(&mut frame, 1..=count).text("frame"))
+        .add(egui::Slider::new(&mut frame, 1..=count).text(view.tr("ui.frame_word")))
         .changed()
     {
         view.preview_frame = frame - 1;
@@ -1135,28 +1194,31 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new("vixel").strong());
         ui.separator();
-        ui.label(format!("[{}]", mode_name(editor.mode)));
+        ui.label(format!("[{}]", view.value("mode", mode_name(editor.mode))));
         ui.separator();
 
-        for (tool, name) in [
-            (Tool::Pencil, "P"),
-            (Tool::Eraser, "E"),
-            (Tool::Bucket, "B"),
-            (Tool::Picker, "Pick"),
-            (Tool::Line, "Line"),
-            (Tool::Rect, "Rect"),
-            (Tool::Ellipse, "Ellip"),
-            (Tool::Gradient, "Grad"),
-            (Tool::Shade, "Shade"),
-            (Tool::Spray, "Spray"),
-            (Tool::Blur, "Blur"),
-            (Tool::Lasso, "Lasso"),
-            (Tool::Polygon, "Poly"),
-            (Tool::Text, "Text"),
-            (Tool::Tile, "Tile"),
-            (Tool::Move, "Move"),
+        for (tool, key) in [
+            (Tool::Pencil, "tool.pencil"),
+            (Tool::Eraser, "tool.eraser"),
+            (Tool::Bucket, "tool.bucket"),
+            (Tool::Picker, "tool.picker"),
+            (Tool::Line, "tool.line"),
+            (Tool::Rect, "tool.rect"),
+            (Tool::Ellipse, "tool.ellipse"),
+            (Tool::Gradient, "tool.gradient"),
+            (Tool::Shade, "tool.shade"),
+            (Tool::Spray, "tool.spray"),
+            (Tool::Blur, "tool.blur"),
+            (Tool::Lasso, "tool.lasso"),
+            (Tool::Polygon, "tool.polygon"),
+            (Tool::Text, "tool.text"),
+            (Tool::Tile, "tool.tile"),
+            (Tool::Move, "tool.move"),
         ] {
-            if ui.selectable_label(editor.tool == tool, name).clicked() {
+            if ui
+                .selectable_label(editor.tool == tool, view.tr(key))
+                .clicked()
+            {
                 editor.set_tool(tool);
             }
         }
@@ -1165,13 +1227,20 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         if ui
             .selectable_label(
                 editor.symmetry != Symmetry::None,
-                format!("sym:{}", editor.symmetry.name()),
+                format!(
+                    "{}:{}",
+                    view.tr("ui.sym_prefix"),
+                    view.value("sym", editor.symmetry.name())
+                ),
             )
             .clicked()
         {
             editor.cycle_symmetry();
         }
-        if ui.selectable_label(editor.filled_shapes, "fill").clicked() {
+        if ui
+            .selectable_label(editor.filled_shapes, view.tr("ui.fill"))
+            .clicked()
+        {
             editor.toggle_filled_shapes();
         }
         let gmode = if editor.gradient_radial {
@@ -1223,7 +1292,11 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         if ui
             .selectable_label(
                 editor.selection_op != SelectionOp::Replace,
-                format!("sel:{}", editor.selection_op.name()),
+                format!(
+                    "{}:{}",
+                    view.tr("ui.sel_prefix"),
+                    view.value("selop", editor.selection_op.name())
+                ),
             )
             .clicked()
         {
@@ -1231,22 +1304,22 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
 
         ui.horizontal(|ui| {
-            if ui.small_button("sel+").clicked() {
+            if ui.small_button(view.tr("ui.sel")).clicked() {
                 editor.selection_expand(1);
             }
-            if ui.small_button("sel-").clicked() {
+            if ui.small_button(view.tr("ui.sel")).clicked() {
                 editor.selection_contract(1);
             }
-            if ui.small_button("ring").clicked() {
+            if ui.small_button(view.tr("ui.ring")).clicked() {
                 editor.selection_border(1);
             }
-            if ui.small_button("soft").clicked() {
+            if ui.small_button(view.tr("ui.soft")).clicked() {
                 editor.selection_feather(2);
             }
-            if ui.small_button("inv").clicked() {
+            if ui.small_button(view.tr("ui.inv")).clicked() {
                 editor.selection_invert();
             }
-            if ui.small_button("none").clicked() {
+            if ui.small_button(view.tr("ui.none")).clicked() {
                 editor.selection_none();
             }
         });
@@ -1254,7 +1327,7 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         ui.separator();
         swatch(ui, editor.fg, true);
         swatch(ui, editor.bg, false);
-        if ui.button("swap").clicked() {
+        if ui.button(view.tr("ui.swap")).clicked() {
             editor.swap_colors();
         }
 
@@ -1287,7 +1360,10 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             ui.label(egui::RichText::new(format!(":{}", editor.cmdline)).strong());
             ui.label(egui::RichText::new("▏").weak());
         } else if let Some((name, progress)) = editor.filter_progress() {
-            ui.label(format!("filter: {name} {progress}%"));
+            {
+                let line = vixel::status!("filter: {name} {progress}%");
+                ui.label(line.render(&view.i18n));
+            }
         } else {
             ui.label(editor.msg.render(&view.i18n));
         }
@@ -1338,7 +1414,7 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
             let text = egui::RichText::new(label).color(Color32::from_rgb(rgb[0], rgb[1], rgb[2]));
             if ui
                 .selectable_label(active, text)
-                .on_hover_text("play this tag (click again to clear)")
+                .on_hover_text(view.tr("ui.play_this_tag_click_again_to_clear"))
                 .clicked()
             {
                 editor.active_tag = if active { None } else { Some(i) };
@@ -1348,11 +1424,18 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
                 }
             }
         }
-        ui.checkbox(&mut view.timeline_grid, "grid");
-        ui.checkbox(&mut view.onion.enabled, "onion");
+        {
+            let l = view.tr("ui.grid");
+            ui.checkbox(&mut view.timeline_grid, l)
+        };
+        {
+            let l = view.tr("ui.onion");
+            ui.checkbox(&mut view.onion.enabled, l)
+        };
         if view.onion.enabled {
             ui.add(egui::DragValue::new(&mut view.onion.count).range(1..=3));
-            ui.add(egui::Slider::new(&mut view.onion.opacity, 0..=255).text("op"));
+            let op = view.tr("ui.op_word");
+            ui.add(egui::Slider::new(&mut view.onion.opacity, 0..=255).text(op));
         }
         ui.separator();
 
@@ -1436,7 +1519,7 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
         }
 
         ui.separator();
-        tag_editor(ui, editor);
+        tag_editor(ui, editor, view);
         ui.separator();
         ui.label("ms:");
         let d = &mut editor.sprite.frames[editor.active_frame].duration_ms;
@@ -1465,8 +1548,8 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
                 editor.unlink_cel();
             }
         } else if ui
-            .small_button("link")
-            .on_hover_text("link this cel to the previous frame")
+            .small_button(view.tr("ui.link"))
+            .on_hover_text(view.tr("ui.link_this_cel_to_the_previous_frame"))
             .clicked()
         {
             let target = if f > 0 {
@@ -1479,18 +1562,18 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
             editor.link_cel(target);
         }
         ui.separator();
-        if ui.small_button("cel copy").clicked() {
+        if ui.small_button(view.tr("ui.cel_copy")).clicked() {
             editor.copy_cel();
         }
-        if ui.small_button("cel cut").clicked() {
+        if ui.small_button(view.tr("ui.cel_cut")).clicked() {
             editor.cut_cel();
         }
-        if ui.small_button("cel paste").clicked() {
+        if ui.small_button(view.tr("ui.cel_paste")).clicked() {
             editor.paste_cel();
         }
         if ui
-            .small_button("cel empty")
-            .on_hover_text("empty this cel but keep the frame")
+            .small_button(view.tr("ui.cel_empty"))
+            .on_hover_text(view.tr("ui.empty_this_cel_but_keep_the_frame"))
             .clicked()
         {
             editor.delete_cel();
@@ -1609,7 +1692,7 @@ fn timeline_grid(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         });
 }
 
-fn tag_editor(ui: &mut egui::Ui, editor: &mut Editor) {
+fn tag_editor(ui: &mut egui::Ui, editor: &mut Editor, view: &View) {
     ui.horizontal(|ui| {
         let idx = editor.active_tag.filter(|i| *i < editor.sprite.tags.len());
         if let Some(i) = idx {
@@ -1623,7 +1706,7 @@ fn tag_editor(ui: &mut egui::Ui, editor: &mut Editor) {
                 )
             };
             let mut changed = false;
-            ui.label("tag");
+            ui.label(view.tr("ui.tag_word"));
             changed |= ui
                 .add(egui::TextEdit::singleline(&mut name).desired_width(80.0))
                 .changed();
@@ -1643,14 +1726,14 @@ fn tag_editor(ui: &mut egui::Ui, editor: &mut Editor) {
                     color.a(),
                 ));
             }
-            if ui.small_button("del tag").clicked() {
+            if ui.small_button(view.tr("ui.del_tag")).clicked() {
                 let name = editor.sprite.tags[i].name.clone();
                 editor.del_tag(Some(&name));
             }
         }
         if ui
-            .small_button("new tag")
-            .on_hover_text("tag the active frame")
+            .small_button(view.tr("ui.new_tag"))
+            .on_hover_text(view.tr("ui.tag_the_active_frame"))
             .clicked()
         {
             let f = editor.active_frame;
@@ -1685,7 +1768,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         let light = !crate::theme::resolve(&view.theme).map_or(true, |t| t.dark);
         if ui
             .selectable_label(light, view.tr("theme.light"))
-            .on_hover_text("theme (saved in the config)")
+            .on_hover_text(view.tr("ui.theme_saved_in_the_config"))
             .clicked()
         {
             view.theme = if light { "dark".into() } else { "light".into() };
@@ -1695,7 +1778,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     });
     ui.horizontal(|ui| {
-        ui.label("background");
+        ui.label(view.tr("ui.background"));
         let mut color = editor
             .sprite
             .background_color()
@@ -1703,7 +1786,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             .unwrap_or(egui::Color32::TRANSPARENT);
         if ui
             .color_edit_button_srgba(&mut color)
-            .on_hover_text("sprite-properties background colour (:bgcolor)")
+            .on_hover_text(view.tr("ui.sprite_properties_background_colour_bgcolor"))
             .changed()
         {
             editor.set_background_color(Some(crate::color::Rgba(
@@ -1713,7 +1796,9 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                 255,
             )));
         }
-        if editor.sprite.background_color().is_some() && ui.small_button("clear").clicked() {
+        if editor.sprite.background_color().is_some()
+            && ui.small_button(view.tr("ui.clear")).clicked()
+        {
             editor.set_background_color(None);
         }
     });
@@ -1721,26 +1806,29 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         ui.label(view.tr("brush"));
         ui.add(egui::Slider::new(&mut editor.brush_size, 1..=64));
         egui::ComboBox::from_id_salt("brush_kind")
-            .selected_text(editor.brush_kind.name())
+            .selected_text(view.value("brush", editor.brush_kind.name()))
             .show_ui(ui, |ui| {
                 for kind in [BrushKind::Square, BrushKind::Circle, BrushKind::Custom] {
                     if ui
-                        .selectable_label(editor.brush_kind == kind, kind.name())
+                        .selectable_label(
+                            editor.brush_kind == kind,
+                            view.value("brush", kind.name()),
+                        )
                         .clicked()
                     {
                         editor.set_brush_kind(kind);
                     }
                 }
             });
-        ui.checkbox(&mut editor.pixel_perfect, "perfect")
-            .on_hover_text("drop L-shaped corner pixels while drawing");
+        ui.checkbox(&mut editor.pixel_perfect, view.tr("ui.perfect"))
+            .on_hover_text(view.tr("ui.drop_l_shaped_corner_pixels_while_drawing"));
     });
     ui.horizontal(|ui| {
-        ui.label("spacing");
+        ui.label(view.tr("ui.spacing"));
         ui.add(egui::Slider::new(&mut editor.brush_spacing, 1..=200).suffix("%"));
     });
     ui.horizontal(|ui| {
-        ui.label("pressure");
+        ui.label(view.tr("ui.pressure"));
         let mut pct = (editor.pressure() * 100.0).round() as u32;
         if ui
             .add(egui::Slider::new(&mut pct, 0..=100).suffix("%"))
@@ -1748,35 +1836,35 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         {
             editor.set_pressure(pct as f32 / 100.0);
         }
-        if ui.small_button("auto").clicked() {
+        if ui.small_button(view.tr("ui.auto")).clicked() {
             editor.pressure_auto();
         }
-        ui.label(editor.pressure_source());
+        ui.label(view.value("pressure", editor.pressure_source()));
     });
-    ui.collapsing("tool depth", |ui| {
+    ui.collapsing(view.tr("ui.tool_depth"), |ui| {
         ui.horizontal(|ui| {
-            ui.label("spray");
-            ui.add(egui::Slider::new(&mut editor.spray_rate, 1..=64).prefix("dots "));
+            ui.label(view.tr("ui.spray"));
+            ui.add(egui::Slider::new(&mut editor.spray_rate, 1..=64).prefix(view.tr("ui.dots_prefix")));
             ui.add(egui::Slider::new(&mut editor.spray_radius, 1..=64).prefix("r "));
         });
         ui.horizontal(|ui| {
-            ui.label("shade");
+            ui.label(view.tr("ui.shade"));
             ui.add(egui::Slider::new(&mut editor.shade_strength, 1..=100).suffix("%"));
         });
         ui.horizontal(|ui| {
-            ui.label("blur");
+            ui.label(view.tr("ui.blur"));
             ui.add(egui::Slider::new(&mut editor.blur_radius, 1..=32).prefix("r "));
         });
         ui.horizontal(|ui| {
-            ui.label("contour");
+            ui.label(view.tr("ui.contour"));
             ui.add(egui::Slider::new(&mut editor.contour_width, 1..=64).suffix(" px"));
-            ui.checkbox(&mut editor.contour_inside, "inside");
+            ui.checkbox(&mut editor.contour_inside, view.tr("ui.inside"));
         });
     });
     ui.horizontal(|ui| {
-        ui.label("ink");
+        ui.label(view.tr("ui.ink"));
         egui::ComboBox::from_id_salt("ink")
-            .selected_text(editor.ink().name())
+            .selected_text(view.value("ink", editor.ink().name()))
             .show_ui(ui, |ui| {
                 for ink in [
                     Ink::Simple,
@@ -1786,7 +1874,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                     Ink::Erase,
                 ] {
                     if ui
-                        .selectable_label(editor.ink() == ink, ink.name())
+                        .selectable_label(editor.ink() == ink, view.value("ink", ink.name()))
                         .clicked()
                     {
                         editor.set_ink(ink);
@@ -1795,51 +1883,75 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             });
         let mut lock = editor.alpha_lock;
         if ui
-            .checkbox(&mut lock, "α lock")
-            .on_hover_text("only change pixels that are already opaque")
+            .checkbox(&mut lock, view.tr("ui.lock"))
+            .on_hover_text(view.tr("ui.only_change_pixels_that_are_already_opaque"))
             .changed()
         {
             editor.set_alpha_lock(lock);
         }
     });
-    ui.checkbox(&mut view.show_grid, "pixel grid");
-    ui.checkbox(&mut view.show_aspect, "wide px")
-        .on_hover_text("render with the sprite's pixel aspect ratio");
-    ui.checkbox(&mut view.preview_open, "preview")
-        .on_hover_text("independent preview window");
-    ui.checkbox(&mut view.preview_os, "preview OS")
-        .on_hover_text("preview in a separate OS viewport");
-    ui.checkbox(&mut view.history_open, "history");
-    ui.checkbox(&mut view.export_open, "export");
-    ui.checkbox(&mut view.browser_open, "files");
-    ui.checkbox(&mut view.onion.enabled, "onion skin");
+    {
+        let l = view.tr("ui.pixel_grid");
+        ui.checkbox(&mut view.show_grid, l)
+    };
+    {
+        let l = view.tr("ui.wide_px");
+        ui.checkbox(&mut view.show_aspect, l)
+    }
+    .on_hover_text(view.tr("ui.render_with_the_sprite_s_pixel_aspect_ratio"));
+    {
+        let l = view.tr("ui.preview");
+        ui.checkbox(&mut view.preview_open, l)
+    }
+    .on_hover_text(view.tr("ui.independent_preview_window"));
+    {
+        let l = view.tr("ui.preview_os");
+        ui.checkbox(&mut view.preview_os, l)
+    }
+    .on_hover_text(view.tr("ui.preview_in_a_separate_os_viewport"));
+    {
+        let l = view.tr("ui.history");
+        ui.checkbox(&mut view.history_open, l)
+    };
+    {
+        let l = view.tr("ui.export");
+        ui.checkbox(&mut view.export_open, l)
+    };
+    {
+        let l = view.tr("ui.files");
+        ui.checkbox(&mut view.browser_open, l)
+    };
+    {
+        let l = view.tr("ui.onion_skin");
+        ui.checkbox(&mut view.onion.enabled, l)
+    };
     if view.onion.enabled {
         ui.horizontal(|ui| {
-            ui.label("count");
+            ui.label(view.tr("ui.count"));
             ui.add(egui::Slider::new(&mut view.onion.count, 1..=3));
-            ui.label("opacity");
+            ui.label(view.tr("ui.opacity"));
             ui.add(egui::Slider::new(&mut view.onion.opacity, 0..=255));
         });
         ui.horizontal(|ui| {
-            ui.label("before");
+            ui.label(view.tr("ui.before"));
             let _ = ui.color_edit_button_srgb(&mut view.onion.prev);
-            ui.label("after");
+            ui.label(view.tr("ui.after"));
             let _ = ui.color_edit_button_srgb(&mut view.onion.next);
         });
     }
     ui.horizontal(|ui| {
-        ui.checkbox(&mut editor.play_loop, "loop playback");
-        ui.checkbox(&mut editor.play_pingpong, "ping-pong");
+        ui.checkbox(&mut editor.play_loop, view.tr("ui.loop_playback"));
+        ui.checkbox(&mut editor.play_pingpong, view.tr("ui.ping_pong"));
     });
-    ui.checkbox(&mut editor.tile_mode, "tile mode (wraps)");
+    ui.checkbox(&mut editor.tile_mode, view.tr("ui.tile_mode_wraps"));
     if editor.tile_mode {
         ui.horizontal(|ui| {
-            ui.label("tiles x");
+            ui.label(view.tr("ui.tiles_x"));
             ui.add(egui::DragValue::new(&mut editor.tile_x).range(1..=8));
             ui.label("y");
             ui.add(egui::DragValue::new(&mut editor.tile_y).range(1..=8));
-            ui.checkbox(&mut editor.tile_preview, "preview");
-            ui.add(egui::Slider::new(&mut editor.tile_opacity, 0..=255).prefix("alpha "));
+            ui.checkbox(&mut editor.tile_preview, view.tr("ui.preview"));
+            ui.add(egui::Slider::new(&mut editor.tile_opacity, 0..=255).prefix(view.tr("ui.alpha_prefix")));
         });
     }
     if editor
@@ -1849,21 +1961,24 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         .is_some_and(|l| l.tilemap)
     {
         ui.horizontal(|ui| {
-            ui.label("tiles");
+            ui.label(view.tr("ui.tiles"));
             if ui
-                .selectable_label(editor.tool == Tool::Tile, "tile tool")
+                .selectable_label(editor.tool == Tool::Tile, view.tr("ui.tile_tool"))
                 .clicked()
             {
                 editor.set_tool(Tool::Tile);
             }
-            ui.checkbox(&mut editor.tile_pixel_mode, "pixel edit")
-                .on_hover_text("paint pixels on the tilemap instead of placing tiles");
+            ui.checkbox(&mut editor.tile_pixel_mode, view.tr("ui.pixel_edit"))
+                .on_hover_text(view.tr("ui.paint_pixels_on_the_tilemap_instead_of_placing_t"));
             egui::ComboBox::from_id_salt("tile_edit_mode")
-                .selected_text(match editor.tile_edit_mode {
-                    TileMode::Manual => "manual",
-                    TileMode::Auto => "auto",
-                    TileMode::Stack => "stack",
-                })
+                .selected_text(view.value(
+                    "mode",
+                    match editor.tile_edit_mode {
+                        TileMode::Manual => "manual",
+                        TileMode::Auto => "auto",
+                        TileMode::Stack => "stack",
+                    },
+                ))
                 .show_ui(ui, |ui| {
                     for (mode, name) in [
                         (TileMode::Manual, "manual"),
@@ -1871,7 +1986,10 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                         (TileMode::Stack, "stack"),
                     ] {
                         if ui
-                            .selectable_label(editor.tile_edit_mode == mode, name)
+                            .selectable_label(
+                                editor.tile_edit_mode == mode,
+                                view.value("mode", name),
+                            )
                             .clicked()
                         {
                             editor.tile_edit_mode = mode;
@@ -1885,8 +2003,8 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             );
             ui.checkbox(&mut editor.tile_flip_x, "x");
             ui.checkbox(&mut editor.tile_flip_y, "y");
-            ui.checkbox(&mut editor.tile_flip_diagonal, "diag");
-            ui.label("right-click picks");
+            ui.checkbox(&mut editor.tile_flip_diagonal, view.tr("ui.diag"));
+            ui.label(view.tr("ui.right_click_picks"));
         });
     }
     ui.horizontal(|ui| {
@@ -1915,17 +2033,23 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                     changed = true;
                 }
             });
-        let align_name = match editor.text_align {
-            1 => "center",
-            2 => "right",
-            _ => "left",
-        };
+        let align_name = view.value(
+            "align",
+            match editor.text_align {
+                1 => "center",
+                2 => "right",
+                _ => "left",
+            },
+        );
         egui::ComboBox::from_id_salt("text_align")
             .selected_text(align_name)
             .show_ui(ui, |ui| {
                 for (i, name) in ["left", "center", "right"].iter().enumerate() {
                     if ui
-                        .selectable_label(editor.text_align as usize == i, *name)
+                        .selectable_label(
+                            editor.text_align as usize == i,
+                            view.value("align", name),
+                        )
                         .clicked()
                     {
                         editor.text_align = i as u8;
@@ -1936,12 +2060,12 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         if changed && editor.tool == Tool::Text {
             editor.preview_text_object();
         }
-        if ui.button("text tool").clicked() {
+        if ui.button(view.tr("ui.text_tool")).clicked() {
             editor.set_tool(Tool::Text);
         }
         if ui
-            .button("stamp")
-            .on_hover_text("stamp at the cursor (:text)")
+            .button(view.tr("ui.stamp"))
+            .on_hover_text(view.tr("ui.stamp_at_the_cursor_text"))
             .clicked()
         {
             let (x, y) = editor.cursor;
@@ -1949,8 +2073,8 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             editor.stamp_text(&text, x, y);
         }
         if ui
-            .button("commit")
-            .on_hover_text("finish the live text edit (one undo step)")
+            .button(view.tr("ui.commit"))
+            .on_hover_text(view.tr("ui.finish_the_live_text_edit_one_undo_step"))
             .clicked()
         {
             editor.commit_text_edit();
@@ -1959,21 +2083,22 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.horizontal(|ui| {
         let mut profile = editor.sprite.color_profile;
         egui::ComboBox::from_id_salt("profile")
-            .selected_text(profile.name())
+            .selected_text(view.value("profile", profile.name()))
             .show_ui(ui, |ui| {
                 for p in [
                     crate::sprite::ColorProfile::Srgb,
                     crate::sprite::ColorProfile::Linear,
                 ] {
-                    ui.selectable_value(&mut profile, p, p.name());
+                    let label = view.value("profile", p.name());
+                    ui.selectable_value(&mut profile, p, label);
                 }
             });
         if profile != editor.sprite.color_profile {
             editor.set_color_profile(profile);
         }
-        ui.label("grid");
+        ui.label(view.tr("ui.grid"));
         ui.add(egui::Slider::new(&mut editor.grid, 1..=64));
-        ui.checkbox(&mut editor.snap, "snap");
+        ui.checkbox(&mut editor.snap, view.tr("ui.snap"));
     });
     ui.horizontal(|ui| {
         ui.label(view.tr("symmetry"));
@@ -1985,7 +2110,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             ("radial", Symmetry::Radial),
         ] {
             if ui
-                .selectable_label(editor.symmetry == mode, label)
+                .selectable_label(editor.symmetry == mode, view.value("sym", label))
                 .clicked()
             {
                 editor.symmetry = mode;
@@ -1993,28 +2118,31 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     });
     if editor.symmetry == Symmetry::Radial {
-        ui.add(egui::Slider::new(&mut editor.sym_axes, 2..=16).text("axes"));
+        ui.add(egui::Slider::new(&mut editor.sym_axes, 2..=16).text(view.tr("ui.axes")));
     }
     ui.horizontal(|ui| {
         let (cx, cy) = editor.symmetry_center();
-        ui.label(format!("centre {cx:.0},{cy:.0}"));
+        {
+            let line = vixel::status!("centre {cx:.0},{cy:.0}");
+            ui.label(line.render(&view.i18n));
+        }
         if ui
-            .small_button("cursor")
-            .on_hover_text("mirror about the cursor")
+            .small_button(view.tr("ui.cursor_word"))
+            .on_hover_text(view.tr("ui.mirror_about_the_cursor"))
             .clicked()
         {
             editor.sym_center = Some(editor.cursor);
         }
-        if ui.small_button("reset").clicked() {
+        if ui.small_button(view.tr("ui.reset")).clicked() {
             editor.sym_center = None;
         }
     });
     ui.horizontal(|ui| {
-        ui.label("tol (wand/fill)");
+        ui.label(view.tr("ui.tol_wand_fill"));
         ui.add(egui::Slider::new(&mut editor.wand_tolerance, 0..=255));
     });
-    ui.checkbox(&mut editor.contiguous, "contiguous (wand/fill)");
-    ui.checkbox(&mut editor.wand_all_layers, "wand: all layers");
+    ui.checkbox(&mut editor.contiguous, view.tr("ui.contiguous_wand_fill"));
+    ui.checkbox(&mut editor.wand_all_layers, view.tr("ui.wand_all_layers"));
     ui.separator();
 
     let mut fg = editor.fg;
@@ -2029,7 +2157,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     }
     if !editor.recent_colors.is_empty() {
         ui.horizontal_wrapped(|ui| {
-            ui.label("recent");
+            ui.label(view.tr("ui.recent"));
             for c in editor.recent_colors.clone() {
                 let col = Color32::from_rgb(c.0, c.1, c.2);
                 if ui
@@ -2045,7 +2173,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.separator();
 
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Palette").strong());
+        ui.label(egui::RichText::new(view.tr("ui.palette_heading")).strong());
         if ui.button("+fg").clicked() {
             editor.add_palette_color();
         }
@@ -2053,7 +2181,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             editor.remove_palette_color();
         }
         egui::ComboBox::from_id_salt("palette_preset")
-            .selected_text("preset")
+            .selected_text(view.tr("ui.preset"))
             .show_ui(ui, |ui| {
                 for p in crate::palette::PRESETS {
                     if ui.selectable_label(false, *p).clicked() {
@@ -2063,7 +2191,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             });
     });
     ui.horizontal(|ui| {
-        ui.label("name");
+        ui.label(view.tr("ui.name"));
         let mut name = editor.palette_name(editor.fg_idx).to_owned();
         if ui
             .add(egui::TextEdit::singleline(&mut name).desired_width(100.0))
@@ -2118,15 +2246,15 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         });
     ui.horizontal(|ui| {
         if ui
-            .small_button("from sprite")
-            .on_hover_text("palette = the frame's own colours (:pal from-sprite)")
+            .small_button(view.tr("ui.from_sprite"))
+            .on_hover_text(view.tr("ui.palette_the_frame_s_own_colours_pal_from_sprite"))
             .clicked()
         {
             editor.palette_from_sprite();
         }
         if ui
-            .selectable_label(editor.palette_lock, "lock")
-            .on_hover_text("refuse colours that are not in the palette (:pal lock)")
+            .selectable_label(editor.palette_lock, view.tr("ui.lock"))
+            .on_hover_text(view.tr("ui.refuse_colours_that_are_not_in_the_palette_pal_l"))
             .clicked()
         {
             editor.set_palette_lock(!editor.palette_lock);
@@ -2134,7 +2262,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     });
     if !editor.sprite.slices.is_empty() {
         ui.separator();
-        ui.label(egui::RichText::new("Slices").strong());
+        ui.label(egui::RichText::new(view.tr("ui.slices_heading")).strong());
         for slice in &editor.sprite.slices {
             let label = match slice.keys.first() {
                 Some(k) => format!(
@@ -2149,7 +2277,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.separator();
 
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Layers").strong());
+        ui.label(egui::RichText::new(view.tr("ui.layers_heading")).strong());
         if ui.button("^").clicked() {
             editor.move_layer_active(-1);
         }
@@ -2163,37 +2291,45 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             editor.del_layer();
         }
         if ui
-            .button("dup")
-            .on_hover_text("duplicate the active layer")
+            .button(view.tr("ui.dup"))
+            .on_hover_text(view.tr("ui.duplicate_the_active_layer"))
             .clicked()
         {
             editor.duplicate_layer();
         }
         if ui
-            .button("merge")
-            .on_hover_text("merge into the layer below")
+            .button(view.tr("ui.merge"))
+            .on_hover_text(view.tr("ui.merge_into_the_layer_below"))
             .clicked()
         {
             editor.merge_down();
         }
         if ui
-            .button("flat")
-            .on_hover_text("flatten every visible layer")
+            .button(view.tr("ui.flat"))
+            .on_hover_text(view.tr("ui.flatten_every_visible_layer"))
             .clicked()
         {
             editor.flatten();
         }
-        if ui.button("grp").on_hover_text("new group").clicked() {
+        if ui
+            .button("grp")
+            .on_hover_text(view.tr("ui.new_group"))
+            .clicked()
+        {
             editor.add_group();
         }
         if ui
             .button(">")
-            .on_hover_text("indent into group above")
+            .on_hover_text(view.tr("ui.indent_into_group_above"))
             .clicked()
         {
             editor.indent_layer(1);
         }
-        if ui.button("<").on_hover_text("outdent").clicked() {
+        if ui
+            .button("<")
+            .on_hover_text(view.tr("ui.outdent"))
+            .clicked()
+        {
             editor.indent_layer(-1);
         }
     });
@@ -2254,14 +2390,14 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                         }
                         if ui
                             .checkbox(&mut layer.visible, "")
-                            .on_hover_text("visible")
+                            .on_hover_text(view.tr("ui.visible"))
                             .changed()
                         {
                             prop_edits.push((i, before));
                         }
                         if ui
-                            .checkbox(&mut layer.editable, "edit")
-                            .on_hover_text("editable (lock)")
+                            .checkbox(&mut layer.editable, view.tr("ui.edit"))
+                            .on_hover_text(view.tr("ui.editable_lock"))
                             .changed()
                         {
                             prop_edits.push((i, before));
@@ -2269,7 +2405,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                         if !layer.group
                             && ui
                                 .selectable_label(layer.lock_movement, "mv")
-                                .on_hover_text("lock movement (cut/move/transform)")
+                                .on_hover_text(view.tr("ui.lock_movement_cut_move_transform"))
                                 .clicked()
                         {
                             layer.lock_movement = !layer.lock_movement;
@@ -2278,7 +2414,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                         if layer.group
                             && ui
                                 .selectable_label(layer.collapsed, "col")
-                                .on_hover_text("collapse this group")
+                                .on_hover_text(view.tr("ui.collapse_this_group"))
                                 .clicked()
                         {
                             layer.collapsed = !layer.collapsed;
@@ -2286,14 +2422,16 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                         }
                         if ui
                             .selectable_label(layer.reference, "ref")
-                            .on_hover_text("reference layer: traced, not painted or exported")
+                            .on_hover_text(
+                                view.tr("ui.reference_layer_traced_not_painted_or_exported"),
+                            )
                             .clicked()
                         {
                             toggle_ref = Some(i);
                         }
                         if ui
                             .selectable_label(layer.background, "bg")
-                            .on_hover_text("background layer (opaque)")
+                            .on_hover_text(view.tr("ui.background_layer_opaque"))
                             .clicked()
                         {
                             toggle_bg = Some(i);
@@ -2311,11 +2449,11 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                     });
                     ui.horizontal(|ui| {
                         ui.add_space(indent);
-                        if blend_combo(ui, i, &mut layer.blend) {
+                        if blend_combo(ui, view, i, &mut layer.blend) {
                             prop_edits.push((i, before));
                         }
                         let opacity =
-                            ui.add(egui::Slider::new(&mut layer.opacity, 0..=255).text("op"));
+                            ui.add(egui::Slider::new(&mut layer.opacity, 0..=255).text(view.tr("ui.op_word")));
                         if opacity.drag_started() {
                             prop_drag = Some((i, before));
                         }
@@ -2380,10 +2518,10 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
 
     ui.separator();
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Sprite").strong());
+        ui.label(egui::RichText::new(view.tr("ui.sprite_heading")).strong());
         let mut mode = editor.sprite.color_mode;
         egui::ComboBox::from_id_salt("colormode")
-            .selected_text(mode.name())
+            .selected_text(view.value("colormode", mode.name()))
             .show_ui(ui, |ui| {
                 for m in [
                     crate::sprite::ColorMode::Auto,
@@ -2391,7 +2529,8 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                     crate::sprite::ColorMode::Grayscale,
                     crate::sprite::ColorMode::Indexed,
                 ] {
-                    ui.selectable_value(&mut mode, m, m.name());
+                    let label = view.value("colormode", m.name());
+                    ui.selectable_value(&mut mode, m, label);
                 }
             });
         if mode != editor.sprite.color_mode {
@@ -2399,21 +2538,21 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     });
     ui.horizontal(|ui| {
-        ui.label("px ratio");
+        ui.label(view.tr("ui.px_ratio"));
         let (mut ax, mut ay) = editor.sprite.pixel_aspect;
         let cx = ui.add(egui::DragValue::new(&mut ax).range(1..=255));
         let cy = ui.add(egui::DragValue::new(&mut ay).range(1..=255));
         if (cx.changed() || cy.changed()) && (ax, ay) != editor.sprite.pixel_aspect {
             editor.set_pixel_aspect(ax, ay);
         }
-        ui.label("grid");
+        ui.label(view.tr("ui.grid"));
         let (mut gx, mut gy) = editor.sprite.grid;
         let g1 = ui.add(egui::DragValue::new(&mut gx).range(0..=1024));
         let g2 = ui.add(egui::DragValue::new(&mut gy).range(0..=1024));
         if (g1.changed() || g2.changed()) && (gx, gy) != editor.sprite.grid {
             editor.set_sprite_grid(gx, gy);
         }
-        ui.label("origin");
+        ui.label(view.tr("ui.origin"));
         let (mut ox, mut oy) = editor.sprite.grid_origin;
         let o1 = ui.add(egui::DragValue::new(&mut ox).range(-32768..=32767));
         let o2 = ui.add(egui::DragValue::new(&mut oy).range(-32768..=32767));
@@ -2424,29 +2563,35 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
 
     ui.separator();
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Transform").strong());
+        ui.label(egui::RichText::new(view.tr("ui.transform_heading")).strong());
     });
     ui.horizontal(|ui| {
-        ui.label("rot");
+        ui.label(view.tr("ui.rot"));
         ui.add(egui::DragValue::new(&mut view.rot).speed(1.0).suffix("°"));
-        ui.label("scale");
+        ui.label(view.tr("ui.scale"));
         ui.add(
             egui::DragValue::new(&mut view.scale)
                 .speed(0.05)
                 .range(0.05..=8.0),
         );
-        ui.label("skew");
+        ui.label(view.tr("ui.skew"));
         ui.add(egui::DragValue::new(&mut view.skew).speed(1.0).suffix("°"));
         ui.checkbox(&mut editor.transform_rotsprite, "rotsprite")
-            .on_hover_text("supersampled rotation instead of nearest-neighbour");
-        ui.checkbox(&mut view.transform_mode, "handles")
-            .on_hover_text("drag corner/edge/rotate handles on the canvas");
-        ui.checkbox(&mut view.transform_selection_only, "sel only")
-            .on_hover_text("handles transform the selection mask, not pixels");
+            .on_hover_text(view.tr("ui.supersampled_rotation_instead_of_nearest_neighbo"));
+        {
+            let l = view.tr("ui.handles");
+            ui.checkbox(&mut view.transform_mode, l)
+        }
+        .on_hover_text(view.tr("ui.drag_corner_edge_rotate_handles_on_the_canvas"));
+        {
+            let l = view.tr("ui.sel_only");
+            ui.checkbox(&mut view.transform_selection_only, l)
+        }
+        .on_hover_text(view.tr("ui.handles_transform_the_selection_mask_not_pixels"));
     });
     if ui
-        .button("apply transform")
-        .on_hover_text("rotate / scale / skew the selection (or the layer) about its centre")
+        .button(view.tr("ui.apply_transform"))
+        .on_hover_text(view.tr("ui.rotate_scale_skew_the_selection_or_the_layer_abo"))
         .clicked()
     {
         editor.free_transform(view.rot, view.scale, view.scale, view.skew);
@@ -2454,7 +2599,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
 
     ui.separator();
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Filter").strong());
+        ui.label(egui::RichText::new(view.tr("ui.filter_heading")).strong());
         egui::ComboBox::from_id_salt("filter")
             .selected_text(crate::editor::FILTERS[view.filter])
             .show_ui(ui, |ui| {
@@ -2464,8 +2609,8 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             });
         ui.add(egui::DragValue::new(&mut view.filter_amount).speed(1.0));
         if ui
-            .button("apply")
-            .on_hover_text("apply to the selection, or the whole layer (:filter)")
+            .button(view.tr("ui.apply"))
+            .on_hover_text(view.tr("ui.apply_to_the_selection_or_the_whole_layer_filter"))
             .clicked()
         {
             let name = crate::editor::FILTERS[view.filter];
@@ -2550,13 +2695,14 @@ fn wheel_hue(center: Pos2, pos: Pos2) -> f32 {
 }
 
 /// Blend-mode dropdown; returns whether the mode changed.
-fn blend_combo(ui: &mut egui::Ui, i: usize, blend: &mut BlendMode) -> bool {
+fn blend_combo(ui: &mut egui::Ui, view: &View, i: usize, blend: &mut BlendMode) -> bool {
     let was = *blend;
     egui::ComboBox::from_id_salt(("blend", i))
-        .selected_text(blend_name(*blend))
+        .selected_text(view.value("blend", blend_name(*blend)))
         .show_ui(ui, |ui| {
             for b in ALL_BLENDS {
-                ui.selectable_value(blend, b, blend_name(b));
+                let label = view.value("blend", blend_name(b));
+                ui.selectable_value(blend, b, label);
             }
         });
     *blend != was

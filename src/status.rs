@@ -49,7 +49,8 @@ impl Status {
         if translated == self.template {
             return self.text.clone();
         }
-        substitute(&self.template, &translated, &self.text).unwrap_or_else(|| self.text.clone())
+        substitute(&self.template, &translated, &self.text, tr)
+            .unwrap_or_else(|| self.text.clone())
     }
 
     pub fn text(&self) -> &str {
@@ -131,7 +132,12 @@ fn literal_parts(template: &str) -> Vec<String> {
 
 /// Rebuild `text` using the translated literal segments. `None` means the
 /// shapes disagree, so the caller keeps the English text.
-fn substitute(template: &str, translated: &str, text: &str) -> Option<String> {
+fn substitute(
+    template: &str,
+    translated: &str,
+    text: &str,
+    tr: &Translator,
+) -> Option<String> {
     let src = literal_parts(template);
     let dst = literal_parts(translated);
     if src.len() != dst.len() {
@@ -146,12 +152,12 @@ fn substitute(template: &str, translated: &str, text: &str) -> Option<String> {
             cursor + text[cursor..].find(from.as_str())?
         };
         if i > 0 {
-            out.push_str(&text[cursor..start]);
+            out.push_str(&tr.value(&text[cursor..start]));
         }
         out.push_str(to);
         cursor = start + from.len();
     }
-    out.push_str(&text[cursor..]);
+    out.push_str(&tr.value(&text[cursor..]));
     Some(out)
 }
 
@@ -178,6 +184,16 @@ mod tests {
         let tr = translator(&[("layer {} -> {}", "camada {} -> {}")]);
         assert_eq!(s.render(&tr), "camada 1 -> 2");
         assert_eq!(s.text(), "layer 1 -> 2", "English stays available");
+    }
+
+    #[test]
+    fn enum_values_inside_messages_are_translated() {
+        let s = Status::new("ink: {}", "ink: simple".into());
+        let mut catalog = Catalog::default();
+        catalog.messages.insert("ink: {}".into(), "tinta: {}".into());
+        catalog.values.insert("simple".into(), "simples".into());
+        let tr = Translator::new(catalog);
+        assert_eq!(s.render(&tr), "tinta: simples");
     }
 
     #[test]

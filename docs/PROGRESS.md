@@ -522,13 +522,12 @@ Read, in order:
   2 frames at 120 ms.
 105. **P6-03 — localization extraction** — `Editor::msg` is a `Status` (English
   text + `format!` template); `status!` records the template and the status line
-  re-renders translated values in place. 411 message templates + help overlay +
-  window titles + preferences labels translated to pt-BR; tests scan
-  `status!`/`.msg`/`.tr()` usage and fail on missing translations (2 tests, 284
-  total). Xvfb: `:lang pt-BR` gave "grade: 12 px", "filtro: invert (25 px)",
-  Portuguese help/prefs; `:lang en` switched back cleanly. Side-panel/timeline
-  technical words stay English (allowlisted).
-
+  re-renders translated values in place, with a value dictionary for enum names.
+  411 message templates + help overlay + window titles + preferences + side
+  panel/timeline chrome + tool labels translated to pt-BR; tests scan
+  `status!`/`.msg`/`.tr()` usage and check every key/message/value (3 tests, 286
+  total). Xvfb: `:lang pt-BR` gave `tinta: simples`, `grade: 12 px`, Portuguese
+  tools/panels/prefs; `:lang en` switched back cleanly.
 ## Next step (exact)
 
 **P6 is complete (7/7).** All P6 tasks are checked in `docs/ROADMAP.md` and
