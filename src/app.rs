@@ -40,6 +40,7 @@ impl Doc {
         view.ui_font = config.ui_font.clone();
         view.ui_font_size = config.ui_font_size;
         view.layout = config.layout.clone();
+        view.keymap = config.keymap.clone();
         view.browser_favourites = config.favourites.iter().map(PathBuf::from).collect();
         if let Some(path) = path
             && let Err(e) = editor.open_path(&path)
@@ -133,8 +134,19 @@ impl VixelApp {
     }
 
     fn new_doc(&mut self) {
-        self.docs.push(Doc::new(&self.config, None));
+        let keymap = self.docs[self.active].view.keymap.clone();
+        let mut doc = Doc::new(&self.config, None);
+        doc.view.keymap = keymap;
+        self.docs.push(doc);
         self.active = self.docs.len() - 1;
+    }
+
+    /// Switch tabs, carrying the (global) action keymap with the selection.
+    fn activate(&mut self, index: usize) {
+        let keymap = self.docs[self.active].view.keymap.clone();
+        self.docs[index].view.keymap = keymap;
+        self.docs[index].view.layout_pending = true;
+        self.active = index;
     }
 
     /// Close one tab. Dirty documents need an explicit save or force.
@@ -186,6 +198,7 @@ impl VixelApp {
         self.config.ui_font = doc.view.ui_font.clone();
         self.config.ui_font_size = doc.view.ui_font_size;
         self.config.layout = doc.view.layout.clone();
+        self.config.keymap = doc.view.keymap.clone();
         self.config.renderer = doc.editor.renderer.clone();
         self.config.recent = doc
             .editor
@@ -227,8 +240,7 @@ impl VixelApp {
             }
         });
         if let Some(i) = switch {
-            self.docs[i].view.layout_pending = true;
-            self.active = i;
+            self.activate(i);
         }
         if add {
             self.new_doc();
@@ -287,12 +299,10 @@ impl eframe::App for VixelApp {
             }
         });
         if next_tab {
-            self.active = (self.active + 1) % self.docs.len();
-            self.docs[self.active].view.layout_pending = true;
+            self.activate((self.active + 1) % self.docs.len());
         }
         if prev_tab {
-            self.active = (self.active + self.docs.len() - 1) % self.docs.len();
-            self.docs[self.active].view.layout_pending = true;
+            self.activate((self.active + self.docs.len() - 1) % self.docs.len());
         }
         if new_tab {
             self.new_doc();
@@ -365,6 +375,16 @@ impl eframe::App for VixelApp {
                 .send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
         }
+        // A configured wheel binding consumes the scroll before the canvas can
+        // treat it as zoom.
+        let scroll = ui.ctx().input(|i| i.smooth_scroll_delta.y);
+        if scroll != 0.0
+            && let Some(action) = doc.view.keymap.wheel_action(scroll > 0.0)
+        {
+            doc.view.wheel_consumed = true;
+            action.apply(&mut doc.editor, &mut doc.view, ui.ctx());
+        }
+
         input::handle_input(&mut doc.editor, &mut doc.view, ui);
 
         // Snapshot the active dirty sprite periodically. A successful save or a

@@ -17,7 +17,7 @@ pub fn handle_input(editor: &mut Editor, view: &mut View, ui: &egui::Ui) {
     let events: Vec<Event> = ui.input(|i| i.events.clone());
     for event in &events {
         match event {
-            Event::Text(text) => handle_text(editor, text),
+            Event::Text(text) => handle_text(editor, view, text),
             Event::Key {
                 key,
                 pressed: true,
@@ -152,6 +152,20 @@ fn handle_key(
 ) {
     use Key::*;
 
+    // Custom action bindings are checked first so they can override the fixed
+    // modal keymap; a moved default is swallowed rather than falling through.
+    if editor.mode == Mode::Normal {
+        if let Some(action) = view.keymap.action_for(key, mods) {
+            action.apply(editor, view, ctx);
+            view.suppress_text = key_produces_text(key, mods);
+            return;
+        }
+        if view.keymap.blocks_default(key, mods) {
+            view.suppress_text = key_produces_text(key, mods);
+            return;
+        }
+    }
+
     if mods.command {
         match key {
             R => editor.redo(),
@@ -280,12 +294,53 @@ fn handle_key(
     }
 }
 
+/// Keys that also emit an `Event::Text`, so a keymap action must suppress the
+/// follow-up character handler.
+fn key_produces_text(key: Key, mods: Modifiers) -> bool {
+    if mods.ctrl || mods.alt {
+        return false;
+    }
+    !matches!(
+        key,
+        Key::ArrowLeft
+            | Key::ArrowRight
+            | Key::ArrowUp
+            | Key::ArrowDown
+            | Key::Enter
+            | Key::Escape
+            | Key::Tab
+            | Key::Backspace
+            | Key::Delete
+            | Key::Insert
+            | Key::Home
+            | Key::End
+            | Key::PageUp
+            | Key::PageDown
+            | Key::F1
+            | Key::F2
+            | Key::F3
+            | Key::F4
+            | Key::F5
+            | Key::F6
+            | Key::F7
+            | Key::F8
+            | Key::F9
+            | Key::F10
+            | Key::F11
+            | Key::F12
+    )
+}
+
 fn paint_cursor(editor: &mut Editor) {
     let (x, y) = editor.cursor;
     editor.paint_with_tool(x, y);
 }
 
-fn handle_text(editor: &mut Editor, text: &str) {
+fn handle_text(editor: &mut Editor, view: &mut View, text: &str) {
+    if view.suppress_text {
+        view.suppress_text = false;
+        return;
+    }
     for ch in text.chars() {
         match editor.mode {
             Mode::Command => {
@@ -496,6 +551,73 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
         }
         return;
     }
+    if let Some(rest) = cmd.strip_prefix("bind")
+        && (rest.is_empty() || rest.starts_with(char::is_whitespace))
+    {
+        let rest = rest.trim();
+        if rest.is_empty() || rest == "list" {
+            let mut text = format!("bindings ({} actions):", view.keymap.bindings.len());
+            for (action, chord) in &view.keymap.bindings {
+                text.push_str(&format!(" {}={}", action.name(), chord.label()));
+            }
+            if let Some(a) = view.keymap.wheel_up {
+                text.push_str(&format!(" wheel-up={}", a.name()));
+            }
+            if let Some(a) = view.keymap.wheel_down {
+                text.push_str(&format!(" wheel-down={}", a.name()));
+            }
+            let conflicts = view.keymap.conflicts();
+            if !conflicts.is_empty() {
+                text.push_str(&format!(" CONFLICTS: {}", conflicts.len()));
+            }
+            editor.msg = text;
+        } else if rest == "reset" {
+            view.keymap = crate::keymap::Keymap::default();
+            editor.msg = "bindings: defaults restored".into();
+        } else {
+            let mut it = rest.split_whitespace();
+            let name = it.next().unwrap_or("");
+            let target = it.next();
+            let Some(action) = crate::keymap::Action::parse(name) else {
+                editor.msg = format!("unknown action '{name}' (use :bind list)");
+                return;
+            };
+            match target {
+                None => {
+                    editor.msg = format!(
+                        "usage: :bind {} <chord|wheel-up|wheel-down|none>",
+                        action.name()
+                    )
+                }
+                Some("none") => {
+                    view.keymap.unbind(action);
+                    editor.msg = format!("{}: unbound", action.name());
+                }
+                Some("wheel-up") | Some("wheel-down") => {
+                    view.keymap.set_wheel(action, target == Some("wheel-up"));
+                    editor.msg = format!("{}: {} (scroll)", action.name(), target.unwrap());
+                }
+                Some(chord) => match crate::keymap::Chord::parse(chord) {
+                    None => {
+                        editor.msg = format!("bad chord '{chord}' (e.g. ctrl-shift-z, f1, space)")
+                    }
+                    Some(chord) => {
+                        let stolen = view.keymap.set(action, chord.clone());
+                        editor.msg = match stolen {
+                            Some(old) => format!(
+                                "{} = {} (stole from {})",
+                                action.name(),
+                                chord.label(),
+                                old.name()
+                            ),
+                            None => format!("{} = {}", action.name(), chord.label()),
+                        };
+                    }
+                },
+            }
+        }
+        return;
+    }
     if let Some(rest) = cmd.strip_prefix("uifont")
         && (rest.is_empty() || rest.starts_with(char::is_whitespace))
     {
@@ -521,6 +643,10 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
         return;
     }
     exec_command(editor, &cmd);
+}
+
+pub fn save_active(editor: &mut Editor) {
+    save(editor);
 }
 
 fn save(editor: &mut Editor) {

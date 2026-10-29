@@ -631,8 +631,16 @@ met; blocked tasks are marked with the reason.
   layout seeds egui's `PanelState` to override remembered sizes. 3 tests + old
   config defaults (233 total). Xvfb smoke: animation (side hidden, 210 px
   timeline), JSON export, reset.
-- [ ] **P5-55 — Keymap customization** (M) — deps: none.
-  Action layer, key/wheel bindings, conflicts, persisted map.
+- [x] **P5-55 — Keymap customization** (M) — deps: none.
+  Landed 2026-10-28. `src/keymap.rs` defines 28 actions (undo/save/quit/tools/
+  frame/layer/zoom/grid/help/command) with default chords matching the modal
+  keys. `:bind <action> <chord|wheel-up|wheel-down|none>`, `:bind list`,
+  `:bind reset`; chords parse ctrl/alt/shift and named keys. Rebinding steals a
+  conflicting chord (reported) and suppresses the old hardcoded default;
+  keymaps are global across tabs and persist in `config.json`. Wheel actions
+  consume scroll before canvas zoom. 5 tests (238 total). Xvfb smoke: `u`
+  blocked after undo→ctrl-z, ctrl-z undid, `h`/`?` opened help, `wheel-down`
+  zoomed.
 - [ ] **P5-56 — Localization infrastructure** (M) — deps: none.
   String extraction, language files, runtime switch.
 - [ ] **P5-57 — Preferences dialog** (M) — deps: none.

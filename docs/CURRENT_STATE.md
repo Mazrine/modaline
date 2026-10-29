@@ -136,6 +136,9 @@ L-shaped corners for the 1 px pencil/eraser.
   transparency checkerboard, cursor + selection + floating-paste previews.
   **Wide pixels** render at the sprite's `pixel_aspect` (checkbox "wide px");
   grids, hit-testing, fit, zoom anchoring and handles all follow the cell.
+- **keymap customization**: 28 actions with default chords; `:bind` rebinds,
+  steals/reports conflicts, unbinds or maps `wheel-up`/`wheel-down`, lists and
+  resets. Bindings are global across tabs and persisted in `config.json`.
 - **workspace layouts**: four built-ins (`default`, `drawing`, `animation`,
   `compact`) and JSON layouts; `:layout` applies/resets/saves; panel visibility,
   side width and timeline height persist per tab and in `config.json`.

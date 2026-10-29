@@ -215,8 +215,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 |---|---|---|
 | Preferences dialog | Partial (side panel + config) | P5-57 |
 | Themes + font customization | Covered (4 built-ins, JSON themes, UI font/size) | P5-53 |
-| Keyboard shortcut customization | Missing | P5-55 |
-| Mouse-wheel customization | Missing | P5-55 |
+| Keyboard shortcut customization | Covered (actions, rebinding, conflicts, persisted) | P5-55 |
+| Mouse-wheel customization | Covered (wheel-up/down actions) | P5-55 |
 | Workspace layouts | Covered (4 built-ins, JSON layouts, reset, drag sizes) | P5-54 |
 | Localization | Missing | P5-56 |
 

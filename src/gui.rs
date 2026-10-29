@@ -68,6 +68,13 @@ pub struct View {
     /// Apply the saved sizes on the next frame, overriding egui's remembered
     /// panel size after a layout/tab change.
     pub layout_pending: bool,
+    /// Custom action bindings.
+    pub keymap: crate::keymap::Keymap,
+    /// Set when a wheel binding consumed this frame's scroll.
+    pub wheel_consumed: bool,
+    /// A keymap action consumed a key whose character would otherwise be
+    /// handled again by `Event::Text`.
+    pub suppress_text: bool,
     /// Mirrored from the editor each frame: 0 = no snapping.
     pub snap_grid: u32,
     pub onion: Onion,
@@ -141,6 +148,9 @@ impl View {
             ui_font_size: 13.0,
             layout: crate::layout::Layout::default(),
             layout_pending: true,
+            keymap: crate::keymap::Keymap::default(),
+            wheel_consumed: false,
+            suppress_text: false,
             snap_grid: 0,
             onion: Onion::default(),
             drag_frame: None,
@@ -3027,7 +3037,12 @@ fn canvas_input(
         return;
     }
 
-    let scroll = ui.input(|i| i.smooth_scroll_delta.y);
+    let scroll = if view.wheel_consumed {
+        0.0
+    } else {
+        ui.input(|i| i.smooth_scroll_delta.y)
+    };
+    view.wheel_consumed = false;
     if scroll != 0.0
         && let Some(pos) = resp.hover_pos()
     {
@@ -3249,6 +3264,7 @@ const HELP: &[&str] = &[
     "  :theme [dark|light|midnight|paper|file.json]   :theme save <file>",
     "  :uifont <font.ttf|default> [8-32]   (UI font and size, saved in config)",
     "  :layout [default|drawing|animation|compact|file.json]   :layout reset|save <file>",
+    "  :bind <action> <chord|wheel-up|wheel-down|none>   :bind list|reset",
     "  :slices [<dir> [cols rows|named]]   (list, grid export, or named slices)",
     "  :grad linear|radial   :contour   :textobj <text>   (editable text object)",
     "  :textfont vixel   :textsize <8-64>   :textalign left|center|right",
