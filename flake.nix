@@ -28,7 +28,6 @@
         version = "0.1.0";
         src = self;
         cargoLock.lockFile = ./Cargo.lock;
-        useFetchCargoVendor = true;
 
         nativeBuildInputs = with pkgs; [ makeWrapper pkg-config ];
         buildInputs = runtimeLibs;
