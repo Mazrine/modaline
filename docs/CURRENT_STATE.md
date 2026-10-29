@@ -53,6 +53,10 @@ L-shaped corners for the 1 px pencil/eraser.
   global via `:contig`, with **tolerance** and optional **all-layers**
   matching), **lasso** (`L`, freehand mouse drag), and **polygon** (`P`, click
   vertices, `Enter` closes).
+- **Cel clipboard**: `:celcopy` / `:celcut` / `:celpaste` move whole cels
+  across layers and frames (links resolved; one undo step), `:celdel` empties a
+  cel while keeping the frame, and `:celinfo` reports emptiness. Timeline cel
+  row exposes opacity, z-index, link/unlink and copy/cut/paste/empty.
 - **Multi-cel selection**: Ctrl/Cmd-click toggles a timeline frame or layer,
   Shift-click selects a range (`:celselect`, `:celclear`). Paint and exact
   writes fan out to every selected cel; transforms run per cel as one undo;

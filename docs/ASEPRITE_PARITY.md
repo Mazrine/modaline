@@ -28,8 +28,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Onion skin: count, opacity, tints | Covered | — |
 | Timeline thumbnails | Covered | — |
 | Multi-cel selection (layer×frame) | Covered | P5-34 |
-| Cel copy/paste across frames/layers | Missing | P5-35 |
-| Empty cel vs empty frame | Missing | P5-35 |
+| Cel copy/paste across frames/layers | Covered | P5-35 |
+| Empty cel vs empty frame | Covered | P5-35 |
 | Linked cels (authoring + write) | Covered | P5-12 |
 | Cel z-index | Covered | P5-11 |
 | Timeline layer×frame grid + per-cel cells | Missing | P5-37 |

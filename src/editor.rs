@@ -414,6 +414,8 @@ pub struct Editor {
     pub select_anchor: Option<(u32, u32)>,
     pub selection: Option<Selection>,
     pub clipboard: Option<Clipboard>,
+    /// Whole-cel clipboard for copy/paste across layers and frames.
+    pub cel_clipboard: Option<Cel>,
     pub paste_pos: Option<(u32, u32)>,
     pub cmdline: String,
     pub msg: String,
@@ -528,6 +530,7 @@ impl Editor {
             select_anchor: None,
             selection: None,
             clipboard: None,
+            cel_clipboard: None,
             paste_pos: None,
             cmdline: String::new(),
             msg: "press ? for help".into(),
@@ -683,6 +686,91 @@ impl Editor {
     /// Explicitly selected cels plus the active one.
     pub fn selected_cels(&self) -> Vec<(usize, usize)> {
         self.cel_targets()
+    }
+
+    fn active_cel_content(&self) -> Cel {
+        let (l, f) = (self.active_layer, self.active_frame);
+        let mut cel = self.sprite.cels[l][f].clone();
+        let mut hops = 0;
+        while let Some(target) = cel.link {
+            if target >= self.sprite.frames.len() || hops > self.sprite.frames.len() {
+                break;
+            }
+            cel = self.sprite.cels[l][target].clone();
+            hops += 1;
+        }
+        cel.link = None;
+        cel
+    }
+
+    /// Copy the active cel (resolving links) to the cel clipboard.
+    pub fn copy_cel(&mut self) {
+        let cel = self.active_cel_content();
+        self.msg = format!("cel copied ({}x{})", cel.w, cel.h);
+        self.cel_clipboard = Some(cel);
+    }
+
+    /// Copy the active cel, then empty it (one undo step).
+    pub fn cut_cel(&mut self) {
+        let cel = self.active_cel_content();
+        self.cel_clipboard = Some(cel);
+        let before = self.sprite.clone();
+        let (l, f) = (self.active_layer, self.active_frame);
+        self.empty_cel_at(l, f);
+        self.snapshot(before);
+        self.msg = "cel cut".into();
+    }
+
+    /// Paste the cel clipboard into the active cel.
+    pub fn paste_cel(&mut self) {
+        let Some(mut cel) = self.cel_clipboard.clone() else {
+            self.msg = "cel clipboard is empty".into();
+            return;
+        };
+        if !self.sprite.layer_editable(self.active_layer) {
+            self.msg = "layer is locked or hidden".into();
+            return;
+        }
+        cel.link = None;
+        let before = self.sprite.clone();
+        let (l, f) = (self.active_layer, self.active_frame);
+        self.sprite.cels[l][f] = cel;
+        self.snapshot(before);
+        self.msg = "cel pasted".into();
+    }
+
+    /// Empty the active cel but keep the frame.
+    pub fn delete_cel(&mut self) {
+        let (l, f) = (self.active_layer, self.active_frame);
+        let before = self.sprite.clone();
+        self.empty_cel_at(l, f);
+        self.snapshot(before);
+        self.msg = "cel emptied (frame kept)".into();
+    }
+
+    fn empty_cel_at(&mut self, layer: usize, frame: usize) {
+        let (z, op) = {
+            let cel = &self.sprite.cels[layer][frame];
+            (cel.z_index, cel.opacity)
+        };
+        let mut cel = Cel::blank(0, 0);
+        cel.z_index = z;
+        cel.opacity = op;
+        self.sprite.cels[layer][frame] = cel;
+        self.touch();
+    }
+
+    pub fn cel_is_empty(&self, layer: usize, frame: usize) -> bool {
+        self.sprite
+            .cels
+            .get(layer)
+            .and_then(|f| f.get(frame))
+            .is_none_or(|cel| {
+                cel.link.is_none()
+                    && cel.user_data.is_none()
+                    && cel.tilemap.is_none()
+                    && cel.pixels.iter().all(|p| p.3 == 0)
+            })
     }
 
     /// Export every selected cel to `dir` as `l<layer>_f<frame>.png`.
@@ -5701,6 +5789,34 @@ mod tests {
         assert_eq!(e.export_cels(&dir).unwrap(), 2);
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cel_copy_cut_paste_and_empty_cel_vs_frame() {
+        let mut e = Editor::new(2, 2);
+        let red = Rgba::rgb(200, 0, 0);
+        e.sprite.set(0, 0, 1, 1, red);
+        e.copy_cel();
+        e.sprite.add_frame_after(0);
+        e.active_frame = 1;
+        e.paste_cel();
+        assert_eq!(e.sprite.get(0, 1, 1, 1), red);
+        e.undo();
+        assert_eq!(e.sprite.get(0, 1, 1, 1), Rgba::TRANSPARENT);
+
+        e.active_frame = 0;
+        e.cut_cel();
+        assert!(e.cel_is_empty(0, 0));
+        assert_eq!(e.sprite.get(0, 0, 1, 1), Rgba::TRANSPARENT);
+        e.paste_cel();
+        assert_eq!(e.sprite.get(0, 0, 1, 1), red);
+
+        let frames = e.sprite.frames.len();
+        e.delete_cel();
+        assert_eq!(e.sprite.frames.len(), frames, "empty cel keeps the frame");
+        assert!(e.cel_is_empty(0, 0));
+        e.del_frame();
+        assert_eq!(e.sprite.frames.len(), frames - 1, "del_frame removes it");
     }
 
     #[test]

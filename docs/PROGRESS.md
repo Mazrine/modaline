@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **200 tests green** (189 lib + 11 bin)
+- `cargo test` → **201 tests green** (190 lib + 11 bin)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-34 multi-cel selection** (see batch 71).
+- Last completed batch: **P5-35 cel operations** (see batch 72).
 
 ## How to resume
 
@@ -392,6 +392,10 @@ Read, in order:
   timeline modifiers, paint/exact-write fan-out, per-cel transform loop with one
   undo, `:exportcels` PNG fan-out, `:celselect|:celclear`. 2 new tests (200
   total): fan-out and range selection.
+72. **P5-35 — cel operations** — whole-cel clipboard with link-resolving
+  copy/cut/paste, `:celdel` empty-cel vs `:delframe`, `:celinfo`, and timeline
+  copy/cut/paste/empty buttons beside z/link controls. 1 new test (201 total):
+  copy/paste/cut and empty-cel-vs-frame.
 
 ## Next step (exact)
 
@@ -400,7 +404,7 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-35** — cel operations (first open task), then continue down the P5 roadmap
+- **P5-36** — preview window (first open task), then continue down the P5 roadmap
   in dependency order.
 
 ## Known limitations (do not forget)

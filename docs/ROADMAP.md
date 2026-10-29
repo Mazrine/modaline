@@ -469,8 +469,15 @@ met; blocked tasks are marked with the reason.
   `l<layer>_f<frame>.png` per selected cel. Commands: `:celselect`,
   `:celclear`, `:exportcels`. 2 new tests (200 total): paint/transform/export
   fan-out and range selection. Timeline modifiers are UI-only (manual check).
-- [ ] **P5-35 — Cel operations** (M) — deps: P5-11, P5-12, P5-34.
-  Copy/paste cels, empty cel vs frame, z/link controls in the timeline.
+- [x] **P5-35 — Cel operations** (M) — deps: P5-11, P5-12, P5-34.
+  Landed 2026-10-28. Whole-cel clipboard (`Cel`) with copy/cut/paste that
+  resolves links and works across layers/frames; cut/paste are one undo step.
+  `:celdel` empties the active cel but keeps the frame (distinct from
+  `:delframe`), with `:celinfo` reporting emptiness. Timeline cel controls keep
+  opacity, z-index and link/unlink plus copy/cut/paste/empty buttons. Commands:
+  `:celcopy`, `:celcut`, `:celpaste`, `:celdel`, `:celinfo`. 1 new test (201
+  total): copy/paste/cut and empty-cel-vs-frame. Timeline buttons are UI-only
+  (manual check).
 - [ ] **P5-36 — Preview window** (M) — deps: none.
   In-window preview + optional OS viewport; independent playback/zoom/loop,
   fullscreen.

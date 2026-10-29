@@ -118,6 +118,7 @@ keyboard-first, but the mouse is fully wired.)
 | `:tileid <n>` / `:tileflip x\|y\|diag\|none` / `:tilemode manual\|auto\|stack\|pixel` | tile brush ID/flips and editing mode |
 | `:exporttileset [out.png]` | export the retained tileset atlas |
 | `:celselect <layer> <frame>` / `:celclear` / `:exportcels <dir>` | multi-cel selection and per-cel PNG export |
+| `:celcopy` / `:celcut` / `:celpaste` / `:celdel` / `:celinfo` | whole-cel clipboard, empty cel vs frame, cel status |
 | `vixel --export-tileset in.ase [out.png]` | headless atlas export |
 | `:tilepick` / `:tileerase` | pick the tile under the cursor / place the empty tile |
 | `:fliph` / `:flipv` / `:rot90` | mirror H / V / rotate 90° (selection if any, else whole sprite) |

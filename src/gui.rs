@@ -560,6 +560,23 @@ fn timeline(ui: &mut egui::Ui, editor: &mut Editor, playing: &mut bool, view: &m
             };
             editor.link_cel(target);
         }
+        ui.separator();
+        if ui.small_button("cel copy").clicked() {
+            editor.copy_cel();
+        }
+        if ui.small_button("cel cut").clicked() {
+            editor.cut_cel();
+        }
+        if ui.small_button("cel paste").clicked() {
+            editor.paste_cel();
+        }
+        if ui
+            .small_button("cel empty")
+            .on_hover_text("empty this cel but keep the frame")
+            .clicked()
+        {
+            editor.delete_cel();
+        }
     });
 }
 
@@ -2297,6 +2314,7 @@ const HELP: &[&str] = &[
     "  :tileid <n>   :tileflip x|y|diag|none   :tilemode manual|auto|stack|pixel",
     "  :tilepick   :tileerase   :exporttileset [out.png]   (--export-tileset headless)",
     "  :celselect <layer> <frame>   :celclear   :exportcels <dir>",
+    "  :celcopy   :celcut   :celpaste   :celdel (empty cel)   :celinfo",
     "  Ctrl/Cmd-click toggles a cel; Shift-click selects a timeline range",
     "  t                  toggle filled shapes (rect / ellipse)",
     "  , / .              prev / next color",
