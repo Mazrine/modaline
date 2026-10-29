@@ -5,12 +5,12 @@
 
 ## Status snapshot
 
-- `cargo test` → **224 tests green** (205 lib + 14 bin + 5 CLI)
+- `cargo test` → **228 tests green** (205 lib + 18 bin + 5 CLI)
 - `cargo clippy --all-targets` → **clean**
 - `cargo build --features wgpu` → **clean**; runs headless under Xvfb
 - App launches on NixOS via `steam-run` (the plain loader can't find the
   wayland/xkbcommon libs).
-- Last completed batch: **P5-48 scripting decision** (see batch 85).
+- Last completed batch: **P5-52 multi-document tabs** (see batch 86).
 
 ## How to resume
 
@@ -439,6 +439,10 @@ Read, in order:
   Rhai, QuickJS/WASM, Python and JSON Op; chose Lua/mlua 0.10 for Aseprite
   compatibility, with sandbox/limits/API plan. Offline check found no mlua
   source/cache, so P5-49/P5-50/P5-51 are Blocked (dependency, not design).
+86. **P5-52 — multi-document tabs** — `Doc` vector with per-doc editor/view/
+  textures/playback, tab strip, Ctrl-Tab/Shift-Tab/T/W, dirty close guards,
+  session restore (paths + active). 4 unit tests (228 total); Xvfb smoke showed
+  two tabs and tab switching. Fixed per-event chord modifiers.
 
 ## Next step (exact)
 
@@ -447,8 +451,8 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P5)
 
-- **P5-52** — multi-document/tabs (first unblocked task; P5-49/50/51 are blocked
-  on offline `mlua`), then continue down the P5 roadmap.
+- **P5-53** — themes and font customization (first open task), then continue
+  down the P5 roadmap.
 
 ## Known limitations (do not forget)
 

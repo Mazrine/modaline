@@ -41,7 +41,7 @@ thin shells:
 | `config.rs` | `config.json` load/save + the autosave `recovery.vpx` path |
 | `input.rs` | vim keymap + `:` command line (reads `egui::Event`) |
 | `gui.rs` | `View` (zoom/pan), canvas drawing, panels, help overlay |
-| `app.rs` | `eframe::App`: event loop, playback timer, texture upload |
+| `app.rs` | `eframe::App` + `Doc` tabs: event loop, per-doc view/textures, playback, session persistence |
 | `lib.rs` | The **model** half as a library (`ase`, `color`, `editor`, `io`, `ops`, `palette`, `sprite`) with no GUI dependency, so another tool can read/composite/write a `.vpx` without launching the editor |
 | `main.rs` | `run_native` + shell module wiring; takes an optional file path argument |
 

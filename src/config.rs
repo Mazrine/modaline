@@ -33,6 +33,9 @@ pub struct Config {
     pub recent: Vec<String>,
     /// Favourite directories in the in-app file browser.
     pub favourites: Vec<String>,
+    /// Open document paths restored on launch.
+    pub session: Vec<String>,
+    pub session_active: usize,
     /// Free-form entries a future build can read; round-tripped, never guessed.
     pub extra: BTreeMap<String, String>,
 }
@@ -101,6 +104,8 @@ impl Default for Config {
             renderer: "glow".into(),
             recent: Vec::new(),
             favourites: Vec::new(),
+            session: Vec::new(),
+            session_active: 0,
             extra: BTreeMap::new(),
         }
     }

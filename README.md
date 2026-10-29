@@ -58,6 +58,8 @@ Modal, like vim. Start in **normal** mode.
 | `Ctrl-c` / `Ctrl-x` / `Ctrl-v` | copy / cut / paste (OS clipboard; no selection copies the whole cel) |
 | `Ctrl-z` | undo (alias of `u`) |
 | `Ctrl-s` / `Ctrl-q` | save / quit |
+| `Ctrl-Tab` / `Ctrl-Shift-Tab` | next / previous document tab |
+| `Ctrl-t` / `Ctrl-w` | new / close document tab |
 
 ### Draw mode (`i`)
 

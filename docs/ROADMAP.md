@@ -603,9 +603,16 @@ met; blocked tasks are marked with the reason.
 
 ### Epic 10 — App shell and UX
 
-- [ ] **P5-52 — Multi-document/tabs** (L) — deps: none.
-  `Vec<Doc>` + active index, per-doc state, session persistence, aggregated
-  dirty close, tab keys.
+- [x] **P5-52 — Multi-document/tabs** (L) — deps: none.
+  Landed 2026-10-28. `Vec<Doc>` (editor, view, textures, playback timer) with an
+  active index; tab strip with dirty markers, close/new buttons; Ctrl/Cmd-Tab
+  cycles, Ctrl/Cmd-Shift-Tab reverses, Ctrl/Cmd-T opens, Ctrl/Cmd-W closes.
+  Session paths + active index persist in `config.json` and restore on launch;
+  drops open a new tab. Dirty tabs refuse close, window close checks every tab,
+  and `:q` refuses while another tab is dirty (only active `:q!` discards all).
+  4 unit tests + Xvfb/twm smoke (2 tabs, Ctrl+T, Ctrl+Tab): 228 total.
+  Fixed chord detection to read per-event modifiers (frame-end modifiers lost
+  fast Ctrl+T).
 - [ ] **P5-53 — Themes** (M) — deps: none.
   Theme file format + built-ins; font customization.
 - [ ] **P5-54 — Workspace layouts** (M) — deps: P5-52.

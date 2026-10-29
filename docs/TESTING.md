@@ -66,6 +66,7 @@ Rules that cost me a run each:
 | onion skin | 3 frames, different glyph each, frame 0 active | neighbours show as red/green ghosts |
 | playback | click `play` | the canvas content changes between screenshots at 0.4 s and 0.9 s |
 | config | `:renderer wgpu`, quit, relaunch | `config.json` has `"renderer": "wgpu"`; a glow-only build logs `built without the wgpu feature; using glow`, a `--features wgpu` build initialises EGL instead |
+| tabs | `Ctrl-t`, screenshot; `Ctrl-Tab`, screenshot | two `untitled` tabs, active marker moves; the strip shows `×` and `+`; `Ctrl-w` closes (dirty tabs refuse) |
 
 ## Checking a screenshot
 

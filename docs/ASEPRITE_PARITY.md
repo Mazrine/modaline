@@ -224,7 +224,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 
 | Capability | Status | Task |
 |---|---|---|
-| Multiple documents / tabs | Missing | P5-52 |
+| Multiple documents / tabs | Covered (tab strip, per-doc state, session restore) | P5-52 |
 | Preview window / fullscreen | Covered | P5-36 |
 | Linear undo/redo (strokes, structural, properties) | Covered | — |
 | Undo history panel | Covered | P5-38 |
