@@ -104,11 +104,35 @@ pub fn is_image(path: &Path) -> bool {
     })
 }
 
+/// PCX (ZSoft Paintbrush) image, import-only.
+pub fn is_pcx(path: &Path) -> bool {
+    path.extension()
+        .map(|e| e.to_string_lossy())
+        .is_some_and(|e| e.eq_ignore_ascii_case("pcx"))
+}
+
+/// Autodesk Animator FLI or Animator Pro FLC.
+pub fn is_flic(path: &Path) -> bool {
+    path.extension()
+        .map(|e| e.to_string_lossy())
+        .is_some_and(|e| e.eq_ignore_ascii_case("flc") || e.eq_ignore_ascii_case("fli"))
+}
+
+/// Formats `load_any` can turn into a sprite, including the legacy codecs that
+/// are import-only (PCX, FLC/FLI).
+pub fn is_importable(path: &Path) -> bool {
+    is_image(path) || is_pcx(path) || is_flic(path)
+}
+
 /// Load whatever file vixel can open, dispatched on the extension. The one
 /// place that dispatch lives, so `:open` and the command line cannot drift.
 pub fn load_any(path: &Path) -> Result<Sprite> {
     if is_ase(path) {
         crate::ase::load(path)
+    } else if is_pcx(path) {
+        import_pcx(path)
+    } else if is_flic(path) {
+        import_flic(path)
     } else if is_image(path) {
         import_image(path)
     } else {
@@ -1248,6 +1272,69 @@ pub fn import_image(path: &Path) -> Result<Sprite> {
     Ok(sprite)
 }
 
+/// Import a PCX (ZSoft Paintbrush) image. PCX has no alpha, so imported
+/// pixels are opaque; paletted files are expanded through their palette.
+pub fn import_pcx(path: &Path) -> Result<Sprite> {
+    let mut reader =
+        pcx::Reader::from_file(path).with_context(|| format!("open {}", path.display()))?;
+    let (w, h) = (reader.width() as u32, reader.height() as u32);
+    if w == 0 || h == 0 {
+        bail!("{}: empty PCX", path.display());
+    }
+    let mut rgb = vec![0u8; (w as usize) * (h as usize) * 3];
+    reader
+        .read_rgb_pixels(&mut rgb)
+        .with_context(|| format!("decode {}", path.display()))?;
+    let mut sprite = Sprite::new(w, h);
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 3) as usize;
+            sprite.set(0, 0, x, y, Rgba(rgb[i], rgb[i + 1], rgb[i + 2], 255));
+        }
+    }
+    Ok(sprite)
+}
+
+/// Import an Autodesk Animator FLI / Animator Pro FLC animation. Every frame
+/// becomes a sprite frame and all frames use the file's playback speed.
+pub fn import_flic(path: &Path) -> Result<Sprite> {
+    let mut flic =
+        flic::FlicFile::open(path).with_context(|| format!("open {}", path.display()))?;
+    let w = flic.width() as u32;
+    let h = flic.height() as u32;
+    let count = flic.frame_count() as usize;
+    if w == 0 || h == 0 || count == 0 {
+        bail!("{}: empty FLIC", path.display());
+    }
+    let delay = flic.speed_msec().clamp(1, u16::MAX as u32) as u16;
+    let mut sprite = Sprite::new(w, h);
+    let mut pixels = vec![0u8; (w as usize) * (h as usize)];
+    let mut palette = vec![0u8; 3 * 256];
+    for frame in 0..count {
+        if frame > 0 {
+            sprite.add_frame_after(sprite.frames.len() - 1);
+        }
+        let index = sprite.frames.len() - 1;
+        sprite.frames[index].duration_ms = delay;
+        let mut raster = flic::RasterMut::new(w as usize, h as usize, &mut pixels, &mut palette);
+        flic.read_next_frame(&mut raster)
+            .with_context(|| format!("decode {} frame {frame}", path.display()))?;
+        for y in 0..h {
+            for x in 0..w {
+                let p = pixels[(y * w + x) as usize] as usize * 3;
+                sprite.set(
+                    0,
+                    index,
+                    x,
+                    y,
+                    Rgba(palette[p], palette[p + 1], palette[p + 2], 255),
+                );
+            }
+        }
+    }
+    Ok(sprite)
+}
+
 /// The sidecar `:export` writes beside a sheet: `<stem>.json` for
 /// `<stem>.sheet.png`, else the same stem with `.json`.
 fn meta_beside(path: &Path) -> PathBuf {
@@ -1512,7 +1599,7 @@ pub fn import_sequence_dir(dir: &Path) -> Result<Sprite> {
         .with_context(|| format!("read {}", dir.display()))?
         .flatten()
         .map(|e| e.path())
-        .filter(|p| is_image(p))
+        .filter(|p| is_importable(p))
         .collect();
     if files.is_empty() {
         bail!("no image files in {}", dir.display());
@@ -1547,32 +1634,40 @@ fn natural_key(s: &str) -> Vec<(u64, String)> {
     out
 }
 
-/// Import explicit image files as animation frames.
+/// Import explicit image files as animation frames. PCX contributes one frame;
+/// an FLC/FLI contributes all of its frames (and playback speed).
 pub fn import_sequence(files: &[PathBuf]) -> Result<Sprite> {
     if files.is_empty() {
         bail!("no frames to import");
     }
-    let images: Vec<image::RgbaImage> = files
-        .iter()
-        .map(|p| {
-            image::open(p)
-                .with_context(|| format!("open {}", p.display()))
-                .map(|i| i.to_rgba8())
-        })
-        .collect::<Result<_>>()?;
-    let w = images.iter().map(|i| i.width()).max().unwrap_or(1);
-    let h = images.iter().map(|i| i.height()).max().unwrap_or(1);
-    let mut sprite = Sprite::new(w, h);
-    for (i, img) in images.iter().enumerate() {
-        if i > 0 {
-            sprite.add_frame_after(sprite.frames.len() - 1);
-        }
-        for y in 0..img.height().min(h) {
-            for x in 0..img.width().min(w) {
-                let p = img.get_pixel(x, y);
-                let c = Rgba(p[0], p[1], p[2], p[3]);
-                if !c.is_transparent() {
-                    sprite.set(0, i, x, y, c);
+    let mut parts = Vec::with_capacity(files.len());
+    for path in files {
+        parts.push(if is_pcx(path) {
+            import_pcx(path)?
+        } else if is_flic(path) {
+            import_flic(path)?
+        } else {
+            import_image(path)?
+        });
+    }
+    let w = parts.iter().map(|s| s.width).max().unwrap_or(1);
+    let h = parts.iter().map(|s| s.height).max().unwrap_or(1);
+    let mut sprite = Sprite::new(w.max(1), h.max(1));
+    let mut first = true;
+    for part in &parts {
+        for frame in 0..part.frames.len() {
+            if !first {
+                sprite.add_frame_after(sprite.frames.len() - 1);
+            }
+            first = false;
+            let index = sprite.frames.len() - 1;
+            sprite.frames[index].duration_ms = part.frames[frame].duration_ms;
+            for y in 0..part.height.min(h) {
+                for x in 0..part.width.min(w) {
+                    let c = part.get(0, frame, x, y);
+                    if !c.is_transparent() {
+                        sprite.set(0, index, x, y, c);
+                    }
                 }
             }
         }
@@ -1660,6 +1755,84 @@ pub fn import_sheet(path: &Path, cols: u32, rows: u32) -> Result<Sprite> {
 mod tests {
     use super::*;
     use crate::color::Rgba;
+
+    /// Regenerate the legacy-format fixtures (run with `--ignored`).
+    #[test]
+    #[ignore = "writes tests/fixtures/*"]
+    fn generate_legacy_codec_fixtures() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        std::fs::create_dir_all(&dir).unwrap();
+        let pcx_path = dir.join("sample.pcx");
+        let mut w = pcx::WriterRgb::create_file(&pcx_path, (4, 3), (72, 72)).unwrap();
+        for row in [
+            [255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255],
+            [0, 0, 0, 128, 128, 128, 255, 255, 0, 0, 255, 255],
+            [255, 0, 255, 12, 34, 56, 90, 80, 70, 255, 128, 0],
+        ] {
+            w.write_row(&row).unwrap();
+        }
+        drop(w);
+
+        let flc_path = dir.join("sample.flc");
+        let mut w = flic::FlicFileWriter::create(&flc_path, 8, 8, 120).unwrap();
+        let mut pal = vec![0u8; 3 * 256];
+        pal[3..6].copy_from_slice(&[255, 0, 0]);
+        pal[6..9].copy_from_slice(&[0, 0, 255]);
+        let first = vec![1u8; 8 * 8];
+        let mut second = first.clone();
+        second[0..32].fill(2);
+        {
+            let raster = flic::Raster::new(8, 8, &first, &pal);
+            w.write_next_frame(None, &raster).unwrap();
+        }
+        {
+            let raster = flic::Raster::new(8, 8, &second, &pal);
+            w.write_next_frame(Some(&flic::Raster::new(8, 8, &first, &pal)), &raster)
+                .unwrap();
+        }
+        {
+            // Ring frame: the player loops back to the first frame.
+            let raster = flic::Raster::new(8, 8, &first, &pal);
+            w.write_next_frame(Some(&flic::Raster::new(8, 8, &second, &pal)), &raster)
+                .unwrap();
+        }
+        w.close().unwrap();
+    }
+
+    #[test]
+    fn pcx_fixtures_load_as_opaque_pixels() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample.pcx");
+        let sprite = load_any(&path).unwrap();
+        assert_eq!((sprite.width, sprite.height), (4, 3));
+        assert_eq!(sprite.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+        assert_eq!(sprite.get(0, 0, 2, 0), Rgba::rgb(0, 0, 255));
+        assert_eq!(sprite.get(0, 0, 1, 1), Rgba::rgb(128, 128, 128));
+        assert_eq!(sprite.get(0, 0, 3, 2).3, 255, "PCX import is opaque");
+    }
+
+    #[test]
+    fn flic_fixtures_load_all_frames_with_speed() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample.flc");
+        let sprite = load_any(&path).unwrap();
+        assert_eq!((sprite.width, sprite.height), (8, 8));
+        assert_eq!(sprite.frames.len(), 2);
+        assert_eq!(sprite.frames[0].duration_ms, 120);
+        assert_eq!(sprite.frames[1].duration_ms, 120);
+        assert_eq!(sprite.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+        assert_eq!(sprite.get(0, 1, 0, 0), Rgba::rgb(0, 0, 255));
+        assert_eq!(sprite.get(0, 1, 7, 7), Rgba::rgb(255, 0, 0));
+    }
+
+    #[test]
+    fn a_sequence_can_mix_pcx_and_images() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let sprite = import_sequence(&[dir.join("sample.pcx"), dir.join("sample.pcx")]).unwrap();
+        assert_eq!(sprite.frames.len(), 2);
+        assert_eq!(sprite.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+        assert_eq!(sprite.get(0, 1, 3, 2), Rgba::rgb(255, 128, 0));
+    }
 
     #[test]
     fn atlas_metadata_hash_and_array_include_tags_layers_slices() {

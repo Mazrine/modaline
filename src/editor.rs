@@ -5097,6 +5097,8 @@ impl Editor {
             crate::ase::save(&self.sprite, path)?;
         } else if crate::io::is_image(path) {
             crate::io::export_png_scaled(&self.sprite, self.active_frame, path, 1)?;
+        } else if crate::io::is_pcx(path) || crate::io::is_flic(path) {
+            anyhow::bail!("{} is an import-only format", path.display());
         } else {
             crate::io::save_project(&self.sprite, path)?;
         }

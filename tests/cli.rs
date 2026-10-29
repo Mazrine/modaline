@@ -237,6 +237,29 @@ fn batch_splits_grid_slices_and_tileset() {
 }
 
 #[test]
+fn batch_opens_flic_and_saves_a_project_with_frames() {
+    let d = dir("flic");
+    let input = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample.flc");
+    let out_path = d.join("flc.vpx");
+    let out = run(&[
+        "-b".into(),
+        input.display().to_string(),
+        "--save-as".into(),
+        out_path.display().to_string(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let back = io::load_project(&out_path).unwrap();
+    assert_eq!(back.frames.len(), 2);
+    assert_eq!(back.frames[0].duration_ms, 120);
+    assert_eq!(back.get(0, 0, 0, 0), Rgba::rgb(255, 0, 0));
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
 fn batch_converts_colour_mode_and_saves_as_project() {
     let d = dir("colour");
     let input = fixture(&d);

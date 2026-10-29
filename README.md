@@ -233,6 +233,8 @@ crop/resize canonicalize to the canvas.
   raw; unknown chunks are preserved on save.
 - **`.vpx`** — project file: JSON with size, layers, frames, and every cel.
 - **PNG** — single-frame import/export with full alpha.
+- **PCX** — import only (24-bit and paletted, expanded to opaque RGBA).
+- **FLC / FLI** — import only (all frames plus the file's playback speed).
 
 `:` commands pick the format by file extension (`.ase` → Aseprite, `.png` →
 PNG, otherwise `.vpx`).
@@ -280,7 +282,7 @@ text** (text tool with live preview/size/alignment), **brush size 1-64 + custom 
 including bucket fill and paste), flip H/V + rotate 90° (**selection-aware**),
 stroke-grouped undo/redo with a clickable **history window** (**structural layer/frame/tag edits and panel
 properties undo too**),
-**headless CLI batch export**, **in-app file browser with recents/favourites**, **`.ase`/`.aseprite` + PNG/JPEG/BMP/TGA/WebP + `.vpx` import/export**, **sheet + GIF + meta JSON
+**headless CLI batch export**, **in-app file browser with recents/favourites**, **`.ase`/`.aseprite` + PNG/JPEG/BMP/TGA/WebP + `.vpx` import/export and PCX/FLC/FLI import**, **sheet + GIF + meta JSON
 export**, **sprite properties** (colour mode, pixel ratio, grid size + origin) and
 **layer flags** (movement lock, collapsed groups, UUIDs),
 **sRGB/linear colour profiles**, **custom palettes** (`.gpl`/`.hex`/`.pal`),

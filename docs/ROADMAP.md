@@ -773,11 +773,18 @@ Partial or Not supported, so "no unexplained gap" is true again.
   and cancellation without undo. Xvfb smoke: `:new 512 512`, `:filter blur 4`
   showed 50% progress, `?` opened help while the job ran, and completion
   reported `(0 px)` on the empty canvas.
-- [ ] **P6-06 — PCX / FLC / FLI import** (M) — deps: none.
-  Evaluate/implement codecs for PCX and FLC/FLI (frames + durations), integrate
-  with `load_any` and sequence import; add fixtures and docs. If no maintainable
-  crate/decoder is available offline, mark Blocked with the exact missing
-  dependency instead of silently dropping the formats.
+- [x] **P6-06 — PCX / FLC / FLI import** (M) — deps: none.
+  Landed 2026-10-29. PCX (`pcx` 0.2) and FLIC (`flic` 0.1, pure Rust) were
+  added from crates.io; both are import-only and `save_path` refuses them
+  instead of writing JSON under a legacy extension. `load_any` dispatches
+  `.pcx`/`.flc`/`.fli`; PCX expands paletted files to opaque RGBA; FLC/FLI
+  decodes every frame (ring frame skipped) and applies the file's speed as each
+  frame duration. Sequence import accepts both (`is_importable`) and expands a
+  FLIC's frames in place. Fixtures live in `tests/fixtures/sample.pcx` and
+  `.flc` (regenerate with `cargo test generate_legacy -- --ignored`). 4 tests
+  (278 total): PCX pixels/opacity, FLIC frames/speed/colors, mixed PCX
+  sequence, and a CLI `-b` FLC → project round-trip. Docs record the crates and
+  the import-only rule.
 
 ### P6 definition of done
 

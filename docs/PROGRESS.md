@@ -514,6 +514,12 @@ Read, in order:
   step on the UI thread, and cancelled jobs are dropped. Neighborhood filters
   chunk with radius context so async == inline. 5 tests (274 total). Xvfb:
   512² `blur 4` showed 50% while the help overlay opened; completion reported.
+104. **P6-06 — PCX / FLC / FLI import** — added `pcx 0.2` and `flic 0.1`
+  (pure Rust); `load_any` opens `.pcx` (paletted → opaque RGBA) and
+  `.flc`/`.fli` (all frames + speed), sequence import accepts both, and saving
+  to a legacy extension is refused. 4 tests (278 total) + checked-in fixtures
+  (`sample.pcx`, `sample.flc`). CLI `-b sample.flc --save-as` round-trips to
+  2 frames at 120 ms.
 
 ## Next step (exact)
 
@@ -522,15 +528,15 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P6)
 
-P5 is complete; **P6 is open (5/7)** in `docs/ROADMAP.md`:
+P5 is complete; **P6 is open (6/7)** in `docs/ROADMAP.md`:
 
 - ~~**P6-00** — move layer/cel content tool~~ (done 2026-10-29).
 - ~~**P6-01** — reopen closed documents~~ (done 2026-10-29).
 - ~~**P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects~~ (done 2026-10-29).
 - ~~**P6-04** — incremental dirty compositing~~ (done 2026-10-29).
 - ~~**P6-05** — async filter pipeline~~ (done 2026-10-29).
-- **P6-03** — localization string extraction.
-- **P6-06** — PCX/FLC/FLI import (next).
+- ~~**P6-06** — PCX/FLC/FLI import~~ (done 2026-10-29).
+- **P6-03** — localization string extraction (last open task).
 - **P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects.
 - **P6-03** — localization string extraction.
 - **P6-04** — incremental dirty compositing.

@@ -164,7 +164,8 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Image sequence export | Covered | P5-40 |
 | Filename templates (`{frame}`, `{layer}`, `{tag}`, `{title}`, `{duration}`) | Covered | P5-40 |
 | JPG / BMP / TGA / WebP | Covered (static read/write) | P5-43 |
-| PCX / FLC / FLI | Not supported (documented gap: no codec yet) | P6-06 |
+| PCX import | Covered (24-bit and paletted; opaque, via the `pcx` crate) | P6-06 |
+| FLC / FLI import | Covered (all frames + playback speed, via the `flic` crate) | P6-06 |
 | Crash recovery | Covered | — |
 | Reopen closed files | Covered (`:reopen`/`:closed`, clean docs only) | P6-01 |
 | File browser dialog | Covered (in-app, no native dep) | P5-45 |
