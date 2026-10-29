@@ -509,6 +509,11 @@ Read, in order:
   full compositor's core; partial canvas uploads now composite only the dirty
   rect instead of the whole frame. 2 tests (269 total); debug benchmark:
   256×256×8 full 71.3 ms vs 16×16 dirty 0.55 ms. Xvfb paint/drag/undo smoke.
+103. **P6-05 — async filters** — `:filter` on canvases ≥512×512 runs in a
+  `FilterJob` worker; status shows progress, `poll_filter` applies one undo
+  step on the UI thread, and cancelled jobs are dropped. Neighborhood filters
+  chunk with radius context so async == inline. 5 tests (274 total). Xvfb:
+  512² `blur 4` showed 50% while the help overlay opened; completion reported.
 
 ## Next step (exact)
 
@@ -517,15 +522,15 @@ loop picks the first unchecked task whose dependencies are met.
 
 ### Next (P6)
 
-P5 is complete; **P6 is open (4/7)** in `docs/ROADMAP.md`:
+P5 is complete; **P6 is open (5/7)** in `docs/ROADMAP.md`:
 
 - ~~**P6-00** — move layer/cel content tool~~ (done 2026-10-29).
 - ~~**P6-01** — reopen closed documents~~ (done 2026-10-29).
 - ~~**P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects~~ (done 2026-10-29).
 - ~~**P6-04** — incremental dirty compositing~~ (done 2026-10-29).
+- ~~**P6-05** — async filter pipeline~~ (done 2026-10-29).
 - **P6-03** — localization string extraction.
-- **P6-05** — async filter pipeline (next).
-- **P6-06** — PCX/FLC/FLI import.
+- **P6-06** — PCX/FLC/FLI import (next).
 - **P6-02** — Lua Image/Cel/Selection/Dialog/`app.fs` objects.
 - **P6-03** — localization string extraction.
 - **P6-04** — incremental dirty compositing.

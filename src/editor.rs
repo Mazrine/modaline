@@ -254,6 +254,125 @@ pub struct CelMove {
     before: Box<Sprite>,
 }
 
+/// `(source, filtered, width, height, layer, frame)` returned by a job.
+type FilterOutput = (Vec<Rgba>, Vec<Rgba>, u32, u32, usize, usize);
+
+/// A filter running on a worker thread. The UI polls it; the result is applied
+/// on the UI thread as one undo step, or discarded when cancelled.
+pub struct FilterJob {
+    pub name: String,
+    layer: usize,
+    frame: usize,
+    w: u32,
+    h: u32,
+    src: Vec<Rgba>,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    progress: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    handle: Option<std::thread::JoinHandle<Option<Vec<Rgba>>>>,
+}
+
+impl FilterJob {
+    fn spawn(
+        src: Vec<Rgba>,
+        w: u32,
+        h: u32,
+        layer: usize,
+        frame: usize,
+        f: Filter,
+        fg: Rgba,
+    ) -> Self {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, AtomicUsize};
+        let cancel = Arc::new(AtomicBool::new(false));
+        let progress = Arc::new(AtomicUsize::new(0));
+        let (cancel_w, progress_w) = (cancel.clone(), progress.clone());
+        let source = src.clone();
+        let handle = std::thread::spawn(move || {
+            use std::sync::atomic::Ordering::Relaxed;
+            if cancel_w.load(Relaxed) {
+                return None;
+            }
+            if pointwise(f) {
+                // Chunk rows so the job reports progress and can be cancelled
+                // between chunks while `apply_filter_parallel` still uses
+                // worker threads inside each chunk.
+                let mut out = vec![Rgba::TRANSPARENT; source.len()];
+                let chunks = h.div_ceil(128).max(1);
+                for (i, y) in (0..h).step_by(128).enumerate() {
+                    if cancel_w.load(Relaxed) {
+                        return None;
+                    }
+                    let rows = 128.min(h - y);
+                    let start = (y * w) as usize;
+                    let end = ((y + rows) * w) as usize;
+                    let band = apply_filter_parallel(&source[start..end], w, rows, f, fg);
+                    out[start..end].copy_from_slice(&band);
+                    progress_w.store(((i + 1) * 100 / chunks as usize).min(100), Relaxed);
+                }
+                Some(out)
+            } else {
+                // Neighborhood filters need `r` rows of context above and
+                // below each chunk; only the inner rows are copied, so the
+                // band edges (where the filter sees a fake border) are thrown
+                // away. That gives progress and cancellation without changing
+                // the result.
+                let r = filter_radius(f);
+                let mut out = vec![Rgba::TRANSPARENT; source.len()];
+                let chunks = h.div_ceil(128).max(1);
+                for (i, y) in (0..h).step_by(128).enumerate() {
+                    if cancel_w.load(Relaxed) {
+                        return None;
+                    }
+                    let rows = 128.min(h - y);
+                    let top = y.saturating_sub(r);
+                    let bottom = (y + rows + r).min(h);
+                    let band = &source[(top * w) as usize..(bottom * w) as usize];
+                    let filtered = apply_filter(band, w, bottom - top, f, fg);
+                    let offset = ((y - top) * w) as usize;
+                    out[(y * w) as usize..((y + rows) * w) as usize]
+                        .copy_from_slice(&filtered[offset..offset + (rows * w) as usize]);
+                    progress_w.store(((i + 1) * 100 / chunks as usize).min(100), Relaxed);
+                }
+                Some(out)
+            }
+        });
+        FilterJob {
+            name: f.name(),
+            layer,
+            frame,
+            w,
+            h,
+            src,
+            cancel,
+            progress,
+            handle: Some(handle),
+        }
+    }
+
+    pub fn progress(&self) -> u8 {
+        self.progress.load(std::sync::atomic::Ordering::Relaxed) as u8
+    }
+
+    pub fn done(&self) -> bool {
+        self.handle.as_ref().is_none_or(|h| h.is_finished())
+    }
+
+    fn cancel(&self) {
+        self.cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Join the worker. `None` means cancelled; `Some` carries the result.
+    fn take(mut self) -> Option<FilterOutput> {
+        let cancelled = self.cancel.load(std::sync::atomic::Ordering::Relaxed);
+        let out = self.handle.take().and_then(|h| h.join().ok()).flatten();
+        if cancelled {
+            return None;
+        }
+        out.map(|dst| (self.src, dst, self.w, self.h, self.layer, self.frame))
+    }
+}
+
 /// Active indices at one side of a structural edit.
 #[derive(Clone, Copy, Debug)]
 pub struct EditPoint {
@@ -278,6 +397,9 @@ pub struct LayerProps {
 /// Approximate cap for the whole undo/redo history; pixel-cell steps are small,
 /// structural snapshots are bounded by this even when the count limit is high.
 const MAX_UNDO_BYTES: usize = 256 * 1024 * 1024;
+
+/// Canvases at or above this many pixels run filters on a worker thread.
+pub const FILTER_ASYNC_PIXELS: usize = 512 * 512;
 
 /// One undoable change.
 pub enum UndoStep {
@@ -484,6 +606,8 @@ pub struct Editor {
     pub paste_pos: Option<(u32, u32)>,
     /// Active layer-content move (floating cel), if any.
     pub cel_move: Option<CelMove>,
+    /// Background filter currently running, polled by the app each frame.
+    pub filter_job: Option<FilterJob>,
     pub cmdline: String,
     pub msg: String,
     pub dirty: bool,
@@ -622,6 +746,7 @@ impl Editor {
             export_config: crate::io::ExportConfig::default(),
             paste_pos: None,
             cel_move: None,
+            filter_job: None,
             cmdline: String::new(),
             msg: "press ? for help".into(),
             dirty: false,
@@ -3454,6 +3579,84 @@ impl Editor {
             .map(|i| self.sprite.get(l, frame, i % w, i / w))
             .collect();
         let dst = apply_filter_parallel(&src, w, h, f, self.fg);
+        let changed = self.apply_filter_result(&src, &dst);
+        self.msg = format!("filter: {} ({changed} px)", f.name());
+    }
+
+    /// `:filter`: small canvases run inline (instant and testable), large ones
+    /// go to a worker so the UI keeps painting.
+    pub fn filter_background(&mut self, f: Filter) {
+        let px = self.sprite.width as usize * self.sprite.height as usize;
+        if px < FILTER_ASYNC_PIXELS {
+            self.filter(f);
+            return;
+        }
+        if self.filter_job.is_some() {
+            self.msg = "filter: already running (:filter cancel)".into();
+            return;
+        }
+        let (w, h) = (self.sprite.width, self.sprite.height);
+        let (l, frame) = (self.active_layer, self.active_frame);
+        let src: Vec<Rgba> = (0..w * h)
+            .map(|i| self.sprite.get(l, frame, i % w, i / w))
+            .collect();
+        let name = f.name();
+        self.filter_job = Some(FilterJob::spawn(src, w, h, l, frame, f, self.fg));
+        self.msg = format!("filter: {name}...");
+    }
+
+    /// Progress of the background filter, for the status line.
+    pub fn filter_progress(&self) -> Option<(String, u8)> {
+        self.filter_job
+            .as_ref()
+            .map(|job| (job.name.clone(), job.progress()))
+    }
+
+    pub fn cancel_filter(&mut self) {
+        match &self.filter_job {
+            Some(job) => {
+                job.cancel();
+                self.msg = format!("filter: {} cancelling", job.name);
+            }
+            None => self.msg = "no filter running".into(),
+        }
+    }
+
+    /// Apply a finished background filter on the UI thread. Returns whether a
+    /// job finished (not whether it changed pixels).
+    pub fn poll_filter(&mut self) -> bool {
+        let Some(job) = self.filter_job.as_ref() else {
+            return false;
+        };
+        if !job.done() {
+            return false;
+        }
+        let job = self.filter_job.take().unwrap();
+        let name = job.name.clone();
+        let Some((src, dst, w, h, layer, frame)) = job.take() else {
+            self.msg = format!("filter: {name} cancelled");
+            return true;
+        };
+        if (w, h) != (self.sprite.width, self.sprite.height)
+            || layer >= self.sprite.layers.len()
+            || frame >= self.sprite.frames.len()
+        {
+            self.msg = format!("filter: {name} discarded (sprite changed)");
+            return true;
+        }
+        let (saved_layer, saved_frame) = (self.active_layer, self.active_frame);
+        self.active_layer = layer;
+        self.active_frame = frame;
+        let changed = self.apply_filter_result(&src, &dst);
+        self.active_layer = saved_layer;
+        self.active_frame = saved_frame;
+        self.msg = format!("filter: {name} ({changed} px)");
+        true
+    }
+
+    /// Write the filtered pixels that differ, selection-clipped, as one step.
+    fn apply_filter_result(&mut self, src: &[Rgba], dst: &[Rgba]) -> usize {
+        let w = self.sprite.width;
         let sel = self.current_selection();
         self.begin_stroke();
         let mut changed = 0;
@@ -3471,7 +3674,7 @@ impl Editor {
             changed += 1;
         }
         self.end_stroke();
-        self.msg = format!("filter: {} ({changed} px)", f.name());
+        changed
     }
 
     // ---- selection shape ----
@@ -5363,6 +5566,15 @@ fn pointwise(f: Filter) -> bool {
     )
 }
 
+/// Rows of context a neighborhood filter reads outside the output row.
+fn filter_radius(f: Filter) -> u32 {
+    match f {
+        Filter::Blur(r) | Filter::Median(r) | Filter::Outline(r) => r.clamp(1, 32),
+        Filter::Sharpen(_) | Filter::Convolve { .. } | Filter::Emboss => 1,
+        _ => 0,
+    }
+}
+
 /// Apply a pointwise filter on scoped worker threads for large images. The
 /// caller still waits for the result (the editor is not thread-shared), but the
 /// pixel work no longer runs on one thread.
@@ -5724,6 +5936,94 @@ fn erode(g: &[bool], w: u32, h: u32) -> Vec<bool> {
 
 #[cfg(test)]
 mod tests {
+    fn wait_filter(e: &mut Editor) {
+        for _ in 0..1000 {
+            if e.poll_filter() {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("filter job timed out");
+    }
+
+    #[test]
+    fn small_canvases_keep_the_inline_filter_path() {
+        let mut e = Editor::new(8, 8);
+        e.filter_background(Filter::Invert);
+        assert!(e.filter_job.is_none(), "below the threshold runs inline");
+    }
+
+    #[test]
+    fn background_filter_completes_and_is_one_undo_step() {
+        let mut e = Editor::new(512, 512);
+        e.paint_pixel(3, 4, Rgba::rgb(200, 10, 20));
+        e.undo.clear();
+        e.filter_background(Filter::Invert);
+        assert!(e.filter_job.is_some(), "512x512 runs on a worker");
+        wait_filter(&mut e);
+        assert_eq!(e.sprite.get(0, 0, 3, 4), Rgba::rgb(55, 245, 235));
+        e.undo();
+        assert_eq!(e.sprite.get(0, 0, 3, 4), Rgba::rgb(200, 10, 20));
+        assert!(e.undo.is_empty(), "the whole filter was one undo step");
+    }
+
+    #[test]
+    fn background_neighborhood_filter_applies() {
+        let mut e = Editor::new(512, 512);
+        for y in 0..8 {
+            for x in 0..8 {
+                e.sprite.set(0, 0, x, y, Rgba::rgb(255, 0, 0));
+            }
+        }
+        e.filter_background(Filter::Blur(2));
+        wait_filter(&mut e);
+        let edge = e.sprite.get(0, 0, 7, 7);
+        assert!(
+            edge.3 > 0 && edge.3 < 255,
+            "blur softened the edge: {edge:?}"
+        );
+    }
+
+    #[test]
+    fn background_neighborhood_matches_the_inline_result() {
+        let mut a = Editor::new(512, 512);
+        let mut b = Editor::new(512, 512);
+        for (x, y, c) in [
+            (100u32, 100u32, Rgba::rgb(255, 0, 0)),
+            (101, 100, Rgba::rgb(0, 255, 0)),
+            (250, 250, Rgba::rgb(0, 0, 255)),
+            (251, 250, Rgba::rgb(9, 9, 9)),
+        ] {
+            a.sprite.set(0, 0, x, y, c);
+            b.sprite.set(0, 0, x, y, c);
+        }
+        a.filter_background(Filter::Blur(3));
+        wait_filter(&mut a);
+        b.filter(Filter::Blur(3));
+        for y in (0..512).step_by(7) {
+            for x in (0..512).step_by(7) {
+                assert_eq!(
+                    a.sprite.get(0, 0, x, y),
+                    b.sprite.get(0, 0, x, y),
+                    "async chunk != inline at {x},{y}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cancelling_a_background_filter_discards_the_result() {
+        let mut e = Editor::new(512, 512);
+        e.paint_pixel(5, 5, Rgba::rgb(9, 9, 9));
+        e.undo.clear();
+        e.filter_background(Filter::Median(3));
+        assert!(e.filter_job.is_some());
+        e.cancel_filter();
+        wait_filter(&mut e);
+        assert_eq!(e.sprite.get(0, 0, 5, 5), Rgba::rgb(9, 9, 9));
+        assert!(e.undo.is_empty(), "a cancelled filter records no undo");
+    }
+
     #[test]
     fn filters_are_undoable_and_keep_alpha() {
         let mut e = Editor::new(4, 4);

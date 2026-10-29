@@ -761,11 +761,18 @@ Partial or Not supported, so "no unexplained gap" is true again.
   case proves rect == full composite. Ignored benchmark (debug): 256x256 x8
   layers full 71.3 ms vs 16x16 dirty 0.55 ms vs cache hit 12 ns. Xvfb smoke:
   paint, drag and undo updated the canvas through the partial path.
-- [ ] **P6-05 — Async filter pipeline** (M) — deps: P5-59.
-  Run filters on a worker job (pointwise and neighborhood) with progress/cancel,
-  apply the result on the UI thread as one undo step, and keep the editor
-  responsive. Tests for completion, cancellation and undo; Xvfb large-canvas
-  responsiveness check.
+- [x] **P6-05 — Async filter pipeline** (M) — deps: P5-59.
+  Landed 2026-10-29. Canvases ≥512×512 run `:filter` and the filter panel on a
+  `FilterJob` worker; the status line shows its progress, the UI keeps taking
+  input, and `poll_filter` applies the result on the UI thread as one undo step
+  (cancelled jobs are discarded). Neighborhood filters process 128-row chunks
+  with `r` rows of context and keep only the inner rows, so async output equals
+  the inline result while progress and cancel still work between chunks.
+  Pointwise chunks still use the scoped parallel workers. 5 tests (274 total):
+  inline small path, completion + undo, neighborhood apply, async == inline,
+  and cancellation without undo. Xvfb smoke: `:new 512 512`, `:filter blur 4`
+  showed 50% progress, `?` opened help while the job ran, and completion
+  reported `(0 px)` on the empty canvas.
 - [ ] **P6-06 — PCX / FLC / FLI import** (M) — deps: none.
   Evaluate/implement codecs for PCX and FLC/FLI (frames + durations), integrate
   with `load_any` and sequence import; add fixtures and docs. If no maintainable

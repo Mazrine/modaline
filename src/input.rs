@@ -280,6 +280,9 @@ fn handle_key(
                 }
             }
             Escape => {
+                if editor.filter_job.is_some() {
+                    editor.cancel_filter();
+                }
                 if editor.cel_move.is_some() {
                     editor.cancel_cel_move();
                 }
@@ -1627,8 +1630,12 @@ fn exec_command(editor: &mut Editor, cmd: &str) {
         },
         "filter" | "fx" => {
             let args: Vec<&str> = arg.unwrap_or("").split_whitespace().collect();
+            if args.first() == Some(&"cancel") {
+                editor.cancel_filter();
+                return;
+            }
             match crate::editor::Filter::parse_args(&args) {
-                Some(f) => editor.filter(f),
+                Some(f) => editor.filter_background(f),
                 None => {
                     editor.msg =
                         "usage: :filter invert|brightness|contrast|hue|saturation|desaturate|\

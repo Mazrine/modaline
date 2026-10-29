@@ -1284,6 +1284,8 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         if editor.mode == Mode::Command {
             ui.label(egui::RichText::new(format!(":{}", editor.cmdline)).strong());
             ui.label(egui::RichText::new("▏").weak());
+        } else if let Some((name, progress)) = editor.filter_progress() {
+            ui.label(format!("filter: {name} {progress}%"));
         } else {
             ui.label(&editor.msg);
         }
@@ -2467,7 +2469,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             let name = crate::editor::FILTERS[view.filter];
             let amount = format!("{:.2}", view.filter_amount);
             if let Some(f) = crate::editor::Filter::parse(name, Some(&amount)) {
-                editor.filter(f);
+                editor.filter_background(f);
             }
         }
     });
@@ -3611,6 +3613,7 @@ const HELP: &[&str] = &[
     "  :fill [#hex]   :stroke [width] [inside|outside] [#hex]   (selection paint)",
     "  :filter invert|brightness|contrast|hue|saturation|desaturate|posterize|outline|",
     "          blur|sharpen|median|emboss [amount]   :filter curves|levels|balance|convolve ...",
+    "  :filter cancel   (stop a large-canvas filter; Esc also cancels)",
     "  :rotate <deg>   :scale <sx> [sy]   :skew <deg>   :rotsprite on|off",
     "  :pivot <x> <y>|clear   (free transform about a point)",
     "  :brush <1-64>|square|circle <n>|spacing <pct>|load <png>|save|use|list",

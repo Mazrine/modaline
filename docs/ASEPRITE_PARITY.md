@@ -231,7 +231,7 @@ exercised. The smoke found and fixed the idle-autosave wakeup (`cc25a29`).
 | Non-linear undo | Covered (jump within the linear stack; branching documented) | P5-38 |
 | Compact/bounded undo memory | Covered (count limit + 256 MB byte budget; oldest trimmed) | P5-59 |
 | Incremental rendering / large-canvas performance | Covered (revision/frame cache, dirty-rect texture uploads and dirty-rect compositing) | P6-04 |
-| Filter threading | Partial (pointwise filters run on scoped workers; neighborhood filters synchronous and the caller waits) | P6-05 |
+| Filter threading | Covered (filters over 512×512 run on a worker with progress/cancel; UI stays responsive) | P6-05 |
 
 ## vixel extras (not parity gaps)
 

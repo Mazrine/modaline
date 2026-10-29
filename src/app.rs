@@ -455,6 +455,10 @@ impl eframe::App for VixelApp {
 
         input::handle_input(&mut doc.editor, &mut doc.view, ui);
         let reopen = doc.editor.reopen_request.take();
+        doc.editor.poll_filter();
+        if doc.editor.filter_job.is_some() {
+            ui.ctx().request_repaint();
+        }
 
         // Snapshot the active dirty sprite periodically. A successful save or a
         // forced quit drops the snapshot.
