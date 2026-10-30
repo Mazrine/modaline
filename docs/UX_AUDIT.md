@@ -2,8 +2,8 @@
 
 Scope: the real GUI under Xvfb (screenshots in the session log), the control
 inventory in `src/gui.rs`, and a keyboard/mouse/pen pass over every action.
-Findings are ordered by impact. "Landed" means fixed in this pass; the rest is
-tracked in `docs/ROADMAP.md` P7.
+Findings are ordered by impact; the table lists the fixes and the remaining
+work is tracked in `docs/ROADMAP.md`.
 
 ## What already works
 
