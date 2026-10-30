@@ -14,15 +14,16 @@ All seven steps are implemented for review:
 - Step 1: palette, bundled Silkscreen/Noto, `arcane` theme and default font.
 - Step 2: dotted panel chrome, sunken status band, canvas corner brackets.
 - Step 3: wrapped HUD, grouped tools, per-mode chip, section headers.
-- Step 4: 12×12 pixel icons in the overlay tool rail, with key tooltips.
+- Step 4: 12×12 pixel icons in both the overlay rail and the docked tool strip,
+  with key tooltips (text labels stay for localization).
 - Step 5: hover lift, pressed inset, focus rings, 2 s toast, `:motion` toggle.
 - Step 6: `:layout overlay` / `Ctrl-K`, floating inspector, canvas-first fit.
 - Step 7: contrast/font/icon/layout tests, docs, review screenshots.
 
 Review screenshots: `assets/screenshots/editor.png`,
 `assets/screenshots/selection.png`, `assets/screenshots/tips.png`,
-`assets/screenshots/overlay.png`. Docked toolbar keeps text labels (localized)
-while the overlay rail uses icons.
+`assets/screenshots/overlay.png`. The docked toolbar uses icon + text; the
+overlay rail is icon-only with tooltips.
 
 ## Design rules
 
