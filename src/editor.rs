@@ -631,7 +631,7 @@ pub struct Editor {
     /// Filesystem root scripts may read/write through `app.fs`; `None` falls
     /// back to the open document's directory.
     pub script_root: Option<PathBuf>,
-    /// Set when the opened file is a another tool fix bundle: the part the strokes
+    /// Set when the opened file is an external fix bundle: the part the strokes
     /// are for, from the sidecar. Also marks the file as one whose `ref` layer
     /// must survive a save.
     pub bundle_stage: Option<String>,

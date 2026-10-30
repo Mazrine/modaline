@@ -1,11 +1,11 @@
 # Arcane UI — plan
 
-Port the Arcane Pixel look and game-like shell from `another tool` into Modaline
+Adopt the Arcane Pixel look and game-like shell in Modaline
 without changing editing behaviour or the vim keymap. Work lands on
 `feat/arcane-ui`; each step gets a screenshot and a keyboard/mouse/pen pass.
 
-Source of truth: `~/projects/another tool/src/viewer/ui/` (`tokens.rs`, `theme.rs`,
-`frame.rs`, `widgets.rs`, `shell.rs`, `icons.rs`) and its bundled fonts.
+Reference: the Arcane Pixel design (palette, type scale, flat chrome and
+bundled fonts).
 
 ## Status on `feat/arcane-ui`
 
@@ -70,7 +70,7 @@ the default layout too; the docked toolbar keeps the options row.
    - Acceptance: same actions reachable, keyboard-only pass, screenshot.
 
 4. **Pixel icons**
-   - Port/redraw the another tool icon set for tools and panel actions (pencil,
+   - Draw a pixel icon set for tools and panel actions (pencil,
      eraser, bucket, picker, shapes, select, layers, frames, play).
    - Icons are painted primitives (no external image dependency), with text
      tooltips and key hints.

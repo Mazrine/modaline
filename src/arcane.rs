@@ -1,6 +1,6 @@
 //! Arcane Pixel UI: palette, spacing, flat chrome and the dotted surface.
 //!
-//! The Arcane shell. The geometry is the pixel look: straight
+//! The Arcane shell: geometry is the pixel look: straight
 //! edges, 1 px borders, a lighter top edge, sunken wells and raised buttons.
 //!
 //! Tokens and helpers are the design system for the later port steps too, so
