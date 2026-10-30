@@ -10,8 +10,9 @@ reach for them.
 
 ![Modaline with the demo scene open](assets/screenshots/editor.png)
 
-*The demo project open: layer×frame timeline at the bottom, tools on single
-keys, and a hint on the status line for whatever mode you are in.*
+*The demo project open: the pixel-icon tool rail stays on the left, the
+timeline is docked at the bottom, and the status line hints at the current
+mode's next actions.*
 
 ## How it works
 
@@ -46,6 +47,22 @@ there is also a command for it: `:layeropacity`, `:celopacity`,
 workflows, plus the vim-versus-Helix question.
 
 ![The tips window](assets/screenshots/tips.png)
+
+### Look and layout
+
+The default look is **Arcane**: an ink-and-violet palette, flat 1 px chrome,
+dotted panels and the Silkscreen pixel font. `:theme` switches between
+`arcane`, `dark`, `light`, `midnight` and `paper`; `:uifont silkscreen|default`
+switches the type. Existing configs keep whatever they had.
+
+The pixel-icon tool rail stays on the left in both layouts, so the active
+tool and its shortcut are always visible. `:layout overlay`, or `Ctrl-K`,
+switches to the canvas-first HUD: the inspector floats over the canvas and the
+timeline stays docked. The docked layout remains the default.
+
+![The overlay layout](assets/screenshots/overlay.png)
+
+*Overlay layout: icon rail, canvas, floating inspector, timeline.*
 
 ## What it does
 
@@ -192,7 +209,7 @@ implemented; and the UX audit lists the rough edges I still want to fix
 corners). Linux is the tested platform.
 
 The model is a GUI-free Rust library, so another tool can read, composite or
-write a project without opening the window. `cargo test` covers it (292 tests),
+write a project without opening the window. `cargo test` covers it (296 tests),
 and `cargo clippy --all-targets` is clean.
 
 ## Docs

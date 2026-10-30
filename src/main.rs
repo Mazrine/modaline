@@ -1,4 +1,5 @@
 mod app;
+mod arcane;
 mod cli;
 mod config;
 mod extension;

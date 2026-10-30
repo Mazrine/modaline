@@ -145,6 +145,12 @@ pub struct View {
     pub playing: bool,
     /// Playback change requested by the command line.
     pub play_request: Option<bool>,
+    /// Dotted grain for the Arcane panels (created on first use).
+    pub arcane_dots: Option<TextureHandle>,
+    /// Hover lift and short transitions.
+    pub motion: bool,
+    /// Transient confirmation shown over the canvas.
+    pub toast: Option<(String, std::time::Instant)>,
     /// Pen pressure backend, mirrored from the app each frame.
     pub pen_enabled: bool,
     pub pen_status: pen::PenStatus,
@@ -192,9 +198,9 @@ impl View {
             show_aspect: true,
             pixel_scale: (1, 1),
             window: (1280.0, 800.0),
-            theme: "dark".into(),
-            ui_font: "default".into(),
-            ui_font_size: 13.0,
+            theme: "arcane".into(),
+            ui_font: "silkscreen".into(),
+            ui_font_size: 12.0,
             layout: crate::layout::Layout::default(),
             layout_pending: true,
             keymap: crate::keymap::Keymap::default(),
@@ -250,6 +256,9 @@ impl View {
             tips_open: false,
             playing: false,
             play_request: None,
+            arcane_dots: None,
+            motion: true,
+            toast: None,
             pen_enabled: true,
             pen_status: pen::PenStatus::NoDevice,
             pen_pressure: None,
@@ -364,8 +373,52 @@ pub fn draw(
     // Remember the window size for the config file.
     let screen = ui.ctx().content_rect().size();
     view.window = (screen.x, screen.y);
+    let arcane = view.theme == "arcane";
+    let dots = if arcane {
+        Some(
+            view.arcane_dots
+                .get_or_insert_with(|| crate::arcane::dot_texture(ui.ctx()))
+                .clone(),
+        )
+    } else {
+        None
+    };
+    let panel_frame = if arcane {
+        crate::arcane::panel_frame(6.0)
+    } else {
+        egui::Frame::NONE
+    };
     if view.layout.show_toolbar {
-        egui::Panel::top("toolbar").show(ui, |ui| toolbar(ui, editor, view));
+        egui::Panel::top("toolbar")
+            .frame(panel_frame)
+            .show(ui, |ui| {
+                if let Some(d) = &dots {
+                    crate::arcane::panel(
+                        ui.painter(),
+                        ui.max_rect(),
+                        Some(d),
+                        crate::arcane::palette(),
+                    );
+                }
+                toolbar(ui, editor, view);
+            });
+    }
+    if arcane {
+        egui::Panel::left("toolrail")
+            .exact_size(64.0)
+            .resizable(false)
+            .frame(panel_frame)
+            .show(ui, |ui| {
+                if let Some(d) = &dots {
+                    crate::arcane::panel(
+                        ui.painter(),
+                        ui.max_rect(),
+                        Some(d),
+                        crate::arcane::palette(),
+                    );
+                }
+                tool_rail(ui, editor, view);
+            });
     }
     if view.layout_pending {
         if view.layout.show_timeline {
@@ -384,25 +437,55 @@ pub fn draw(
         let r = egui::Panel::bottom("timeline")
             .resizable(true)
             .default_size(view.layout.timeline_height)
+            .frame(panel_frame)
             .show(ui, |ui| {
+                if let Some(d) = &dots {
+                    crate::arcane::panel(
+                        ui.painter(),
+                        ui.max_rect(),
+                        Some(d),
+                        crate::arcane::palette(),
+                    );
+                }
                 ui.set_min_height(ui.max_rect().height());
                 timeline(ui, editor, playing, view);
             });
         view.layout.timeline_height = r.response.rect.height();
     }
-    if view.layout.show_side {
+    if view.layout.show_side && !view.layout.overlay {
         let r = egui::Panel::right("side")
             .resizable(true)
             .default_size(view.layout.side_width)
+            .frame(panel_frame)
             .show(ui, |ui| {
+                if let Some(d) = &dots {
+                    crate::arcane::panel(
+                        ui.painter(),
+                        ui.max_rect(),
+                        Some(d),
+                        crate::arcane::palette(),
+                    );
+                }
                 ui.set_min_width(ui.max_rect().width());
                 side(ui, editor, view);
             });
         view.layout.side_width = r.response.rect.width();
     }
-    egui::CentralPanel::default().show(ui, |ui| {
-        canvas(ui, editor, view, texture, onion_prev, onion_next)
-    });
+    egui::CentralPanel::default()
+        .frame(if arcane {
+            egui::Frame::NONE
+                .fill(crate::arcane::VOID)
+                .inner_margin(0.0)
+        } else {
+            egui::Frame::NONE
+        })
+        .show(ui, |ui| {
+            canvas(ui, editor, view, texture, onion_prev, onion_next)
+        });
+
+    if view.layout.overlay && view.layout.show_side {
+        inspector_window(ui.ctx(), editor, view);
+    }
 
     preview_window(ui.ctx(), editor, view);
     preview_viewport(ui.ctx(), editor, view);
@@ -411,6 +494,7 @@ pub fn draw(
     preferences_window(ui.ctx(), editor, view);
     file_browser_window(ui.ctx(), editor, view);
     tips_window(ui.ctx(), view);
+    toast_overlay(ui.ctx(), view);
 
     if editor.mode == Mode::Help {
         help(ui.ctx(), view);
@@ -418,6 +502,11 @@ pub fn draw(
 }
 
 impl View {
+    /// Show a short confirmation over the canvas.
+    pub fn toast(&mut self, message: impl Into<String>) {
+        self.toast = Some((message.into(), Instant::now()));
+    }
+
     /// Pan the canvas by screen pixels (positive x reveals content to the
     /// right, positive y reveals content below).
     pub fn pan_by(&mut self, dx: f32, dy: f32) {
@@ -505,6 +594,22 @@ fn browser_activate(editor: &mut Editor, view: &mut View, path: PathBuf) {
             }
         }
     }
+}
+
+fn inspector_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View) {
+    egui::Window::new(view.tr("window.inspector"))
+        .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-16.0, 84.0))
+        .collapsible(false)
+        .resizable(true)
+        .default_width(340.0)
+        .default_height(600.0)
+        .frame(crate::arcane::panel_frame(6.0))
+        .show(ctx, |ui| {
+            ui.set_min_width(320.0);
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| side_body(ui, editor, view));
+        });
 }
 
 fn tips_window(ctx: &egui::Context, view: &mut View) {
@@ -798,6 +903,8 @@ fn preferences_window(ctx: &egui::Context, editor: &mut Editor, view: &mut View)
                                 ui.label(view.tr("prefs.ui_font_size"));
                                 ui.add(egui::Slider::new(&mut view.ui_font_size, 8.0..=32.0));
                             });
+                            let motion_label = view.tr("prefs.motion");
+                            ui.checkbox(&mut view.motion, motion_label);
                             ui.horizontal(|ui| {
                                 ui.label(view.tr("prefs.language"));
                                 let current = crate::i18n::resolve(&view.language)
@@ -1268,18 +1375,16 @@ fn tool_shortcut(tool: Tool) -> &'static str {
     }
 }
 
-fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("modaline").strong());
-        ui.separator();
-        ui.label(format!("[{}]", view.value("mode", mode_name(editor.mode))));
-        ui.separator();
-
-        for (tool, key) in [
+/// Vertical icon rail for the canvas-first overlay layout.
+fn tool_rail(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
+    let groups: [&[(Tool, &str)]; 4] = [
+        &[
             (Tool::Pencil, "tool.pencil"),
             (Tool::Eraser, "tool.eraser"),
             (Tool::Bucket, "tool.bucket"),
             (Tool::Picker, "tool.picker"),
+        ],
+        &[
             (Tool::Line, "tool.line"),
             (Tool::Rect, "tool.rect"),
             (Tool::Ellipse, "tool.ellipse"),
@@ -1287,20 +1392,443 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             (Tool::Shade, "tool.shade"),
             (Tool::Spray, "tool.spray"),
             (Tool::Blur, "tool.blur"),
-            (Tool::Lasso, "tool.lasso"),
-            (Tool::Polygon, "tool.polygon"),
+        ],
+        &[(Tool::Lasso, "tool.lasso"), (Tool::Polygon, "tool.polygon")],
+        &[
             (Tool::Text, "tool.text"),
             (Tool::Tile, "tool.tile"),
             (Tool::Move, "tool.move"),
-        ] {
-            let label = view.tr(key);
-            let hint = format!("{label} ({})", tool_shortcut(tool));
-            if ui
-                .selectable_label(editor.tool == tool, label)
-                .on_hover_text(hint)
-                .clicked()
-            {
+        ],
+    ];
+    ui.add_space(crate::arcane::SPACE_6);
+    for (gi, group) in groups.iter().enumerate() {
+        if gi > 0 {
+            ui.add_space(crate::arcane::SPACE_6);
+            ui.separator();
+        }
+        for &(tool, key) in *group {
+            let tip = format!("{} ({})", view.tr(key), tool_shortcut(tool));
+            if rail_icon(ui, view, editor.tool == tool, tool_icon(tool), &tip) {
                 editor.set_tool(tool);
+            }
+        }
+    }
+    ui.add_space(crate::arcane::SPACE_6);
+    ui.separator();
+    if rail_icon(
+        ui,
+        view,
+        false,
+        ICON_UNDO,
+        &format!("{} (u)", view.tr("ui.undo")),
+    ) {
+        editor.undo();
+    }
+    if rail_icon(
+        ui,
+        view,
+        false,
+        ICON_REDO,
+        &format!("{} (Ctrl-r)", view.tr("ui.redo")),
+    ) {
+        editor.redo();
+    }
+    if rail_icon(
+        ui,
+        view,
+        false,
+        ICON_HELP,
+        &format!("{} (?)", view.tr("ui.help")),
+    ) {
+        editor.mode = Mode::Help;
+    }
+}
+
+fn rail_icon(ui: &mut egui::Ui, view: &View, selected: bool, rows: &[&str], tip: &str) -> bool {
+    let p = crate::arcane::palette();
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(46.0, 30.0), egui::Sense::click());
+    let pressed = response.is_pointer_button_down_on();
+    let lift = if view.motion && response.hovered() {
+        1.0
+    } else {
+        0.0
+    };
+    let r = rect.translate(egui::vec2(0.0, -lift));
+    let fill = if selected {
+        p.accent_deep
+    } else if response.hovered() {
+        p.panel_hi
+    } else {
+        p.panel
+    };
+    let border = if selected {
+        p.accent
+    } else if response.has_focus() {
+        p.focus
+    } else {
+        p.line
+    };
+    crate::arcane::raised(ui.painter(), r, fill, border, pressed, p);
+    crate::arcane::paint_icon(
+        ui.painter(),
+        egui::Rect::from_center_size(r.center(), egui::Vec2::splat(24.0)),
+        rows,
+        if selected { p.text } else { p.dim },
+    );
+    response.on_hover_text(tip).clicked()
+}
+
+fn tool_icon(tool: Tool) -> &'static [&'static str] {
+    match tool {
+        Tool::Pencil => ICON_PENCIL,
+        Tool::Eraser => ICON_ERASER,
+        Tool::Bucket => ICON_BUCKET,
+        Tool::Picker => ICON_PICKER,
+        Tool::Line => ICON_LINE,
+        Tool::Rect => ICON_RECT,
+        Tool::Ellipse => ICON_ELLIPSE,
+        Tool::Gradient => ICON_GRADIENT,
+        Tool::Shade => ICON_SHADE,
+        Tool::Spray => ICON_SPRAY,
+        Tool::Blur => ICON_BLUR,
+        Tool::Lasso => ICON_LASSO,
+        Tool::Polygon => ICON_POLYGON,
+        Tool::Text => ICON_TEXT,
+        Tool::Tile => ICON_TILE,
+        Tool::Move => ICON_MOVE,
+    }
+}
+
+const ICON_PENCIL: &[&str] = &[
+    "............",
+    ".........##.",
+    "........###.",
+    ".......###..",
+    "......###...",
+    ".....###....",
+    "....###.....",
+    "...###......",
+    "..###.......",
+    ".###........",
+    ".##.........",
+    "............",
+];
+const ICON_ERASER: &[&str] = &[
+    "............",
+    ".......####.",
+    "......##..##",
+    ".....##..##.",
+    "....##..##..",
+    "...##..##...",
+    "..##..##....",
+    ".##..##.....",
+    ".####.......",
+    "............",
+    "............",
+    "............",
+];
+const ICON_BUCKET: &[&str] = &[
+    "............",
+    "....##......",
+    "...####.....",
+    "..######....",
+    ".########...",
+    "..######....",
+    "...####.....",
+    "....##......",
+    "....##......",
+    "............",
+    "............",
+    "............",
+];
+const ICON_PICKER: &[&str] = &[
+    ".........##.",
+    "........####",
+    ".......###..",
+    "......###...",
+    ".....###....",
+    "....###.....",
+    "...###......",
+    "..###.......",
+    ".###........",
+    ".##.........",
+    "............",
+    "............",
+];
+const ICON_LINE: &[&str] = &[
+    "............",
+    "..........##",
+    ".........##.",
+    "........##..",
+    ".......##...",
+    "......##....",
+    ".....##.....",
+    "....##......",
+    "...##.......",
+    "..##........",
+    ".##.........",
+    "............",
+];
+const ICON_RECT: &[&str] = &[
+    "............",
+    ".##########.",
+    ".#........#.",
+    ".#........#.",
+    ".#........#.",
+    ".#........#.",
+    ".#........#.",
+    ".#........#.",
+    ".#........#.",
+    ".##########.",
+    "............",
+    "............",
+];
+const ICON_ELLIPSE: &[&str] = &[
+    "............",
+    "....####....",
+    "..##....##..",
+    ".#........#.",
+    ".#........#.",
+    ".#........#.",
+    ".#........#.",
+    "..##....##..",
+    "....####....",
+    "............",
+    "............",
+    "............",
+];
+const ICON_GRADIENT: &[&str] = &[
+    "............",
+    ".##########.",
+    ".#........#.",
+    ".##.......#.",
+    ".###......#.",
+    ".####.....#.",
+    ".#####....#.",
+    ".######...#.",
+    ".##########.",
+    "............",
+    "............",
+    "............",
+];
+const ICON_SHADE: &[&str] = &[
+    "............",
+    "....####....",
+    "..##....##..",
+    ".###....##..",
+    ".#####..##..",
+    ".######.##..",
+    ".######.##..",
+    "..#####.##..",
+    "....####....",
+    "............",
+    "............",
+    "............",
+];
+const ICON_SPRAY: &[&str] = &[
+    "............",
+    "..#...#...#.",
+    "............",
+    "...#..#.....",
+    "....#...#...",
+    "............",
+    "..#...#...#.",
+    "...#...#....",
+    "............",
+    "..#..#..#...",
+    "............",
+    "............",
+];
+const ICON_BLUR: &[&str] = &[
+    "............",
+    "............",
+    "..###..###..",
+    ".#...#.#..#.",
+    "............",
+    "....###.....",
+    "...#...#....",
+    "............",
+    "..####..###.",
+    ".#....#....#",
+    "............",
+    "............",
+];
+const ICON_LASSO: &[&str] = &[
+    "............",
+    "....####....",
+    "..##....##..",
+    ".#........#.",
+    ".#........#.",
+    "..##....##..",
+    "....####....",
+    "...##.......",
+    "..##........",
+    ".#..........",
+    "............",
+    "............",
+];
+const ICON_POLYGON: &[&str] = &[
+    "............",
+    "....#.......",
+    "...##.......",
+    "..#.#.......",
+    ".#..#.......",
+    ".#...#......",
+    "..#...#.....",
+    "...#...#....",
+    "....#.##....",
+    ".....##.....",
+    "............",
+    "............",
+];
+const ICON_TEXT: &[&str] = &[
+    "............",
+    ".##########.",
+    ".....##.....",
+    ".....##.....",
+    ".....##.....",
+    ".....##.....",
+    ".....##.....",
+    ".....##.....",
+    ".....##.....",
+    "............",
+    "............",
+    "............",
+];
+const ICON_TILE: &[&str] = &[
+    "............",
+    ".#####.#####",
+    ".#...#.#...#",
+    ".#...#.#...#",
+    ".#####.#####",
+    "............",
+    ".#####.#####",
+    ".#...#.#...#",
+    ".#...#.#...#",
+    ".#####.#####",
+    "............",
+    "............",
+];
+const ICON_MOVE: &[&str] = &[
+    "............",
+    ".....##.....",
+    "....####....",
+    "...######...",
+    ".....##.....",
+    ".##..##..##.",
+    "####.##.####",
+    ".##..##..##.",
+    ".....##.....",
+    "....####....",
+    ".....##.....",
+    "............",
+];
+const ICON_UNDO: &[&str] = &[
+    "............",
+    "....##......",
+    "...##.......",
+    "..##........",
+    ".########...",
+    ".......##...",
+    ".......##...",
+    "...##..##...",
+    "....#####...",
+    "............",
+    "............",
+    "............",
+];
+const ICON_REDO: &[&str] = &[
+    "............",
+    "......##....",
+    ".......##...",
+    "........##..",
+    "...########.",
+    "...##.......",
+    "...##.......",
+    "...##..##...",
+    "...#####....",
+    "............",
+    "............",
+    "............",
+];
+const ICON_HELP: &[&str] = &[
+    "............",
+    "....####....",
+    "...#....#...",
+    "...#....#...",
+    ".......#....",
+    "......#.....",
+    ".....##.....",
+    ".....##.....",
+    "............",
+    ".....##.....",
+    "............",
+    "............",
+];
+
+fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
+    let arcane = view.theme == "arcane";
+    // Silkscreen is wider than egui's default font; wrapping keeps every
+    // control reachable at 1280 px instead of clipping the right edge.
+    ui.horizontal_wrapped(|ui| {
+        if arcane {
+            ui.label(
+                egui::RichText::new("MODALINE")
+                    .strong()
+                    .color(crate::arcane::ACCENT_HI),
+            );
+        } else {
+            ui.label(egui::RichText::new("modaline").strong());
+        }
+        ui.separator();
+        let mode = view.value("mode", mode_name(editor.mode)).to_uppercase();
+        if arcane {
+            let p = crate::arcane::palette();
+            let color = match editor.mode {
+                Mode::Normal => p.accent_hi,
+                Mode::Draw => p.good,
+                Mode::Visual => p.focus,
+                Mode::Paste => p.warn,
+                Mode::Command => p.dim,
+                Mode::Help => p.accent,
+            };
+            crate::arcane::mode_chip(ui, &mode, color);
+        } else {
+            ui.label(format!("[{mode}]"));
+        }
+        ui.separator();
+
+        if !arcane {
+            for (tool, key) in [
+                (Tool::Pencil, "tool.pencil"),
+                (Tool::Eraser, "tool.eraser"),
+                (Tool::Bucket, "tool.bucket"),
+                (Tool::Picker, "tool.picker"),
+                (Tool::Line, "tool.line"),
+                (Tool::Rect, "tool.rect"),
+                (Tool::Ellipse, "tool.ellipse"),
+                (Tool::Gradient, "tool.gradient"),
+                (Tool::Shade, "tool.shade"),
+                (Tool::Spray, "tool.spray"),
+                (Tool::Blur, "tool.blur"),
+                (Tool::Lasso, "tool.lasso"),
+                (Tool::Polygon, "tool.polygon"),
+                (Tool::Text, "tool.text"),
+                (Tool::Tile, "tool.tile"),
+                (Tool::Move, "tool.move"),
+            ] {
+                if matches!(tool, Tool::Line | Tool::Lasso | Tool::Text) {
+                    ui.separator();
+                }
+                let label = view.tr(key);
+                let hint = format!("{label} ({})", tool_shortcut(tool));
+                if ui
+                    .selectable_label(editor.tool == tool, label)
+                    .on_hover_text(hint)
+                    .clicked()
+                {
+                    editor.set_tool(tool);
+                }
             }
         }
 
@@ -1433,18 +1961,28 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
     });
 
-    // The status line gets its own row: appended to the tool row it was pushed
-    // off the right edge at any normal window width, so every message (palette
-    // lock refusals included) was invisible.
+    // The status line gets its own row, sunk into the panel so it reads as a
+    // HUD band rather than another toolbar.
+    if view.theme == "arcane" {
+        let p = crate::arcane::palette();
+        egui::Frame::NONE
+            .fill(p.sunken)
+            .stroke(egui::Stroke::new(1.0, p.line))
+            .inner_margin(egui::Margin::symmetric(6, 3))
+            .show(ui, |ui| status_row(ui, editor, view));
+    } else {
+        status_row(ui, editor, view);
+    }
+}
+
+fn status_row(ui: &mut egui::Ui, editor: &Editor, view: &View) {
     ui.horizontal(|ui| {
         if editor.mode == Mode::Command {
             ui.label(egui::RichText::new(format!(":{}", editor.cmdline)).strong());
             ui.label(egui::RichText::new("▏").weak());
         } else if let Some((name, progress)) = editor.filter_progress() {
-            {
-                let line = modaline::status!("filter: {name} {progress}%");
-                ui.label(line.render(&view.i18n));
-            }
+            let line = modaline::status!("filter: {name} {progress}%");
+            ui.label(line.render(&view.i18n));
         } else {
             ui.label(editor.msg.render(&view.i18n));
         }
@@ -1755,6 +2293,13 @@ fn timeline_grid(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
                         }
                         if let Some(tex) = &view.cel_thumbs[idx] {
                             ui.painter().image(tex.id(), rect, uv, Color32::WHITE);
+                            if view.theme == "arcane" {
+                                crate::arcane::brackets(
+                                    ui.painter(),
+                                    rect,
+                                    crate::arcane::palette(),
+                                );
+                            }
                         }
                         let stroke = if editor.cel_selected(layer, frame) {
                             Stroke::new(2.0, Color32::from_rgb(120, 190, 255))
@@ -1873,6 +2418,31 @@ fn side(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         .show(ui, |ui| side_body(ui, editor, view));
 }
 
+fn section_header(ui: &mut egui::Ui, view: &View, key: &str) {
+    if view.theme != "arcane" {
+        ui.separator();
+        return;
+    }
+    ui.add_space(crate::arcane::SPACE_4);
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(view.tr(key))
+                .size(crate::arcane::TYPE_LABEL)
+                .strong()
+                .color(crate::arcane::ACCENT_HI),
+        );
+        let y = ui.cursor().top() + 7.0;
+        let rect = ui.available_rect_before_wrap();
+        ui.painter().line_segment(
+            [
+                egui::pos2(rect.left() + 6.0, y),
+                egui::pos2(rect.right(), y),
+            ],
+            egui::Stroke::new(1.0, crate::arcane::LINE_HI),
+        );
+    });
+}
+
 fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.horizontal(|ui| {
         let light = !crate::theme::resolve(&view.theme).map_or(true, |t| t.dark);
@@ -1912,6 +2482,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             editor.set_background_color(None);
         }
     });
+    section_header(ui, view, "ui.sec_brush");
     ui.horizontal(|ui| {
         ui.label(view.tr("brush"));
         ui.add(egui::Slider::new(&mut editor.brush_size, 1..=64));
@@ -2128,6 +2699,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
             ui.label(view.tr("ui.right_click_picks"));
         });
     }
+    section_header(ui, view, "ui.sec_text");
     ui.horizontal(|ui| {
         ui.label(view.tr("text"));
         let edit = ui.add(
@@ -2221,6 +2793,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         ui.add(egui::Slider::new(&mut editor.grid, 1..=64));
         ui.checkbox(&mut editor.snap, view.tr("ui.snap"));
     });
+    section_header(ui, view, "ui.sec_symmetry");
     ui.horizontal(|ui| {
         ui.label(view.tr("symmetry"));
         for (label, mode) in [
@@ -2266,6 +2839,7 @@ fn side_body(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
     ui.checkbox(&mut editor.wand_all_layers, view.tr("ui.wand_all_layers"));
     ui.separator();
 
+    section_header(ui, view, "ui.sec_colour");
     let mut fg = editor.fg;
     color_editor(ui, "fg", &mut fg, &mut view.fg_hex);
     if fg != editor.fg {
@@ -2932,11 +3506,17 @@ fn canvas(
     }
     editor.clear_dirty();
 
+    let fit_panel = if view.layout.overlay {
+        let right = (panel.max.x - crate::arcane::OVERLAY_INSPECTOR_W).max(panel.min.x + 64.0);
+        Rect::from_min_max(panel.min, egui::pos2(right, panel.max.y))
+    } else {
+        panel
+    };
     if !view.initialized {
-        view.fit(panel, w, h);
+        view.fit(fit_panel, w, h);
         view.initialized = true;
     }
-    reveal_cursor(editor, view, panel);
+    reveal_cursor(editor, view, fit_panel);
 
     let tex = texture.as_ref().unwrap();
     let cell = view.cell();
@@ -3001,6 +3581,9 @@ fn canvas(
     }
 
     ui.painter().image(tex.id(), rect, uv, Color32::WHITE);
+    if view.theme == "arcane" {
+        crate::arcane::brackets(ui.painter(), rect, crate::arcane::palette());
+    }
     if editor.tile_mode {
         ui.painter().rect_stroke(
             rect.expand(1.0),
@@ -3036,6 +3619,9 @@ fn canvas(
         ui.scope_id().with("canvas"),
         Sense::click_and_drag(),
     );
+    if resp.has_focus() && view.theme == "arcane" {
+        crate::arcane::border(ui.painter(), rect, crate::arcane::FOCUS, 1.5);
+    }
     canvas_input(ui, editor, view, resp, w, h);
 }
 
@@ -3788,14 +4374,44 @@ fn pixel_at(editor: &Editor, view: &View, pos: Pos2, w: u32, h: u32) -> Option<(
 
 // ---- help overlay ----
 
+fn toast_overlay(ctx: &egui::Context, view: &mut View) {
+    let Some((message, at)) = &view.toast else {
+        return;
+    };
+    if at.elapsed() > std::time::Duration::from_secs(2) {
+        view.toast = None;
+        return;
+    }
+    let p = crate::arcane::palette();
+    egui::Area::new(egui::Id::unique("modaline-toast"))
+        .order(egui::Order::Foreground)
+        .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-24.0, -48.0))
+        .show(ctx, |ui| {
+            egui::Frame::NONE
+                .fill(p.panel)
+                .stroke(egui::Stroke::new(1.0, p.accent))
+                .inner_margin(egui::Margin::symmetric(10, 6))
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::new(message).color(p.text));
+                });
+        });
+    ctx.request_repaint_after(std::time::Duration::from_millis(100));
+}
+
 fn help(ctx: &egui::Context, view: &View) {
     egui::Window::new(view.tr("help.title"))
         .collapsible(false)
-        .resizable(false)
+        .resizable(true)
+        .default_width(1000.0)
         .show(ctx, |ui| {
-            for line in view.i18n.tr("help.text").lines() {
-                ui.label(line);
-            }
+            // The help is a monospaced cheat sheet. Silkscreen is wider than
+            // egui's default font, so let long lines scroll instead of wrapping.
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            egui::ScrollArea::both().show(ui, |ui| {
+                for line in view.i18n.tr("help.text").lines() {
+                    ui.label(egui::RichText::new(line).size(10.0).monospace());
+                }
+            });
         });
 }
 
@@ -3823,6 +4439,33 @@ fn mode_name(m: Mode) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_tool_has_a_twelve_pixel_icon() {
+        for tool in [
+            Tool::Pencil,
+            Tool::Eraser,
+            Tool::Bucket,
+            Tool::Picker,
+            Tool::Line,
+            Tool::Rect,
+            Tool::Ellipse,
+            Tool::Gradient,
+            Tool::Shade,
+            Tool::Spray,
+            Tool::Blur,
+            Tool::Lasso,
+            Tool::Polygon,
+            Tool::Text,
+            Tool::Tile,
+            Tool::Move,
+        ] {
+            let rows = tool_icon(tool);
+            assert_eq!(rows.len(), 12, "{tool:?}");
+            assert!(rows.iter().all(|row| row.chars().count() == 12), "{tool:?}");
+            assert!(rows.iter().any(|row| row.contains('#')), "{tool:?}");
+        }
+    }
 
     #[test]
     fn browser_entries_sort_dirs_first_and_filter() {

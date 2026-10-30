@@ -168,6 +168,22 @@ fn handle_key(
 
     if mods.command {
         match key {
+            K => {
+                view.layout.overlay = !view.layout.overlay;
+                view.layout.name = if view.layout.overlay {
+                    "overlay".into()
+                } else {
+                    "default".into()
+                };
+                view.layout_pending = true;
+                view.initialized = false;
+                editor.msg = if view.layout.overlay {
+                    "layout: overlay".into()
+                } else {
+                    "layout: default".into()
+                };
+                return;
+            }
             R => editor.redo(),
             Z => editor.undo(),
             S if mods.shift => {
@@ -543,6 +559,19 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
                 Ok(theme) => {
                     crate::theme::apply(ctx, &theme);
                     view.theme = rest.to_string();
+                    // The pixel font is part of the Arcane look, but keep an
+                    // explicit non-default font choice.
+                    if crate::theme::builtin(rest).is_some()
+                        && rest.eq_ignore_ascii_case("arcane")
+                        && view.ui_font == "default"
+                    {
+                        view.ui_font = "silkscreen".into();
+                    } else if crate::theme::builtin(rest).is_some()
+                        && !rest.eq_ignore_ascii_case("arcane")
+                        && view.ui_font == "silkscreen"
+                    {
+                        view.ui_font = "default".into();
+                    }
                     editor.msg = modaline::status!("theme: {}", theme.name);
                 }
                 Err(e) => editor.msg = modaline::status!("theme: {e}"),
@@ -562,6 +591,7 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
         } else if rest == "reset" {
             view.layout = crate::layout::Layout::default();
             view.layout_pending = true;
+            view.initialized = false;
             editor.msg = "layout: default (reset)".into();
         } else if rest.is_empty() {
             editor.msg = modaline::status!(
@@ -575,7 +605,10 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
                     crate::layout::clamp_sizes(&mut layout);
                     view.layout = layout;
                     view.layout_pending = true;
+                    view.initialized = false;
                     editor.msg = modaline::status!("layout: {}", view.layout.name);
+                    let msg = editor.msg.to_string();
+                    view.toast(msg);
                 }
                 Err(e) => editor.msg = modaline::status!("layout: {e}"),
             }
@@ -632,6 +665,25 @@ fn submit(editor: &mut Editor, view: &mut View, ctx: &egui::Context) {
             }
             _ => editor.msg = "usage: :play [on|off]".into(),
         }
+        return;
+    }
+    if let Some(rest) = cmd.strip_prefix("motion") {
+        match rest.trim() {
+            "" => {
+                view.motion = !view.motion;
+            }
+            "on" => view.motion = true,
+            "off" => view.motion = false,
+            _ => {
+                editor.msg = "usage: :motion [on|off]".into();
+                return;
+            }
+        }
+        editor.msg = if view.motion {
+            "motion: on".into()
+        } else {
+            "motion: off".into()
+        };
         return;
     }
     if cmd == "tips" {

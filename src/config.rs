@@ -51,6 +51,8 @@ pub struct Config {
     pub closed: Vec<String>,
     /// Use pen/tablet pressure when a Wacom/OpenTabletDriver device is present.
     pub pen_enabled: bool,
+    /// Hover lift and short transitions in the UI.
+    pub motion: bool,
     /// Free-form entries a future build can read; round-tripped, never guessed.
     pub extra: BTreeMap<String, String>,
 }
@@ -115,9 +117,9 @@ impl Default for Config {
             onion: OnionConfig::default(),
             play_loop: true,
             play_pingpong: false,
-            theme: "dark".into(),
-            ui_font: "default".into(),
-            ui_font_size: 13.0,
+            theme: "arcane".into(),
+            ui_font: "silkscreen".into(),
+            ui_font_size: 12.0,
             layout: crate::layout::Layout::default(),
             keymap: crate::keymap::Keymap::default(),
             language: "en".into(),
@@ -129,6 +131,7 @@ impl Default for Config {
             session_active: 0,
             closed: Vec::new(),
             pen_enabled: true,
+            motion: true,
             extra: BTreeMap::new(),
         }
     }
@@ -188,8 +191,8 @@ mod tests {
         assert_eq!(c.theme, "light");
         assert_eq!(c.onion, OnionConfig::default());
         assert_eq!(c.grid, 8, "defaults fill the gaps");
-        assert_eq!(c.ui_font, "default");
-        assert_eq!(c.ui_font_size, 13.0);
+        assert_eq!(c.ui_font, "silkscreen");
+        assert_eq!(c.ui_font_size, 12.0);
 
         let newer = r#"{"zoom": 2, "future_knob": true}"#;
         let c: Config = serde_json::from_str(newer).expect("unknown keys are ignored");

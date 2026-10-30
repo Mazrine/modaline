@@ -18,6 +18,8 @@ repository or the built binary**, separate from normal Cargo dependencies
 | Sweetie 16 palette | `src/color.rs` default palette | CC0 by GrafxKid — <https://lospec.com/palette-list/sweetie-16> |
 | `font8x8` glyph data | bitmap text tool | MIT, Copyright (c) 2017 Joaquin Rosales |
 | egui default fonts | UI, via the `epaint_default_fonts` crate | OFL-1.1 and Ubuntu-font-1.0 (font data), MIT/Apache-2.0 (code) |
+| Silkscreen | Arcane UI font (`assets/fonts/`) | SIL Open Font License 1.1, by Jason Kottke |
+| Noto Sans Symbols 2 | Arcane UI fallback (`assets/fonts/`) | SIL Open Font License 1.1 |
 
 ## Direct dependencies
 
