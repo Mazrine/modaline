@@ -10,8 +10,9 @@ reach for them.
 
 ![Modaline with the demo scene open](assets/screenshots/editor.png)
 
-*The demo project open: layer×frame timeline at the bottom, tools on single
-keys, and a hint on the status line for whatever mode you are in.*
+*The demo project open: the pixel-icon tool rail stays on the left, the
+timeline is docked at the bottom, and the status line hints at the current
+mode's next actions.*
 
 ## How it works
 
@@ -54,9 +55,10 @@ dotted panels and the Silkscreen pixel font. `:theme` switches between
 `arcane`, `dark`, `light`, `midnight` and `paper`; `:uifont silkscreen|default`
 switches the type. Existing configs keep whatever they had.
 
-`:layout overlay`, or `Ctrl-K`, gives the canvas-first HUD: a pixel-icon tool
-rail on the left, a floating inspector, and the timeline still docked at the
-bottom. The docked layout remains the default.
+The pixel-icon tool rail stays on the left in both layouts, so the active
+tool and its shortcut are always visible. `:layout overlay`, or `Ctrl-K`,
+switches to the canvas-first HUD: the inspector floats over the canvas and the
+timeline stays docked. The docked layout remains the default.
 
 ![The overlay layout](assets/screenshots/overlay.png)
 

@@ -403,7 +403,7 @@ pub fn draw(
                 toolbar(ui, editor, view);
             });
     }
-    if view.layout.overlay && arcane {
+    if arcane {
         egui::Panel::left("toolrail")
             .exact_size(64.0)
             .resizable(false)
@@ -1798,7 +1798,7 @@ fn toolbar(ui: &mut egui::Ui, editor: &mut Editor, view: &mut View) {
         }
         ui.separator();
 
-        if !view.layout.overlay {
+        if !arcane {
             for (tool, key) in [
                 (Tool::Pencil, "tool.pencil"),
                 (Tool::Eraser, "tool.eraser"),
