@@ -117,7 +117,7 @@ pub fn apply(ctx: &egui::Context) {
     visuals.widgets.hovered.fg_stroke = Stroke::new(1.5, p.text);
     visuals.widgets.active.bg_fill = p.accent;
     visuals.widgets.active.bg_stroke = Stroke::new(1.0, p.accent);
-    visuals.widgets.active.fg_stroke = Stroke::new(1.5, p.sunken);
+    visuals.widgets.active.fg_stroke = Stroke::new(1.5, p.text);
     visuals.widgets.open.bg_fill = p.panel_hi;
     visuals.widgets.open.bg_stroke = Stroke::new(1.0, p.line);
     for widget in [
