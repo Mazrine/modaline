@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for AI agents working on **Modaline** — a keyboard-first, vim-style pixel
+Contributor notes for **Modaline** — a keyboard-first, vim-style pixel
 art editor in Rust (native GUI, not a terminal).
 
 ## What this is
@@ -215,9 +215,8 @@ thin shells:
   and undo stay correct. `transform_selection_mask` is mask-only; the pixel
   transform is `free_transform`.
 - `docs/ASEPRITE_PARITY.md` is the source of truth for Aseprite parity: when a
-  capability lands, update its row and the P5 task in `docs/ROADMAP.md` in the
-  same commit (`Refs: P5-xx`). P5 work lands on `feat/aseprite-parity`; do not
-  merge it to `main` or push without explicit approval.
+  capability lands, update its row and the matching roadmap item in the same
+  commit.
 
 ## egui 0.37 gotchas (this version changed things)
 
